@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agents - 欢迎页面</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-robot"></i>
+                <h1>AI Agents</h1>
+            </div>
+            <nav class="nav">
+                <a href="#features" class="nav-link">功能特性</a>
+                <a href="#api" class="nav-link">API文档</a>
+                <a href="#about" class="nav-link">关于我们</a>
+            </nav>
+        </header>
+
+        <main class="main">
+            <section class="hero">
+                <div class="hero-content">
+                    <h2 class="hero-title">欢迎使用 AI Agents 平台</h2>
+                    <p class="hero-subtitle">强大的人工智能代理服务，助力您的业务智能化升级</p>
+                    <div class="hero-buttons">
+                        <a href="/docs" class="btn btn-primary">
+                            <i class="fas fa-book"></i>
+                            查看API文档
+                        </a>
+                        <a href="#features" class="btn btn-secondary">
+                            <i class="fas fa-play"></i>
+                            了解更多
+                        </a>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="floating-card">
+                        <i class="fas fa-brain"></i>
+                        <span>智能分析</span>
+                    </div>
+                    <div class="floating-card">
+                        <i class="fas fa-cogs"></i>
+                        <span>自动化处理</span>
+                    </div>
+                    <div class="floating-card">
+                        <i class="fas fa-chart-line"></i>
+                        <span>数据洞察</span>
+                    </div>
+                </div>
+            </section>
+
+            <section id="features" class="features">
+                <div class="section-header">
+                    <h3>核心功能</h3>
+                    <p>为您提供全方位的AI代理服务</p>
+                </div>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-lightning-bolt"></i>
+                        </div>
+                        <h4>高性能处理</h4>
+                        <p>基于FastAPI构建，提供高性能的API服务，支持异步处理和并发请求。</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h4>安全可靠</h4>
+                        <p>内置安全机制，支持认证授权，确保您的数据和服务安全。</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                        </div>
+                        <h4>易于扩展</h4>
+                        <p>模块化设计，支持插件扩展，轻松集成各种AI模型和服务。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="api" class="api-info">
+                <div class="api-content">
+                    <div class="api-text">
+                        <h3>强大的API接口</h3>
+                        <p>提供完整的RESTful API，支持多种数据格式，文档完善，易于集成。</p>
+                        <ul class="api-features">
+                            <li><i class="fas fa-check"></i> 自动生成的API文档</li>
+                            <li><i class="fas fa-check"></i> 支持OpenAPI规范</li>
+                            <li><i class="fas fa-check"></i> 实时API测试</li>
+                            <li><i class="fas fa-check"></i> 多种认证方式</li>
+                        </ul>
+                        <a href="/docs" class="btn btn-outline">
+                            <i class="fas fa-external-link-alt"></i>
+                            访问API文档
+                        </a>
+                    </div>
+                    <div class="api-demo">
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-title">API示例</span>
+                                <button class="copy-btn" onclick="copyCode()">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            <pre><code id="api-code">curl -X GET "http://localhost:8000/api/v1/agents" \
+     -H "accept: application/json" \
+     -H "Authorization: Bearer your-token"</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="about" class="about">
+                <div class="about-content">
+                    <h3>关于AI Agents</h3>
+                    <p>我们致力于为开发者和企业提供最优秀的AI代理服务平台。通过简单易用的API接口，您可以快速集成各种AI能力到您的应用中。</p>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <div class="stat-number">99.9%</div>
+                            <div class="stat-label">服务可用性</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">&lt;100ms</div>
+                            <div class="stat-label">平均响应时间</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">24/7</div>
+                            <div class="stat-label">技术支持</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>AI Agents</h4>
+                    <p>智能代理服务平台</p>
+                </div>
+                <div class="footer-section">
+                    <h4>快速链接</h4>
+                    <ul>
+                        <li><a href="/docs">API文档</a></li>
+                        <li><a href="#features">功能特性</a></li>
+                        <li><a href="#about">关于我们</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>联系我们</h4>
+                    <p>Email: support@ai-agents.com</p>
+                    <p>电话: +86 400-123-4567</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 AI Agents. All rights reserved.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html> 
