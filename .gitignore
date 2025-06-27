@@ -26,3 +26,6 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Node dependencies
+node_modules/
