@@ -29,3 +29,6 @@ MANIFEST
 
 # Node dependencies
 node_modules/
+
+# Frontend
+frontend/
