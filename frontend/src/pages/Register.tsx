@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
   Button,
   Alert,
   Card,
+  Spinner,
 } from "react-bootstrap";
 import { useAuth } from "../context/useAuth";
 
@@ -18,8 +19,21 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const { register, error, loading } = useAuth();
+  const { register, error, success, loading, resetMessages } = useAuth();
   const navigate = useNavigate();
+
+  // Reset messages when component mounts
+  useEffect(() => {
+    resetMessages();
+  }, [resetMessages]);
+
+  // Navigate after successful registration
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => navigate("/"), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [success, navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -32,7 +46,6 @@ export default function Register() {
 
     try {
       await register(name, email, password);
-      navigate("/");
     } catch {
       // Error is handled in the auth context
     }
@@ -57,6 +70,12 @@ export default function Register() {
                     </Alert>
                   )}
 
+                  {success && (
+                    <Alert variant="success" className="mb-4">
+                      {success}
+                    </Alert>
+                  )}
+
                   <Form.Group className="mb-3">
                     <Form.Label>Full Name</Form.Label>
                     <Form.Control
@@ -65,6 +84,7 @@ export default function Register() {
                       onChange={(e) => setName(e.target.value)}
                       required
                       placeholder="Enter your full name"
+                      disabled={loading}
                     />
                   </Form.Group>
 
@@ -76,6 +96,7 @@ export default function Register() {
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       placeholder="Enter email"
+                      disabled={loading}
                     />
                   </Form.Group>
 
@@ -87,6 +108,7 @@ export default function Register() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       placeholder="Password"
+                      disabled={loading}
                     />
                   </Form.Group>
 
@@ -98,6 +120,7 @@ export default function Register() {
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
                       placeholder="Confirm password"
+                      disabled={loading}
                     />
                   </Form.Group>
 
@@ -107,11 +130,29 @@ export default function Register() {
                     disabled={loading}
                     className="w-100 mb-3"
                   >
-                    {loading ? "Creating account..." : "Sign Up"}
+                    {loading ? (
+                      <>
+                        <Spinner
+                          as="span"
+                          animation="border"
+                          size="sm"
+                          role="status"
+                          aria-hidden="true"
+                          className="me-2"
+                        />
+                        Creating account...
+                      </>
+                    ) : (
+                      "Sign Up"
+                    )}
                   </Button>
 
                   <div className="text-center">
-                    <Link to="/login" className="text-decoration-none">
+                    <Link
+                      to="/login"
+                      className="text-decoration-none"
+                      tabIndex={loading ? -1 : 0}
+                    >
                       Already have an account? Sign In
                     </Link>
                   </div>

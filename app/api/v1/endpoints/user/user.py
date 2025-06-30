@@ -1,14 +1,15 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 import mysql.connector
 from mysql.connector.cursor import MySQLCursorDict
 import os
-from typing import List, Optional, Dict, Any, cast
+from typing import List, Optional, Dict, Any, cast, Literal
 from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
+from fastapi.responses import JSONResponse
 
 # Secret key for JWT
 SECRET_KEY = "your-secret-key-keep-it-secret"  # In production, use environment variable
@@ -18,16 +19,20 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-app = FastAPI()
+router = APIRouter(prefix="/api/v1")
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
+# Error Response Models
+class ErrorDetail(BaseModel):
+    detail: str
+    error_code: str
+    error_type: Literal["validation_error", "database_error", "auth_error", "server_error"]
+
+class ErrorResponse(BaseModel):
+    success: Literal[False] = False
+    error: ErrorDetail
+
+class SuccessResponse(BaseModel):
+    success: Literal[True] = True
 
 class UserCreate(BaseModel):
     username: str
@@ -46,7 +51,7 @@ class User(BaseModel):
     password_hash: str
     created_at: str
 
-class Token(BaseModel):
+class Token(SuccessResponse):
     access_token: str
     token_type: str
 
@@ -55,7 +60,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
 
-class LoginResponse(BaseModel):
+class LoginResponse(SuccessResponse):
     access_token: str
     token_type: str
     user: UserResponse
@@ -89,7 +94,84 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/users", response_model=User)
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = int(payload.get("sub", 0))
+        if user_id == 0:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "success": False,
+                    "error": {
+                        "detail": "Invalid authentication token",
+                        "error_code": "INVALID_TOKEN",
+                        "error_type": "auth_error"
+                    }
+                }
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "success": False,
+                "error": {
+                    "detail": "Could not validate token",
+                    "error_code": "TOKEN_VALIDATION_FAILED",
+                    "error_type": "auth_error"
+                }
+            }
+        )
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = cast(MySQLCursorDict, conn.cursor(dictionary=True))
+        cursor.execute("SELECT id, username as name, email FROM user WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "success": False,
+                    "error": {
+                        "detail": "User not found",
+                        "error_code": "USER_NOT_FOUND",
+                        "error_type": "auth_error"
+                    }
+                }
+            )
+        
+        return cast(Dict[str, Any], user)
+        
+    except mysql.connector.Error as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "detail": f"Database error: {str(e)}",
+                    "error_code": "DB_ERROR",
+                    "error_type": "database_error"
+                }
+            }
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@router.post("/users", response_model=User)
 def create_user(user: UserCreate):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -131,7 +213,7 @@ def create_user(user: UserCreate):
     finally:
         conn.close()
 
-@app.get("/users", response_model=List[User])
+@router.get("/users", response_model=List[User])
 def get_users():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -163,7 +245,7 @@ def get_users():
     conn.close()
     return users
 
-@app.get("/users/{user_id}", response_model=User)
+@router.get("/users/{user_id}", response_model=User)
 def get_user(user_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -195,7 +277,7 @@ def get_user(user_id: int):
     else:
         raise HTTPException(status_code=404, detail="User not found")
 
-@app.put("/users/{user_id}", response_model=User)
+@router.put("/users/{user_id}", response_model=User)
 def update_user(user_id: int, user: UserUpdate):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -252,7 +334,7 @@ def update_user(user_id: int, user: UserUpdate):
     finally:
         conn.close()
 
-@app.delete("/users/{user_id}")
+@router.delete("/users/{user_id}")
 def delete_user(user_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -270,7 +352,7 @@ def delete_user(user_id: int):
     finally:
         conn.close()
 
-@app.get("/")
+@router.get("/")
 def read_root():
     db_port = os.getenv("DB_PORT")
     if db_port is None:
@@ -288,51 +370,37 @@ def read_root():
     conn.close()
     return {"users": users}
 
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = int(payload.get("sub", 0))
-        if user_id == 0:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Could not validate token")
-    
-    conn = get_db_connection()
-    cursor = cast(MySQLCursorDict, conn.cursor(dictionary=True))
-    cursor.execute("SELECT id, name, email FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
-    conn.close()
-    
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    return cast(Dict[str, Any], user)
-
-@app.post("/auth/register", response_model=Token)
+@router.post("/auth/register", response_model=Token, responses={
+    400: {"model": ErrorResponse, "description": "Registration failed"},
+    500: {"model": ErrorResponse, "description": "Server error"}
+})
 async def register(user: UserAuth):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Check if email already exists
-    cursor.execute("SELECT id FROM users WHERE email = %s", (user.email,))
-    if cursor.fetchone():
-        conn.close()
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Hash the password
-    hashed_password = pwd_context.hash(user.password)
-    
+    conn = None
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if email already exists
+        cursor.execute("SELECT id FROM user WHERE email = %s", (user.email,))
+        if cursor.fetchone():
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": {
+                        "detail": "Email already registered",
+                        "error_code": "EMAIL_EXISTS",
+                        "error_type": "validation_error"
+                    }
+                }
+            )
+        
+        # Hash the password
+        hashed_password = pwd_context.hash(user.password)
+        
         # Insert new user
         cursor.execute(
-            "INSERT INTO users (name, email, password) VALUES (%s, %s, %s)",
+            "INSERT INTO user (username, email, password_hash) VALUES (%s, %s, %s)",
             (user.name, user.email, hashed_password)
         )
         conn.commit()
@@ -341,46 +409,165 @@ async def register(user: UserAuth):
         # Create access token
         access_token = create_access_token({"sub": str(user_id)})
         
-        return {"access_token": access_token, "token_type": "bearer"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        conn.close()
-
-@app.post("/auth/login", response_model=LoginResponse)
-async def login(user: UserLogin):
-    conn = get_db_connection()
-    cursor = cast(MySQLCursorDict, conn.cursor(dictionary=True))
-    
-    # Get user by email
-    cursor.execute("SELECT id, name, email, password FROM users WHERE email = %s", (user.email,))
-    result = cursor.fetchone()
-    conn.close()
-    
-    if not result:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    # Verify password
-    stored_password = str(result['password'])
-    if not pwd_context.verify(user.password, stored_password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    # Create access token
-    user_id = str(result['id'])
-    access_token = create_access_token({"sub": user_id})
-    
-    # Return both token and user data
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": result['id'],
-            "name": result['name'],
-            "email": result['email']
+        return {
+            "success": True,
+            "access_token": access_token,
+            "token_type": "bearer"
         }
-    }
+        
+    except mysql.connector.Error as e:
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {
+                    "detail": f"Database error: {str(e)}",
+                    "error_code": "DB_ERROR",
+                    "error_type": "database_error"
+                }
+            }
+        )
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {
+                    "detail": f"Registration failed: {str(e)}",
+                    "error_code": "REGISTRATION_FAILED",
+                    "error_type": "server_error"
+                }
+            }
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
 
-@app.get("/auth/me", response_model=UserResponse)
+@router.post("/auth/login", response_model=LoginResponse, responses={
+    400: {"model": ErrorResponse, "description": "Login failed"},
+    401: {"model": ErrorResponse, "description": "Invalid credentials"},
+    500: {"model": ErrorResponse, "description": "Server error"}
+})
+async def login(user: UserLogin):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = cast(MySQLCursorDict, conn.cursor(dictionary=True))
+        
+        # Get user by email
+        cursor.execute("SELECT id, username as name, email, password_hash as password FROM user WHERE email = %s", (user.email,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "success": False,
+                    "error": {
+                        "detail": "Invalid email or password",
+                        "error_code": "INVALID_CREDENTIALS",
+                        "error_type": "auth_error"
+                    }
+                }
+            )
+        
+        # Verify password
+        stored_password = str(result['password'])
+        if not pwd_context.verify(user.password, stored_password):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "success": False,
+                    "error": {
+                        "detail": "Invalid email or password",
+                        "error_code": "INVALID_CREDENTIALS",
+                        "error_type": "auth_error"
+                    }
+                }
+            )
+        
+        # Create access token
+        user_id = str(result['id'])
+        access_token = create_access_token({"sub": user_id})
+        
+        # Return both token and user data
+        return {
+            "success": True,
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": result['id'],
+                "name": result['name'],
+                "email": result['email']
+            }
+        }
+        
+    except mysql.connector.Error as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {
+                    "detail": f"Database error: {str(e)}",
+                    "error_code": "DB_ERROR",
+                    "error_type": "database_error"
+                }
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": {
+                    "detail": f"Login failed: {str(e)}",
+                    "error_code": "LOGIN_FAILED",
+                    "error_type": "server_error"
+                }
+            }
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@router.get("/auth/me", response_model=UserResponse, responses={
+    401: {"model": ErrorResponse, "description": "Authentication failed"},
+    404: {"model": ErrorResponse, "description": "User not found"},
+    500: {"model": ErrorResponse, "description": "Server error"}
+})
 async def get_user_me(current_user: Dict[str, Any] = Depends(get_current_user)):
-    return current_user
+    try:
+        return {
+            "success": True,
+            "id": current_user["id"],
+            "name": current_user["name"],
+            "email": current_user["email"]
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": {
+                    "detail": f"Failed to get user info: {str(e)}",
+                    "error_code": "USER_INFO_FAILED",
+                    "error_type": "server_error"
+                }
+            }
+        )

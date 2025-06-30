@@ -1,39 +1,39 @@
-import { createContext, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  error: string | null;
-  loading: boolean;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
-export { AuthContext };
+import { AuthContext, type User } from "./context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     checkAuth();
   }, []);
 
+  // Clear messages after 5 seconds
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError(null);
+        setSuccess(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
+  const resetMessages = () => {
+    setError(null);
+    setSuccess(null);
+  };
+
   const checkAuth = async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
     try {
-      const response = await fetch("http://localhost:8000/auth/me", {
+      const response = await fetch("http://localhost:8000/api/v1/auth/me", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -54,8 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
-      const response = await fetch("http://localhost:8000/auth/login", {
+      const response = await fetch("http://localhost:8000/api/v1/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,13 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Invalid credentials");
+        throw new Error(data.error?.detail || "Invalid credentials");
       }
 
-      const data = await response.json();
       localStorage.setItem("token", data.access_token);
       setUser(data.user);
+      setSuccess("Successfully logged in!");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
       throw err;
@@ -82,22 +85,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
-      const response = await fetch("http://localhost:8000/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Registration failed");
-      }
+      const response = await fetch(
+        "http://localhost:8000/api/v1/auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name, email, password }),
+        }
+      );
 
       const data = await response.json();
-      localStorage.setItem("token", data.token);
-      setUser(data.user);
+
+      if (!response.ok) {
+        throw new Error(data.error?.detail || "Registration failed");
+      }
+
+      localStorage.setItem("token", data.access_token);
+      setSuccess("Account created successfully! Welcome aboard!");
+      await checkAuth(); // Fetch user data after registration
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
       throw err;
@@ -109,11 +118,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem("token");
     setUser(null);
+    setSuccess("Logged out successfully!");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, login, register, logout, error, loading }}
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        resetMessages,
+        error,
+        success,
+        loading,
+      }}
     >
       {children}
     </AuthContext.Provider>
