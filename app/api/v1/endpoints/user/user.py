@@ -398,7 +398,7 @@ async def register(user: UserAuth):
         # Hash the password
         hashed_password = pwd_context.hash(user.password)
         
-        # Insert new user
+        # Insert new user (using name as username)
         cursor.execute(
             "INSERT INTO user (username, email, password_hash) VALUES (%s, %s, %s)",
             (user.name, user.email, hashed_password)
