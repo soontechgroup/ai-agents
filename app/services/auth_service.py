@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.core.models import User
 from app.core.security import verify_password, get_password_hash, create_access_token
-from app.schemas.auth import UserCreate, UserLogin
+from app.schemas.auth import UserCreateRequest, UserLoginRequest
 from typing import Optional
 
 
@@ -20,7 +20,7 @@ class AuthService:
         return db.query(User).filter(User.email == email).first()
     
     @staticmethod
-    def create_user(db: Session, user_create: UserCreate) -> User:
+    def create_user(db: Session, user_create: UserCreateRequest) -> User:
         """创建新用户"""
         # 检查用户名是否已存在
         if AuthService.get_user_by_username(db, user_create.username):
@@ -61,7 +61,7 @@ class AuthService:
         return user
     
     @staticmethod
-    def login_user(db: Session, user_login: UserLogin) -> dict:
+    def login_user(db: Session, user_login: UserLoginRequest) -> dict:
         """用户登录"""
         user = AuthService.authenticate_user(db, user_login.username, user_login.password)
         if not user:
