@@ -54,7 +54,7 @@ async def startup_event():
                 raise
 
 
-# 包含API路由 - 这是关键！
+# 包含API路由
 app.include_router(api_router, prefix="/api/v1")
 
 # 挂载静态文件目录

@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.auth import UserCreateRequest, UserLoginRequest, UserResponse, Token
+from app.schemas.common import SuccessResponse
 from app.services.auth_service import AuthService
 from app.utils.dependencies import get_current_active_user, get_current_user
+from app.utils.response import ResponseUtil
 from app.core.models import User
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, summary="用户注册")
+@router.post("/register", response_model=SuccessResponse[UserResponse], summary="用户注册")
 async def register(
     user_create: UserCreateRequest,
     db: Session = Depends(get_db)
@@ -23,10 +25,10 @@ async def register(
     - **full_name**: 全名（可选）
     """
     user = AuthService.create_user(db, user_create)
-    return user
+    return ResponseUtil.success(data=user, message="用户注册成功")
 
 
-@router.post("/login", response_model=Token, summary="用户登录")
+@router.post("/login", response_model=SuccessResponse[Token], summary="用户登录")
 async def login(
     user_login: UserLoginRequest,
     db: Session = Depends(get_db)
@@ -39,22 +41,16 @@ async def login(
     
     返回访问令牌
     """
-    try:
-        result = AuthService.login_user(db, user_login)
-        return {
-            "access_token": result["access_token"],
-            "token_type": result["token_type"]
-        }
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"登录失败: {str(e)}"
-        )
+    result = AuthService.login_user(db, user_login)
+    token_data = {
+        "access_token": result["access_token"],
+        "token_type": result["token_type"]
+    }
+    return ResponseUtil.success(data=token_data, message="登录成功")
 
 
-@router.get("/me", response_model=UserResponse, summary="获取当前用户信息")
+
+@router.get("/me", response_model=SuccessResponse[UserResponse], summary="获取当前用户信息")
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -63,20 +59,5 @@ async def get_current_user_info(
     
     需要在请求头中包含有效的Bearer令牌
     """
-    return current_user
+    return ResponseUtil.success(data=current_user, message="获取用户信息成功")
 
-
-@router.get("/protected", summary="受保护的测试端点")
-async def protected_route(
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    受保护的测试端点
-    
-    需要有效的JWT令牌才能访问
-    """
-    return {
-        "message": f"你好 {current_user.username}！这是一个受保护的端点。",
-        "user_id": current_user.id,
-        "is_superuser": current_user.is_superuser
-    } 
