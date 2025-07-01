@@ -17,8 +17,8 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
-class UserResponse(BaseModel):
-    """用户响应模式"""
+class UserData(BaseModel):
+    """用户数据模式"""
     id: int
     username: str
     email: str
