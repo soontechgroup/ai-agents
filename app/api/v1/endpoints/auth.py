@@ -22,16 +22,8 @@ async def register(
     - **password**: 密码
     - **full_name**: 全名（可选）
     """
-    try:
-        user = AuthService.create_user(db, user_create)
-        return user
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
-        )
+    user = AuthService.create_user(db, user_create)
+    return user
 
 
 @router.post("/login", response_model=Token, summary="用户登录")
