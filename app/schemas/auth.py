@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 
-class UserCreate(BaseModel):
+class UserCreateRequest(BaseModel):
     """用户创建模式"""
     username: str
     email: EmailStr
@@ -11,7 +11,7 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
 
 
-class UserLogin(BaseModel):
+class UserLoginRequest(BaseModel):
     """用户登录模式"""
     username: str
     password: str
