@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 import os
 
 
@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     # 应用配置
     PROJECT_NAME: str = "AI Agents API"
     VERSION: str = "1.0.0"
+    
+    # 环境配置
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
+    
+    # 可选配置
+    LOG_LEVEL: str = "INFO"
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     class Config:
         env_file = ".env"
