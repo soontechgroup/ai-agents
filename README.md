@@ -28,9 +28,9 @@ pip install -r requirements.txt
 
 ```bash
 # 复制环境变量模板
-cp .env.example .env
+cp .env.dev .env.dev
 
-# 编辑 .env 文件，填入你的配置
+# 编辑 .env.dev 文件，填入你的配置
 # 至少需要配置：
 # - SECRET_KEY: JWT 密钥
 # - DATABASE_URL: 数据库连接字符串
@@ -71,7 +71,7 @@ ai-agents/
 │   ├── services/        # 业务逻辑
 │   └── utils/           # 工具函数
 ├── static/              # 静态文件
-├── .env.example         # 环境变量模板
+├── .env.dev             # 开发环境变量配置
 ├── requirements.txt     # Python 依赖
 └── README.md           # 项目说明
 ```

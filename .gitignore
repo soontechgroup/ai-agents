@@ -29,7 +29,7 @@ MANIFEST
 
 
 # Environment files
-.env
+# .env files are tracked for this project
 
 # Virtual environment
 .venv/
