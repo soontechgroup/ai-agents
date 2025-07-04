@@ -26,3 +26,10 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+
+# Environment files
+# .env files are tracked for this project
+
+# Virtual environment
+.venv/

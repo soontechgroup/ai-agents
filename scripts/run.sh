@@ -111,16 +111,44 @@ check_env() {
     export HOST="${HOST:-$DEFAULT_HOST}"
     export PORT="${PORT:-$DEFAULT_PORT}"
     export RELOAD="${RELOAD:-false}"
+    export ENVIRONMENT="${ENVIRONMENT:-dev}"  # 默认开发环境
     
-    log_success "环境配置完成 - Host: $HOST, Port: $PORT"
+    log_success "环境配置完成 - Host: $HOST, Port: $PORT, Environment: $ENVIRONMENT"
     
-    # 如果存在.env文件，则加载
-    if [ -f ".env" ]; then
-        log_info "加载 .env 文件..."
+    # 根据环境变量加载对应的配置文件
+    case "$ENVIRONMENT" in
+        "dev"|"development")
+            ENV_FILE=".env.dev"
+            ;;
+        "test")
+            ENV_FILE=".env.test"
+            ;;
+        "staging")
+            ENV_FILE=".env.staging"
+            ;;
+        "prod"|"production")
+            ENV_FILE=".env.prod"
+            ;;
+        *)
+            ENV_FILE=".env"
+            ;;
+    esac
+    
+    if [ -f "$ENV_FILE" ]; then
+        log_info "加载环境配置文件: $ENV_FILE"
         set -a  # 自动导出变量
-        source .env
+        source "$ENV_FILE"
         set +a
         log_success "环境变量已加载"
+    else
+        log_warning "环境配置文件不存在: $ENV_FILE，使用默认配置"
+        # 尝试加载默认的 .env 文件
+        if [ -f ".env" ]; then
+            log_info "加载默认配置文件: .env"
+            set -a
+            source .env
+            set +a
+        fi
     fi
 }
 
@@ -399,15 +427,19 @@ show_help() {
     echo "  help      - 显示帮助信息"
     echo ""
     echo "环境变量:"
-    echo "  HOST      - 服务监听地址 (默认: $DEFAULT_HOST)"
-    echo "  PORT      - 服务监听端口 (默认: $DEFAULT_PORT)"
-    echo "  RELOAD    - 是否启用热重载 (默认: false)"
+    echo "  HOST        - 服务监听地址 (默认: $DEFAULT_HOST)"
+    echo "  PORT        - 服务监听端口 (默认: $DEFAULT_PORT)"
+    echo "  RELOAD      - 是否启用热重载 (默认: false)"
+    echo "  ENVIRONMENT - 运行环境 (默认: dev)"
+    echo "                可选值: dev, development, test, staging, prod, production"
     echo ""
     echo "示例:"
-    echo "  $0 start                    # 启动服务"
-    echo "  $0 dev                      # 开发模式启动"
-    echo "  PORT=9000 $0 start          # 指定端口启动"
-    echo "  HOST=127.0.0.1 $0 start     # 指定监听地址启动"
+    echo "  $0 start                           # 启动服务 (默认dev环境)"
+    echo "  $0 dev                             # 开发模式启动"
+    echo "  PORT=9000 $0 start                 # 指定端口启动"
+    echo "  HOST=127.0.0.1 $0 start            # 指定监听地址启动"
+    echo "  ENVIRONMENT=prod $0 start          # 生产环境启动"
+    echo "  ENVIRONMENT=staging $0 start       # 预发环境启动"
 }
 
 # 主函数

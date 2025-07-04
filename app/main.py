@@ -11,7 +11,8 @@ import time
 import logging
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+logging.basicConfig(level=log_level)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
@@ -24,7 +25,7 @@ app = FastAPI(
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应该限制具体域名
+    allow_origins=settings.CORS_ORIGINS if settings.ENVIRONMENT != "development" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
