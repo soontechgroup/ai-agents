@@ -1,10 +1,12 @@
-logs
+# Frontend
+frontend/
+ai-agents-admin/
 
-# 数据目录
-data/
-.idea
+# Windows specific
+win-env/
+*.bat
 
-# Python 缓存文件
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,13 +27,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Node dependencies
-node_modules/
-
-# Frontend
-frontend/
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
 
 # IDE
 .idea/
@@ -57,6 +59,3 @@ Thumbs.db
 pids/
 logs/
 data/
-
-# Ignore Windows virtual environment
-.win-venv/
