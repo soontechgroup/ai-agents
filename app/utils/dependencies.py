@@ -5,15 +5,26 @@ from app.core.database import get_db
 from app.core.security import verify_token
 from app.core.models import User
 from app.services.auth_service import AuthService
+from app.repositories.user_repository import UserRepository
 from typing import Optional
 
 # HTTP Bearer 认证方案
 security = HTTPBearer()
 
 
+def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
+    """获取用户仓库实例"""
+    return UserRepository(db)
+
+
+def get_auth_service(user_repository: UserRepository = Depends(get_user_repository)) -> AuthService:
+    """获取认证服务实例"""
+    return AuthService(user_repository)
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    auth_service: AuthService = Depends(get_auth_service)
 ) -> User:
     """获取当前用户"""
     credentials_exception = HTTPException(
@@ -32,7 +43,7 @@ def get_current_user(
         raise credentials_exception
     
     # 获取用户
-    user = AuthService.get_user_by_username(db, username)
+    user = auth_service.get_user_by_username(username)
     if user is None:
         raise credentials_exception
     

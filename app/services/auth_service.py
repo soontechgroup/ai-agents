@@ -1,29 +1,29 @@
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.core.models import User
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.schemas.auth import UserCreateRequest, UserLoginRequest
+from app.repositories.user_repository import UserRepository
 from typing import Optional
 
 
 class AuthService:
     """认证服务"""
     
-    @staticmethod
-    def get_user_by_username(db: Session, username: str) -> Optional[User]:
+    def __init__(self, user_repository: UserRepository):
+        self.user_repository = user_repository
+    
+    def get_user_by_username(self, username: str) -> Optional[User]:
         """根据用户名获取用户"""
-        return db.query(User).filter(User.username == username).first()
+        return self.user_repository.get_user_by_username(username)
     
-    @staticmethod
-    def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    def get_user_by_email(self, email: str) -> Optional[User]:
         """根据邮箱获取用户"""
-        return db.query(User).filter(User.email == email).first()
+        return self.user_repository.get_user_by_email(email)
     
-    @staticmethod
-    def create_user(db: Session, user_create: UserCreateRequest) -> User:
+    def create_user(self, user_create: UserCreateRequest) -> User:
         """创建新用户"""
         # 检查用户名是否已存在（用户名必须唯一）
-        if AuthService.get_user_by_username(db, user_create.username):
+        if self.user_repository.get_user_by_username(user_create.username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="用户名已存在"
@@ -33,31 +33,26 @@ class AuthService:
         
         # 创建新用户
         hashed_password = get_password_hash(user_create.password)
-        db_user = User(
-            username=user_create.username,
-            email=user_create.email,
-            hashed_password=hashed_password
-        )
+        user_data = {
+            "username": user_create.username,
+            "email": user_create.email,
+            "hashed_password": hashed_password
+        }
         
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
-        return db_user
+        return self.user_repository.create_user(user_data)
     
-    @staticmethod
-    def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+    def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """验证用户身份"""
-        user = AuthService.get_user_by_username(db, username)
+        user = self.user_repository.get_user_by_username(username)
         if not user:
             return None
         if not verify_password(password, user.hashed_password):
             return None
         return user
     
-    @staticmethod
-    def login_user(db: Session, user_login: UserLoginRequest) -> dict:
+    def login_user(self, user_login: UserLoginRequest) -> dict:
         """用户登录"""
-        user = AuthService.authenticate_user(db, user_login.username, user_login.password)
+        user = self.authenticate_user(user_login.username, user_login.password)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
