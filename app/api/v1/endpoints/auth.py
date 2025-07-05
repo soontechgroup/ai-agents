@@ -22,7 +22,6 @@ async def register(
     - **username**: 用户名（必须唯一）
     - **email**: 邮箱地址（允许重复）
     - **password**: 密码
-    - **full_name**: 全名（可选）
     """
     user = AuthService.create_user(db, user_create)
     return ResponseUtil.success(data=user, message="用户注册成功")
