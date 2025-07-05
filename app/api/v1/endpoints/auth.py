@@ -20,7 +20,7 @@ async def register(
     用户注册
     
     - **username**: 用户名（必须唯一）
-    - **email**: 邮箱地址（必须唯一）
+    - **email**: 邮箱地址（允许重复）
     - **password**: 密码
     - **full_name**: 全名（可选）
     """

@@ -22,19 +22,14 @@ class AuthService:
     @staticmethod
     def create_user(db: Session, user_create: UserCreateRequest) -> User:
         """创建新用户"""
-        # 检查用户名是否已存在
+        # 检查用户名是否已存在（用户名必须唯一）
         if AuthService.get_user_by_username(db, user_create.username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="用户名已存在"
             )
         
-        # 检查邮箱是否已存在
-        if AuthService.get_user_by_email(db, user_create.email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="邮箱已存在"
-            )
+        # 注意：邮箱允许重复，所以不检查邮箱重复
         
         # 创建新用户
         hashed_password = get_password_hash(user_create.password)
