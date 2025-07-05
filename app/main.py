@@ -4,7 +4,6 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
-from app.core.models import Base
 from app.api.v1.router import api_router
 import os
 import time
@@ -34,16 +33,19 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """应用启动时初始化数据库"""
+    """应用启动时检查数据库连接"""
     max_retries = 10
     retry_interval = 2
     
     for attempt in range(max_retries):
         try:
-            logger.info(f"尝试初始化数据库 (第{attempt + 1}次尝试)")
-            # 创建数据库表
-            Base.metadata.create_all(bind=engine)
-            logger.info("数据库初始化成功!")
+            logger.info(f"尝试连接数据库 (第{attempt + 1}次尝试)")
+            # 测试数据库连接
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                conn.execute(text("SELECT 1"))
+            logger.info("数据库连接成功!")
+            logger.info("请确保已运行 Alembic 迁移: alembic upgrade head")
             break
         except Exception as e:
             logger.warning(f"数据库连接失败: {e}")
@@ -51,7 +53,7 @@ async def startup_event():
                 logger.info(f"等待 {retry_interval} 秒后重试...")
                 time.sleep(retry_interval)
             else:
-                logger.error("数据库初始化失败，已达到最大重试次数")
+                logger.error("数据库连接失败，已达到最大重试次数")
                 raise
 
 
