@@ -51,16 +51,16 @@ class Settings(BaseSettings):
     # 环境配置
     ENVIRONMENT: str = ENVIRONMENT
     DEBUG: bool = True
-    
+
     # 可选配置
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
-    
+
     # 服务器配置
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     RELOAD: bool = False
-    
+
     class Config:
         # 不在这里指定 env_file，因为我们已经手动加载了
         env_file_encoding = 'utf-8'
@@ -72,4 +72,4 @@ settings = Settings()
 # 打印当前环境信息
 print(f"🚀 当前运行环境: {settings.ENVIRONMENT}")
 print(f"📊 调试模式: {'开启' if settings.DEBUG else '关闭'}")
-print(f"🔗 数据库连接: {settings.DATABASE_URL}") 
+print(f"🔗 数据库连接: {settings.DATABASE_URL}")
