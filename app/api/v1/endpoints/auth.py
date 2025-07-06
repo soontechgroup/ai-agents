@@ -7,9 +7,7 @@ from app.services.auth_service import AuthService
 from app.utils.dependencies import get_current_active_user, get_current_user
 from app.utils.response import ResponseUtil
 from app.core.models import User
-import logging
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -26,13 +24,8 @@ async def register(
     - **password**: 密码
     - **full_name**: 全名（可选）
     """
-    logger.debug(f"Received registration request: {user_create.dict(exclude={'password'})}")
-    try:
-        user = AuthService.create_user(db, user_create)
-        return ResponseUtil.success(data=user, message="用户注册成功")
-    except Exception as e:
-        logger.error(f"Registration failed: {str(e)}")
-        raise
+    user = AuthService.create_user(db, user_create)
+    return ResponseUtil.success(data=user, message="用户注册成功")
 
 
 @router.post("/login", response_model=SuccessResponse[Token], summary="用户登录")

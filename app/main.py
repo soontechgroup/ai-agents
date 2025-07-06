@@ -11,7 +11,8 @@ import time
 import logging
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+logging.basicConfig(level=log_level)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
@@ -24,12 +25,7 @@ app = FastAPI(
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js development server
-        "http://127.0.0.1:3000",  # Alternative local address
-        "http://localhost:8000",  # Backend URL
-        "http://127.0.0.1:8000",  # Alternative backend URL
-    ],
+    allow_origins=settings.CORS_ORIGINS if settings.ENVIRONMENT != "development" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

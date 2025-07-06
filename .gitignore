@@ -27,13 +27,12 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
 
 # Virtual Environment
 .env
 .venv
-env/
-venv/
-ENV/
 
 # IDE
 .idea/
@@ -41,21 +40,12 @@ ENV/
 *.swp
 *.swo
 
-# Logs and databases
-*.log
-*.sqlite
-*.db
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
 # Project specific
 pids/
 logs/
 data/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
