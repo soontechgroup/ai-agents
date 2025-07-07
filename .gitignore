@@ -1,10 +1,12 @@
-logs
+# Frontend
+frontend/
+ai-agents-admin/
 
-# 数据目录
-data/
-.idea
+# Windows specific
+win-env/
+*.bat
 
-# Python 缓存文件
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -28,8 +30,22 @@ wheels/
 MANIFEST
 
 
-# Environment files
-# .env files are tracked for this project
+# Virtual Environment
+.env
+.venv
 
-# Virtual environment
-.venv/
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+pids/
+logs/
+data/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
