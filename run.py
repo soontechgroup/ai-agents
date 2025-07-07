@@ -13,6 +13,40 @@ import uvicorn
 import os
 import sys
 import argparse
+from alembic.config import Config
+from alembic import command
+from alembic.script import ScriptDirectory
+from alembic.runtime.environment import EnvironmentContext
+from pathlib import Path
+
+def run_alembic_upgrade():
+    """运行 alembic upgrade head 命令"""
+    try:
+        print("🔄 开始执行数据库迁移...")
+        
+        # 获取 alembic.ini 文件的路径
+        alembic_cfg_path = Path(__file__).parent / "alembic.ini"
+        
+        if not alembic_cfg_path.exists():
+            print("❌ 找不到 alembic.ini 文件")
+            return False
+            
+        # 创建 alembic 配置
+        alembic_cfg = Config(str(alembic_cfg_path))
+        
+        # 检查是否有待执行的迁移
+        script = ScriptDirectory.from_config(alembic_cfg)
+        
+        # 执行 upgrade head 命令
+        command.upgrade(alembic_cfg, "head")
+        
+        print("✅ 数据库迁移完成")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 数据库迁移失败: {str(e)}")
+        print("⚠️  请检查数据库连接和 alembic 配置")
+        return False
 
 def parse_args():
     """解析命令行参数"""
@@ -41,6 +75,11 @@ def parse_args():
         action="store_true",
         help="启用热重载 (默认: True)"
     )
+    parser.add_argument(
+        "--skip-migration", 
+        action="store_true",
+        help="跳过数据库迁移"
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -49,12 +88,20 @@ if __name__ == "__main__":
     # 设置环境变量
     os.environ["ENVIRONMENT"] = args.env
     
+    # 执行数据库迁移（除非指定跳过）
+    if not args.skip_migration:
+        if not run_alembic_upgrade():
+            print("❌ 数据库迁移失败，但继续启动应用...")
+            print("💡 如果需要跳过迁移，请使用 --skip-migration 参数")
+    else:
+        print("⏭️  已跳过数据库迁移")
+    
     # 从环境变量或命令行参数获取配置
     host = args.host
     port = args.port
     reload = args.reload or True  # 开发模式默认开启热重载
     
-    print("🔧 PyCharm 开发模式启动...")
+    print("\n🔧 PyCharm 开发模式启动...")
     print(f"🌍 运行环境: {args.env}")
     print(f"📍 访问地址: http://{host}:{port}")
     print(f"📖 API文档: http://{host}:{port}/docs")
