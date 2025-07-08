@@ -22,13 +22,13 @@ def load_env_file():
     env_file = env_files.get(ENVIRONMENT.lower())
     
     if env_file and os.path.exists(env_file):
-        print(f"🔧 加载环境配置文件: {env_file}")
+        print(f"[CONFIG] Loading environment config file: {env_file}")
         load_dotenv(env_file)
     else:
-        print(f"⚠️  环境配置文件不存在: {env_file}，使用默认配置")
-        # 尝试加载默认的 .env 文件
+        print(f"[WARNING] Environment config file not found: {env_file}, using default config")
+        # Try to load default .env file
         if os.path.exists(".env"):
-            print("🔧 加载默认配置文件: .env")
+            print("[CONFIG] Loading default config file: .env")
             load_dotenv(".env")
 
 # 加载环境配置
@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     PORT: int = 8000
     RELOAD: bool = False
 
+    # OpenAI配置
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_MAX_TOKENS: int = 2048
+    OPENAI_TEMPERATURE: float = 0.7
+
     class Config:
         # 不在这里指定 env_file，因为我们已经手动加载了
         env_file_encoding = 'utf-8'
@@ -69,7 +75,7 @@ class Settings(BaseSettings):
 # 创建配置实例
 settings = Settings()
 
-# 打印当前环境信息
-print(f"🚀 当前运行环境: {settings.ENVIRONMENT}")
-print(f"📊 调试模式: {'开启' if settings.DEBUG else '关闭'}")
-print(f"🔗 数据库连接: {settings.DATABASE_URL}")
+# Print current environment info
+print(f"[STARTUP] Current environment: {settings.ENVIRONMENT}")
+print(f"[DEBUG] Debug mode: {'enabled' if settings.DEBUG else 'disabled'}")
+print(f"[DATABASE] Database connection: {settings.DATABASE_URL}")

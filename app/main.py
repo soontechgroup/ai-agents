@@ -34,24 +34,24 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """应用启动时初始化数据库"""
+    """Initialize database on application startup"""
     max_retries = 10
     retry_interval = 2
     
     for attempt in range(max_retries):
         try:
-            logger.info(f"尝试初始化数据库 (第{attempt + 1}次尝试)")
-            # 创建数据库表
+            logger.info(f"Attempting to initialize database (attempt {attempt + 1})")
+            # Create database tables
             Base.metadata.create_all(bind=engine)
-            logger.info("数据库初始化成功!")
+            logger.info("Database initialization successful!")
             break
         except Exception as e:
-            logger.warning(f"数据库连接失败: {e}")
+            logger.warning(f"Database connection failed: {e}")
             if attempt < max_retries - 1:
-                logger.info(f"等待 {retry_interval} 秒后重试...")
+                logger.info(f"Waiting {retry_interval} seconds before retry...")
                 time.sleep(retry_interval)
             else:
-                logger.error("数据库初始化失败，已达到最大重试次数")
+                logger.error("Database initialization failed, maximum retries reached")
                 raise
 
 
