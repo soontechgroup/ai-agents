@@ -45,7 +45,13 @@ async def startup_event():
                 from sqlalchemy import text
                 conn.execute(text("SELECT 1"))
             logger.info("数据库连接成功!")
-            logger.info("请确保已运行 Alembic 迁移: alembic upgrade head")
+            
+            # 自动创建/更新表结构（类似 GORM 的 AutoMigrate）
+            logger.info("开始自动同步数据库表结构...")
+            from app.core.models import Base
+            Base.metadata.create_all(bind=engine)
+            logger.info("✅ 数据库表结构同步完成!")
+            
             break
         except Exception as e:
             logger.warning(f"数据库连接失败: {e}")
