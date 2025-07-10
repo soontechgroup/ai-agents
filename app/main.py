@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
+from app.core.models import Base  # 移到顶部导入
 from app.api.v1.router import api_router
 import os
 import time
@@ -48,7 +49,6 @@ async def startup_event():
             
             # 自动创建/更新表结构（类似 GORM 的 AutoMigrate）
             logger.info("开始自动同步数据库表结构...")
-            from app.core.models import Base
             Base.metadata.create_all(bind=engine)
             logger.info("✅ 数据库表结构同步完成!")
             
