@@ -54,7 +54,7 @@ if __name__ == "__main__":
     port = args.port
     reload = args.reload or True  # 开发模式默认开启热重载
     
-    print("🔧 PyCharm 开发模式启动...")
+    print("\n🔧 PyCharm 开发模式启动...")
     print(f"🌍 运行环境: {args.env}")
     print(f"📍 访问地址: http://{host}:{port}")
     print(f"📖 API文档: http://{host}:{port}/docs")

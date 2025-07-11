@@ -1,9 +1,9 @@
+"""认证守卫"""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.core.security import verify_token
 from app.core.models import User
+from app.core.security import verify_token
+from app.dependencies.services import get_auth_service
 from app.services.auth_service import AuthService
 from typing import Optional
 
@@ -11,11 +11,11 @@ from typing import Optional
 security = HTTPBearer()
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    auth_service: AuthService = Depends(get_auth_service)
 ) -> User:
-    """获取当前用户"""
+    """验证并获取当前用户"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无法验证凭据",
@@ -32,14 +32,16 @@ def get_current_user(
         raise credentials_exception
     
     # 获取用户
-    user = AuthService.get_user_by_username(db, username)
+    user = auth_service.get_user_by_username(username)
     if user is None:
         raise credentials_exception
     
     return user
 
 
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
     """获取当前活跃用户"""
     if not current_user.is_active:
         raise HTTPException(
@@ -49,11 +51,21 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
-def get_current_superuser(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_superuser(
+    current_user: User = Depends(get_current_user)
+) -> User:
     """获取当前超级用户"""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足"
         )
-    return current_user 
+    return current_user
+
+
+class AuthGuard:
+    """认证守卫类 - 提供静态方法访问"""
+    get_current_user = staticmethod(get_current_user)
+    require_active_user = staticmethod(get_current_active_user)
+    require_superuser = staticmethod(get_current_superuser)
+
