@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.schemas.auth import UserCreateRequest, UserLoginRequest, UserData, Token
 from app.schemas.common import SuccessResponse
 from app.services.auth_service import AuthService
-from app.utils.dependencies import get_current_active_user, get_current_user, get_auth_service
+from app.dependencies import get_auth_service
+from app.guards import get_current_active_user, get_current_user
 from app.utils.response import ResponseUtil
 from app.core.models import User
 
