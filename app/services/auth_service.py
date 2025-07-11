@@ -29,7 +29,12 @@ class AuthService:
                 detail="用户名已存在"
             )
         
-        # 注意：邮箱允许重复，所以不检查邮箱重复
+        # 检查邮箱是否已存在（邮箱必须唯一）
+        if self.user_repository.get_user_by_email(user_create.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邮箱已存在"
+            )
         
         # 创建新用户
         hashed_password = get_password_hash(user_create.password)

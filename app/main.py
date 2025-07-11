@@ -35,8 +35,8 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """应用启动时检查数据库连接"""
-    max_retries = 10
-    retry_interval = 2
+    max_retries = 2
+    retry_interval = 1
     
     for attempt in range(max_retries):
         try:
