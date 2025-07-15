@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人中心 - AI Web应用</title>
+    <style>
+        :root {
+            /* 背景色系 */
+            --bg-primary: #0A1628;
+            --bg-secondary: #1A1A2E;
+            --bg-tertiary: #16213E;
+            --bg-overlay: rgba(10, 22, 40, 0.85);
+            
+            /* 强调色 */
+            --accent-primary: #00D9FF;
+            --accent-secondary: #7B68EE;
+            --accent-gradient: linear-gradient(135deg, #00D9FF 0%, #7B68EE 100%);
+            
+            /* 文字色 */
+            --text-primary: #F5F5F5;
+            --text-secondary: #B8BCC8;
+            --text-muted: #6C7293;
+            
+            /* 功能色 */
+            --success: #00F5A0;
+            --warning: #F7B731;
+            --error: #EE5A6F;
+            --info: #4FACFE;
+            
+            /* 边框和分割线 */
+            --border-default: rgba(255, 255, 255, 0.1);
+            --border-hover: rgba(255, 255, 255, 0.2);
+            --border-focus: var(--accent-primary);
+            
+            /* 阴影 */
+            --shadow-sm: 0 1px 3px rgba(0, 217, 255, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 217, 255, 0.1);
+            --shadow-lg: 0 10px 15px rgba(0, 217, 255, 0.15);
+            --shadow-xl: 0 20px 25px rgba(0, 217, 255, 0.2);
+            --glow-sm: 0 0 10px rgba(0, 217, 255, 0.3);
+            --glow-md: 0 0 20px rgba(0, 217, 255, 0.4);
+            
+            /* 动画 */
+            --duration-fast: 150ms;
+            --duration-normal: 300ms;
+            --duration-slow: 500ms;
+            --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* 网格背景 */
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 217, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            background: rgba(26, 26, 46, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-default);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all var(--duration-normal);
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--accent-primary);
+        }
+
+        .nav-link.active {
+            color: var(--accent-primary);
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--accent-gradient);
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* 个人信息卡片 */
+        .profile-section {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .profile-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+            transition: all var(--duration-normal);
+        }
+
+        .profile-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-xl), var(--glow-sm);
+            border-color: var(--border-hover);
+        }
+
+        /* 科技感边框 */
+        .profile-card::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 16px;
+            padding: 2px;
+            background: var(--accent-gradient);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity var(--duration-normal);
+        }
+
+        .profile-card:hover::before {
+            opacity: 1;
+        }
+
+        .profile-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            border: 3px solid var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: var(--bg-primary);
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--glow-md);
+        }
+
+        .avatar::after {
+            content: '';
+            position: absolute;
+            inset: -50%;
+            background: conic-gradient(from 0deg, transparent, var(--accent-primary), transparent 30%);
+            animation: rotate 3s linear infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes rotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .username {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-id {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1.5rem 0.5rem;
+            background: rgba(22, 33, 62, 0.8);
+            border-radius: 16px;
+            border: 1px solid var(--border-default);
+            transition: all var(--duration-normal);
+            position: relative;
+            overflow: hidden;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .stat-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity var(--duration-normal);
+        }
+
+        .stat-item:hover {
+            background: rgba(22, 33, 62, 0.9);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-item:hover::before {
+            opacity: 1;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            margin-bottom: 0.25rem;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.2;
+            font-weight: 400;
+            white-space: nowrap;
+        }
+
+        /* 特殊处理中间的"自传"卡片 */
+        .stat-item:nth-child(2) .stat-value {
+            font-size: 1.5rem;
+        }
+
+        /* 信息详情 */
+        .info-section {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: var(--accent-gradient);
+            border-radius: 2px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem;
+            background: rgba(0, 217, 255, 0.05);
+            border-radius: 8px;
+            border: 1px solid var(--border-default);
+            transition: all var(--duration-normal);
+        }
+
+        .info-item:hover {
+            background: rgba(0, 217, 255, 0.1);
+            border-color: var(--accent-primary);
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .info-value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* 功能按钮组 */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            font-family: inherit;
+            font-weight: 500;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all var(--duration-normal) var(--ease-in-out);
+            background: transparent;
+            color: var(--text-primary);
+            border-color: var(--border-default);
+            backdrop-filter: blur(10px);
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            border-color: var(--accent-primary);
+            box-shadow: var(--glow-sm);
+            transform: translateY(-2px);
+        }
+
+        .btn.active {
+            background: var(--accent-gradient);
+            color: var(--bg-primary);
+            border-color: transparent;
+        }
+
+        /* 访谈记录部分 */
+        .records-section {
+            margin-top: 2rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .create-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            background: var(--accent-gradient);
+            color: var(--bg-primary);
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all var(--duration-normal);
+            box-shadow: var(--shadow-md);
+        }
+
+        .create-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg), var(--glow-md);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .profile-section {
+                grid-template-columns: 1fr;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">AI Assistant</div>
+            <ul class="nav-menu">
+                <li><a href="#" class="nav-link">首页</a></li>
+                <li><a href="#" class="nav-link">会话</a></li>
+                <li><a href="#" class="nav-link active">个人中心</a></li>
+                <li><a href="#" class="nav-link">设置</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="container">
+        <div class="profile-section">
+            <!-- 左侧个人信息卡片 -->
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div class="avatar-container">
+                        <div class="avatar">
+                            <span>JD</span>
+                        </div>
+                    </div>
+                    <h2 class="username">John Doe</h2>
+                    <p class="user-id">ID: 32153252</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">数字人</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">自传</div>
+                        <div class="stat-label">当前模式</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">156</div>
+                        <div class="stat-label">访谈记录</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧详细信息 -->
+            <div class="info-section">
+                <h3 class="section-title">个人信息</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">用户名</span>
+                        <span class="info-value">John Doe</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">用户ID</span>
+                        <span class="info-value">32153252</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">注册时间</span>
+                        <span class="info-value">2024-01-15</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">邮箱</span>
+                        <span class="info-value">john.doe@example.com</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">手机</span>
+                        <span class="info-value">138****5678</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">最后登录</span>
+                        <span class="info-value">2025-01-13 01:36</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能按钮 -->
+        <div class="action-buttons">
+            <a href="#" class="btn">首页</a>
+            <a href="#" class="btn">会话</a>
+            <a href="#" class="btn active">➕</a>
+            <a href="#" class="btn">书单</a>
+            <a href="#" class="btn">我的</a>
+        </div>
+
+        <!-- 访谈记录 -->
+        <div class="records-section">
+            <h3 class="section-title">访谈记录</h3>
+            <div class="empty-state">
+                <div class="empty-icon">📝</div>
+                <p>还没有自传，请先创建自传</p>
+                <a href="#" class="create-btn">
+                    <span>➕</span>
+                    <span>创建自传</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

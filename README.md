@@ -1,117 +1,178 @@
-# AI Agents API
+# 环境配置说明
 
-基于 FastAPI 的 AI 代理系统，包含 JWT 认证功能。
+## 概述
 
-## 🚀 快速开始
+本项目支持多环境配置，可以通过环境变量或命令行参数指定不同的运行环境。
 
-### 1. 环境设置
+## 支持的环境
 
-```bash
-# 克隆项目
-git clone <your-repo-url>
-cd ai-agents
+- `dev` / `development` - 开发环境 (默认)
+- `test` - 测试环境
+- `staging` - 预发环境
+- `prod` / `production` - 生产环境
 
-# 创建虚拟环境
-python -m venv .venv
+## 配置文件
 
-# 激活虚拟环境
-# Windows
-.venv\Scripts\activate
-# Linux/Mac
-source .venv/bin/activate
+每个环境对应一个配置文件：
 
-# 安装依赖
-pip install -r requirements.txt
-```
+- `.env.dev` - 开发环境配置
+- `.env.test` - 测试环境配置
+- `.env.staging` - 预发环境配置
+- `.env.prod` - 生产环境配置
+- `.env` - 默认配置文件（备用）
 
-### 2. 配置环境变量
+## 使用方法
 
-```bash
-# 复制环境变量模板
-cp .env.dev .env.dev
-
-# 编辑 .env.dev 文件，填入你的配置
-# 至少需要配置：
-# - SECRET_KEY: JWT 密钥
-# - DATABASE_URL: 数据库连接字符串
-```
-
-### 3. 数据库设置
-
-确保 MySQL 数据库已启动，并创建对应的数据库：
-
-```sql
--- 开发环境
-CREATE DATABASE ai_agents_dev;
-
--- 生产环境
-CREATE DATABASE ai_agents;
-```
-
-### 4. 运行应用
+### 1. 使用 Python 启动脚本
 
 ```bash
-# 开发模式
+# 默认开发环境
 python run.py
 
-# 或者直接使用 uvicorn
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# 指定环境
+python run.py --env dev
+python run.py --env staging
+python run.py --env prod
+
+# 指定其他参数
+python run.py --env prod --host 0.0.0.0 --port 9000
 ```
 
-访问 http://localhost:8000 查看应用。
+### 2. 使用 Shell 脚本
 
-## 📁 项目结构
+```bash
+# 默认开发环境
+./scripts/run.sh start
 
-```
-ai-agents/
-├── app/
-│   ├── api/v1/          # API 路由
-│   ├── core/            # 核心配置和数据库
-│   ├── schemas/         # Pydantic 模型
-│   ├── services/        # 业务逻辑
-│   └── utils/           # 工具函数
-├── static/              # 静态文件
-├── .env.dev             # 开发环境变量配置
-├── requirements.txt     # Python 依赖
-└── README.md           # 项目说明
+# 指定环境
+ENVIRONMENT=dev ./scripts/run.sh start
+ENVIRONMENT=staging ./scripts/run.sh start
+ENVIRONMENT=prod ./scripts/run.sh start
+
+# 开发模式
+ENVIRONMENT=dev ./scripts/run.sh dev
 ```
 
-## ⚙️ 环境配置
+### 3. 直接设置环境变量
 
-项目支持多环境配置，主要环境变量：
+```bash
+# 设置环境变量
+export ENVIRONMENT=prod
 
-- `SECRET_KEY`: JWT 密钥（必须）
-- `DATABASE_URL`: 数据库连接字符串（必须）
-- `ENVIRONMENT`: 环境类型 (development/production)
-- `DEBUG`: 调试模式 (true/false)
-- `LOG_LEVEL`: 日志级别 (DEBUG/INFO/WARNING/ERROR)
+# 启动应用
+python run.py
+# 或
+./scripts/run.sh start
+```
 
-## 🔧 开发
+## Docker 数据库配置
 
-### API 文档
+项目使用 Docker Compose 来管理数据库，确保在启动应用前先启动数据库服务：
 
-启动应用后访问：
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+```bash
+# 启动 MySQL 数据库
+docker-compose up -d mysql
 
-### 添加新功能
+# 查看数据库状态
+docker-compose ps
 
-1. 在 `app/api/v1/endpoints/` 添加新的端点
-2. 在 `app/schemas/` 添加 Pydantic 模型
-3. 在 `app/services/` 添加业务逻辑
-4. 更新路由注册
+# 停止数据库
+docker-compose down
+```
 
-## 📦 部署
+## 配置文件示例
 
-生产环境部署时：
+### .env.dev (开发环境)
+```env
+# 开发环境配置
+PROJECT_NAME=AI Agents API (Dev)
+VERSION=1.0.0
+ENVIRONMENT=development
+DEBUG=true
 
-1. 设置环境变量 `ENVIRONMENT=production`
-2. 使用强密钥作为 `SECRET_KEY`
-3. 配置生产数据库
-4. 设置 `DEBUG=false`
-5. 配置适当的 `CORS_ORIGINS`
+# 服务器配置
+HOST=127.0.0.1
+PORT=8000
+RELOAD=true
 
-## 🤝 贡献
+# 数据库配置 (与 docker-compose.yml 匹配)
+# 确保 Docker 容器正在运行: docker-compose up -d mysql
+DATABASE_URL=mysql+pymysql://root:123456@localhost:3306/ai_agents
 
-欢迎提交 Issue 和 Pull Request！
+# JWT配置
+SECRET_KEY=dev-secret-key-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 
+# 日志配置
+LOG_LEVEL=DEBUG
+
+# CORS配置 (开发环境允许本地访问)
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080"]
+```
+
+### .env.staging (预发环境)
+```env
+# 预发环境配置
+PROJECT_NAME=AI Agents API (Staging)
+ENVIRONMENT=staging
+DEBUG=false
+
+HOST=0.0.0.0
+PORT=8000
+RELOAD=false
+
+DATABASE_URL=mysql+pymysql://username:password@localhost:3306/ai_agents_staging
+SECRET_KEY=staging-secret-key-please-change-this
+LOG_LEVEL=INFO
+
+CORS_ORIGINS=["https://staging.your-domain.com"]
+```
+
+### .env.prod (生产环境)
+```env
+# 生产环境配置
+PROJECT_NAME=AI Agents API
+ENVIRONMENT=production
+DEBUG=false
+
+HOST=0.0.0.0
+PORT=8000
+RELOAD=false
+
+DATABASE_URL=mysql+pymysql://username:password@localhost:3306/ai_agents_prod
+SECRET_KEY=your-super-secret-key-for-production-please-change-this
+LOG_LEVEL=INFO
+
+CORS_ORIGINS=["https://your-frontend-domain.com"]
+```
+
+## 环境变量优先级
+
+1. 命令行参数 (最高优先级)
+2. 环境变量文件 (.env.dev, .env.prod 等)
+3. 系统环境变量
+4. 默认配置值 (最低优先级)
+
+## 注意事项
+
+1. **安全性**: 生产环境的配置文件不应该提交到版本控制系统
+2. **密钥管理**: 每个环境应该使用不同的密钥和密码
+3. **数据库**: 不同环境应该使用不同的数据库
+4. **调试模式**: 生产环境应该关闭调试模式
+5. **CORS**: 生产环境应该配置正确的前端域名
+
+## 故障排除
+
+如果环境配置文件不存在，系统会：
+1. 显示警告信息
+2. 尝试加载默认的 `.env` 文件
+3. 使用代码中的默认配置值
+
+启动时会显示当前的环境信息：
+```
+🔧 加载环境配置文件: .env.dev
+🚀 当前运行环境: dev
+📊 调试模式: 开启
+🔗 数据库连接: mysql+pymysql://root:123456@localhost:3306/ai_agents_dev
+``` 
