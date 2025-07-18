@@ -1,16 +1,16 @@
 from fastapi import APIRouter
 from .endpoints import auth
 
-# ú¡ğï1
+# åˆ›å»ºç®¡ç†åå°è·¯ç”±
 admin_router = APIRouter()
 
-# ¡ğ¤Áï1
+# æ³¨å†Œè®¤è¯æ¨¡å—è·¯ç”±
 admin_router.include_router(
     auth.router,
     prefix="/auth",
-    tags=["¡ğ-¤Á"]
+    tags=["ç®¡ç†-è®¤è¯"]
 )
 
-# íïåû vÖ¡!Wï1
-# admin_router.include_router(users.router, prefix="/users", tags=["¡ğ-(7¡"])
-# admin_router.include_router(agents.router, prefix="/agents", tags=["¡ğ-ã¡"])
+# åç»­æ·»åŠ å…¶ä»–æ¨¡å—è·¯ç”±
+# admin_router.include_router(users.router, prefix="/users", tags=["ç®¡ç†-ç”¨æˆ·"])
+# admin_router.include_router(agents.router, prefix="/agents", tags=["ç®¡ç†-ä»£ç†"])

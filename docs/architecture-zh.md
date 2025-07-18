@@ -68,13 +68,13 @@ graph TB
 - **技术栈**：FastAPI + SQLAlchemy 2.0 + Pydantic
 - **架构模式**：分层架构（Controller → Service → Repository）
 - **认证方式**：JWT
-- **已实现接口**：
-  - POST `/api/v1/auth/register` - 用户注册
-  - POST `/api/v1/auth/login` - 用户登录
-  - GET `/api/v1/auth/me` - 获取当前用户信息
-- **待实现接口** ⚠️：
-  - AI 代理管理 API
-  - 其他业务接口
+- **已实现模块**：
+  - 用户认证模块（注册、登录、用户信息）
+- **待实现模块** ⚠️：
+  - AI 代理管理模块
+  - 游戏配置管理模块
+  - 数据统计模块
+  - 系统配置模块
 
 ### 3. 数据层
 
