@@ -6,7 +6,6 @@ from datetime import datetime
 
 class UserCreateRequest(BaseModel):
     """用户创建模式"""
-    username: constr(min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$') = Field(..., description="用户名（3-50字符，只允许字母、数字、下划线和连字符）")
     email: EmailStr = Field(..., description="邮箱地址")
     password: constr(min_length=6) = Field(..., description="密码（最少6个字符）")
 
@@ -14,8 +13,8 @@ class UserCreateRequest(BaseModel):
 
 class UserLoginRequest(BaseModel):
     """用户登录模式"""
-    username: str
-    password: str
+    email: EmailStr = Field(..., description="邮箱地址")
+    password: str = Field(..., description="密码")
 
 
 class UserData(BaseModel):
