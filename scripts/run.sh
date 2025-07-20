@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # FastAPI AI Agents 项目控制脚本
-# 适用于生产环境和开发环境
+# 适用于生产环境和开发环境 (假设环境已预先配置)
 
 set -e  # 遇到错误立即退出
 
@@ -43,64 +43,57 @@ DEFAULT_HOST="0.0.0.0"
 DEFAULT_PORT="8000"
 PID_FILE="pids/app.pid"
 LOG_FILE="logs/app.log"
-VENV_DIR=".venv"
 
 # 检查Python环境
 check_python() {
     log_info "检查Python环境..."
     
-    # 检查Python是否安装
-    if ! command -v python3 &> /dev/null; then
-        log_error "Python3 未安装，请先安装Python3"
+    # 检查Python是否可用
+    if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
+        log_error "Python 未找到，请确保Python已安装并在PATH中"
         exit 1
+    fi
+    
+    # 优先使用python命令，如果不存在则使用python3
+    if command -v python &> /dev/null; then
+        PYTHON_CMD="python"
+    else
+        PYTHON_CMD="python3"
     fi
     
     # 检查Python版本
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-    log_success "Python版本: $PYTHON_VERSION"
+    PYTHON_VERSION=$($PYTHON_CMD --version | cut -d' ' -f2)
+    log_success "Python版本: $PYTHON_VERSION (命令: $PYTHON_CMD)"
     
     # 检查Python版本是否满足要求（至少3.8）
-    if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
+    if ! $PYTHON_CMD -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
         log_error "Python版本需要3.8或更高版本"
         exit 1
     fi
+    
+    # 检查必要的包是否已安装
+    check_dependencies
 }
 
-# 设置虚拟环境
-setup_venv() {
-    log_info "设置虚拟环境..."
+# 检查依赖是否已安装
+check_dependencies() {
+    log_info "检查必要依赖..."
     
-    if [ ! -d "$VENV_DIR" ]; then
-        log_info "创建虚拟环境..."
-        python3 -m venv "$VENV_DIR"
-        log_success "虚拟环境创建完成"
-    else
-        log_info "虚拟环境已存在"
-    fi
-    
-    # 激活虚拟环境
-    log_info "激活虚拟环境..."
-    source "$VENV_DIR/bin/activate"
-    
-    # 显示Python路径
-    log_success "虚拟环境已激活: $(which python)"
-}
-
-# 安装依赖
-install_dependencies() {
-    log_info "安装项目依赖..."
-    
-    if [ ! -f "requirements.txt" ]; then
-        log_error "requirements.txt 文件不存在"
+    # 检查uvicorn是否已安装
+    if ! $PYTHON_CMD -c "import uvicorn" 2>/dev/null; then
+        log_error "uvicorn 未安装，请先安装项目依赖"
+        log_info "运行: pip install -r requirements.txt"
         exit 1
     fi
     
-    # 升级pip
-    python -m pip install --upgrade pip
+    # 检查fastapi是否已安装
+    if ! $PYTHON_CMD -c "import fastapi" 2>/dev/null; then
+        log_error "fastapi 未安装，请先安装项目依赖"
+        log_info "运行: pip install -r requirements.txt"
+        exit 1
+    fi
     
-    # 安装依赖
-    pip install -r requirements.txt
-    log_success "依赖安装完成"
+    log_success "依赖检查通过"
 }
 
 # 检查环境变量配置
@@ -197,9 +190,8 @@ start_app() {
     log_info "API文档地址: http://$HOST:$PORT/docs"
     log_info "主页地址: http://$HOST:$PORT/"
     
-    # 激活虚拟环境并后台启动应用
-    source "$VENV_DIR/bin/activate"
-    nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --reload="$RELOAD" --log-level info > "$LOG_FILE" 2>&1 &
+    # 后台启动应用（不使用虚拟环境）
+    nohup $PYTHON_CMD -m uvicorn app.main:app --host "$HOST" --port "$PORT" --reload="$RELOAD" --log-level info > "$LOG_FILE" 2>&1 &
     APP_PID=$!
     
     # 保存PID
@@ -354,19 +346,17 @@ tail_logs() {
     fi
 }
 
-# 启动服务（完整流程）
+# 启动服务（简化流程）
 start_service() {
     log_info "开始启动 FastAPI AI Agents 服务..."
     echo "=================================="
     
     check_python
-    setup_venv
-    install_dependencies
     check_env
     setup_directories
     
     echo "=================================="
-    log_success "环境准备完成，正在启动服务..."
+    log_success "环境检查完成，正在启动服务..."
     
     start_app
 }
@@ -379,15 +369,13 @@ dev_start() {
     export PORT="${PORT:-8000}"
     
     check_python
-    setup_venv
     check_env
     setup_directories
     
-    # 激活虚拟环境并直接运行（前台模式）
-    source "$VENV_DIR/bin/activate"
+    # 直接运行（前台模式，不使用虚拟环境）
     log_success "开发模式启动，热重载已开启"
     log_info "API文档地址: http://$HOST:$PORT/docs"
-    uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info
+    $PYTHON_CMD -m uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info
 }
 
 # 清理函数
@@ -411,7 +399,7 @@ cleanup() {
 
 # 显示帮助信息
 show_help() {
-    echo "FastAPI AI Agents 项目控制脚本"
+    echo "FastAPI AI Agents 项目控制脚本 (无虚拟环境版本)"
     echo ""
     echo "用法: $0 [命令] [选项]"
     echo ""
@@ -432,6 +420,10 @@ show_help() {
     echo "  RELOAD      - 是否启用热重载 (默认: false)"
     echo "  ENVIRONMENT - 运行环境 (默认: dev)"
     echo "                可选值: dev, development, test, staging, prod, production"
+    echo ""
+    echo "注意："
+    echo "  此脚本假设Python环境和依赖已预先配置完成"
+    echo "  请确保在运行前已安装所有必要的Python包"
     echo ""
     echo "示例:"
     echo "  $0 start                           # 启动服务 (默认dev环境)"
@@ -490,4 +482,4 @@ cleanup_on_exit() {
 trap cleanup_on_exit SIGINT SIGTERM
 
 # 执行主函数
-main "$@" 
+main "$@"
