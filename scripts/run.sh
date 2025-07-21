@@ -206,7 +206,12 @@ start_app() {
     # 激活conda环境并后台启动应用
     eval "$(conda shell.bash hook)"
     conda activate "$CONDA_ENV_NAME"
-    nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --reload="$RELOAD" --log-level info > "$LOG_FILE" 2>&1 &
+    # 根据 RELOAD 变量决定是否添加 --reload 参数
+    if [ "$RELOAD" = "true" ]; then
+        nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info > "$LOG_FILE" 2>&1 &
+    else
+        nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --log-level info > "$LOG_FILE" 2>&1 &
+    fi
     APP_PID=$!
     
     # 保存PID
