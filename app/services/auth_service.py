@@ -22,13 +22,6 @@ class AuthService:
     
     def create_user(self, user_create: UserCreateRequest) -> User:
         """创建新用户"""
-        # 检查用户名是否已存在（用户名必须唯一）
-        if self.user_repository.get_user_by_username(user_create.username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="用户名已存在"
-            )
-        
         # 检查邮箱是否已存在（邮箱必须唯一）
         if self.user_repository.get_user_by_email(user_create.email):
             raise HTTPException(
@@ -38,17 +31,26 @@ class AuthService:
         
         # 创建新用户
         hashed_password = get_password_hash(user_create.password)
+        # 使用邮箱作为用户名
+        username = user_create.email.split('@')[0]
+        # 如果用户名已存在，添加随机后缀
+        base_username = username
+        counter = 1
+        while self.user_repository.get_user_by_username(username):
+            username = f"{base_username}{counter}"
+            counter += 1
+        
         user_data = {
-            "username": user_create.username,
+            "username": username,
             "email": user_create.email,
             "hashed_password": hashed_password
         }
         
         return self.user_repository.create_user(user_data)
     
-    def authenticate_user(self, username: str, password: str) -> Optional[User]:
+    def authenticate_user(self, email: str, password: str) -> Optional[User]:
         """验证用户身份"""
-        user = self.user_repository.get_user_by_username(username)
+        user = self.user_repository.get_user_by_email(email)
         if not user:
             return None
         if not verify_password(password, user.hashed_password):
@@ -57,11 +59,11 @@ class AuthService:
     
     def login_user(self, user_login: UserLoginRequest) -> dict:
         """用户登录"""
-        user = self.authenticate_user(user_login.username, user_login.password)
+        user = self.authenticate_user(user_login.email, user_login.password)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误",
+                detail="邮箱或密码错误",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         

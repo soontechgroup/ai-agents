@@ -18,8 +18,7 @@ async def register(
     """
     用户注册
     
-    - **username**: 用户名（必须唯一）
-    - **email**: 邮箱地址（允许重复）
+    - **email**: 邮箱地址（必须唯一）
     - **password**: 密码
     """
     user = auth_service.create_user(user_create)
@@ -34,7 +33,7 @@ async def login(
     """
     用户登录
     
-    - **username**: 用户名
+    - **email**: 邮箱地址
     - **password**: 密码
     
     返回访问令牌
