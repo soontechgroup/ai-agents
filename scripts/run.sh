@@ -43,7 +43,7 @@ DEFAULT_HOST="0.0.0.0"
 DEFAULT_PORT="8000"
 PID_FILE="pids/app.pid"
 LOG_FILE="logs/app.log"
-VENV_DIR=".venv"
+CONDA_ENV_NAME="ai-agents"
 
 # 检查Python环境
 check_python() {
@@ -66,24 +66,30 @@ check_python() {
     fi
 }
 
-# 设置虚拟环境
-setup_venv() {
-    log_info "设置虚拟环境..."
+# 设置conda环境
+setup_conda_env() {
+    log_info "设置conda环境..."
     
-    if [ ! -d "$VENV_DIR" ]; then
-        log_info "创建虚拟环境..."
-        python3 -m venv "$VENV_DIR"
-        log_success "虚拟环境创建完成"
-    else
-        log_info "虚拟环境已存在"
+    # 检查conda是否安装
+    if ! command -v conda &> /dev/null; then
+        log_error "Conda 未安装，请先安装Conda"
+        exit 1
     fi
     
-    # 激活虚拟环境
-    log_info "激活虚拟环境..."
-    source "$VENV_DIR/bin/activate"
+    # 检查conda环境是否存在
+    if ! conda env list | grep -q "^$CONDA_ENV_NAME "; then
+        log_error "Conda环境 '$CONDA_ENV_NAME' 不存在"
+        log_info "请先创建环境: conda create -n $CONDA_ENV_NAME python=3.11"
+        exit 1
+    fi
+    
+    # 激活conda环境
+    log_info "激活conda环境: $CONDA_ENV_NAME"
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
     
     # 显示Python路径
-    log_success "虚拟环境已激活: $(which python)"
+    log_success "Conda环境已激活: $(which python)"
 }
 
 # 安装依赖
@@ -197,8 +203,9 @@ start_app() {
     log_info "API文档地址: http://$HOST:$PORT/docs"
     log_info "主页地址: http://$HOST:$PORT/"
     
-    # 激活虚拟环境并后台启动应用
-    source "$VENV_DIR/bin/activate"
+    # 激活conda环境并后台启动应用
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
     nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --reload="$RELOAD" --log-level info > "$LOG_FILE" 2>&1 &
     APP_PID=$!
     
@@ -360,7 +367,7 @@ start_service() {
     echo "=================================="
     
     check_python
-    setup_venv
+    setup_conda_env
     install_dependencies
     check_env
     setup_directories
@@ -379,12 +386,13 @@ dev_start() {
     export PORT="${PORT:-8000}"
     
     check_python
-    setup_venv
+    setup_conda_env
     check_env
     setup_directories
     
-    # 激活虚拟环境并直接运行（前台模式）
-    source "$VENV_DIR/bin/activate"
+    # 激活conda环境并直接运行（前台模式）
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
     log_success "开发模式启动，热重载已开启"
     log_info "API文档地址: http://$HOST:$PORT/docs"
     uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info
