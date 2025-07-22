@@ -61,11 +61,9 @@ class Session(Base):
     __tablename__ = "sessions"
     
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String(100), unique=True, index=True, nullable=False, comment="会话唯一标识")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
     title = Column(String(200), nullable=True, comment="会话标题")
-    is_active = Column(Boolean, default=True, comment="是否为活跃会话")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -82,7 +80,7 @@ class DigitalHumanChat(Base):
     id = Column(Integer, primary_key=True, index=True)
     digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    session_id = Column(String(100), ForeignKey("sessions.session_id"), nullable=False, comment="会话ID")
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, comment="会话ID")
     message_type = Column(Enum("user", "assistant", name="message_type"), nullable=False)
     content = Column(Text, nullable=False)
     metadata = Column(JSON, nullable=True, comment="消息元数据")
