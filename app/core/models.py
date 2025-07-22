@@ -45,9 +45,6 @@ class DigitalHuman(Base):
     temperature = Column(Float, default=0.7, comment="AI温度参数")
     max_tokens = Column(Integer, default=2048, comment="最大token数")
     
-    # 状态管理
-    status = Column(Enum("draft", "training", "active", "inactive", name="digital_human_status"), 
-                   default="draft", comment="数字人状态")
     
     # 用户关联
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -59,6 +56,25 @@ class DigitalHuman(Base):
     last_trained_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class Session(Base):
+    """会话模型"""
+    __tablename__ = "sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(100), unique=True, index=True, nullable=False, comment="会话唯一标识")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
+    title = Column(String(200), nullable=True, comment="会话标题")
+    is_active = Column(Boolean, default=True, comment="是否为活跃会话")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # 关联关系
+    user = relationship("User")
+    digital_human = relationship("DigitalHuman")
+    chats = relationship("DigitalHumanChat", back_populates="session")
+
+
 class DigitalHumanChat(Base):
     """数字人对话记录"""
     __tablename__ = "digital_human_chats"
@@ -66,7 +82,7 @@ class DigitalHumanChat(Base):
     id = Column(Integer, primary_key=True, index=True)
     digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    session_id = Column(String(100), nullable=True, comment="会话ID")
+    session_id = Column(String(100), ForeignKey("sessions.session_id"), nullable=False, comment="会话ID")
     message_type = Column(Enum("user", "assistant", name="message_type"), nullable=False)
     content = Column(Text, nullable=False)
     metadata = Column(JSON, nullable=True, comment="消息元数据")
@@ -74,4 +90,5 @@ class DigitalHumanChat(Base):
     
     # 关联关系
     digital_human = relationship("DigitalHuman")
-    user = relationship("User") 
+    user = relationship("User")
+    session = relationship("Session", back_populates="chats") 
