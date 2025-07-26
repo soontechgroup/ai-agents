@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 from app.schemas.digital_human import DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse
 from app.schemas.common import SuccessResponse
 from app.services.digital_human_service import DigitalHumanService
@@ -39,19 +38,6 @@ async def create_digital_human(
     digital_human = digital_human_service.create_digital_human(digital_human_data, current_user.id)
     return ResponseUtil.success(data=digital_human, message="数字人创建成功")
 
-
-@router.get("/", response_model=SuccessResponse[List[DigitalHumanResponse]], summary="获取用户数字人列表")
-async def get_user_digital_humans(
-    current_user: User = Depends(get_current_active_user),
-    digital_human_service: DigitalHumanService = Depends(get_digital_human_service)
-):
-    """
-    获取当前用户的所有数字人
-    
-    返回按创建时间倒序排列的数字人列表
-    """
-    digital_humans = digital_human_service.get_user_digital_humans(current_user.id)
-    return ResponseUtil.success(data=digital_humans, message="获取数字人列表成功")
 
 
 @router.get("/{digital_human_id}", response_model=SuccessResponse[DigitalHumanResponse], summary="获取数字人详情")
