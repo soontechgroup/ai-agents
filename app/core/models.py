@@ -83,7 +83,7 @@ class DigitalHumanChat(Base):
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, comment="会话ID")
     message_type = Column(Enum("user", "assistant", name="message_type"), nullable=False)
     content = Column(Text, nullable=False)
-    metadata = Column(JSON, nullable=True, comment="消息元数据")
+    message_metadata = Column(JSON, nullable=True, comment="消息元数据")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 关联关系
