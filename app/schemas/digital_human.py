@@ -19,7 +19,7 @@ class DigitalHumanCreate(BaseModel):
     skills: Optional[List[str]] = Field(default=[], description="专业领域技能")
     personality: Optional[PersonalityConfig] = Field(default_factory=PersonalityConfig, description="性格特征")
     conversation_style: Optional[str] = Field(default="专业严谨", description="对话风格")
-    temperature: Optional[float] = Field(default=0.7, ge=0, le=2, description="AI温度参数")
+    temperature: Optional[float] = Field(default=0.7, ge=0, le=1, description="AI温度参数")
     max_tokens: Optional[int] = Field(default=2048, ge=1, le=8192, description="最大token数")
 
 
