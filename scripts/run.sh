@@ -126,15 +126,6 @@ check_env() {
         "dev"|"development")
             ENV_FILE=".env.dev"
             ;;
-        "test")
-            ENV_FILE=".env.test"
-            ;;
-        "staging")
-            ENV_FILE=".env.staging"
-            ;;
-        "prod"|"production")
-            ENV_FILE=".env.prod"
-            ;;
         *)
             ENV_FILE=".env"
             ;;
@@ -444,15 +435,14 @@ show_help() {
     echo "  PORT        - 服务监听端口 (默认: $DEFAULT_PORT)"
     echo "  RELOAD      - 是否启用热重载 (默认: false)"
     echo "  ENVIRONMENT - 运行环境 (默认: dev)"
-    echo "                可选值: dev, development, test, staging, prod, production"
+    echo "                可选值: dev, development"
     echo ""
     echo "示例:"
     echo "  $0 start                           # 启动服务 (默认dev环境)"
     echo "  $0 dev                             # 开发模式启动"
     echo "  PORT=9000 $0 start                 # 指定端口启动"
     echo "  HOST=127.0.0.1 $0 start            # 指定监听地址启动"
-    echo "  ENVIRONMENT=prod $0 start          # 生产环境启动"
-    echo "  ENVIRONMENT=staging $0 start       # 预发环境启动"
+    echo "  ENVIRONMENT=dev $0 start           # 开发环境启动"
 }
 
 # 主函数

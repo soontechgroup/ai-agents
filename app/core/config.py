@@ -11,11 +11,7 @@ def load_env_file():
     """根据环境变量加载对应的配置文件"""
     env_files = {
         "dev": ".env.dev",
-        "development": ".env.dev", 
-        "test": ".env.test",
-        "staging": ".env.staging",
-        "prod": ".env.prod",
-        "production": ".env.prod"
+        "development": ".env.dev"
     }
     
     # 获取对应环境的配置文件
