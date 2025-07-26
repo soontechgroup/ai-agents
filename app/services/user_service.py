@@ -19,14 +19,6 @@ class UserService:
         """根据邮箱获取用户"""
         return self.db.query(User).filter(User.email == email).first()
     
-    def get_user_by_username(self, username: str) -> Optional[User]:
-        """根据用户名获取用户"""
-        return self.db.query(User).filter(User.username == username).first()
-    
-    def get_all_users(self) -> List[User]:
-        """获取所有用户"""
-        return self.db.query(User).all()
-    
     def create_user(self, user_data: UserCreate) -> User:
         """创建用户"""
         # 检查邮箱是否已存在
@@ -36,12 +28,6 @@ class UserService:
                 detail="邮箱已存在"
             )
         
-        # 检查用户名是否已存在
-        if self.get_user_by_username(user_data.username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="用户名已存在"
-            )
         
         # 创建用户
         db_user = User(
@@ -77,14 +63,6 @@ class UserService:
                     detail="邮箱已存在"
                 )
         
-        # 检查用户名是否重复
-        if 'username' in update_data:
-            existing_user = self.get_user_by_username(update_data['username'])
-            if existing_user and existing_user.id != user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="用户名已存在"
-                )
         
         for field, value in update_data.items():
             setattr(user, field, value)
