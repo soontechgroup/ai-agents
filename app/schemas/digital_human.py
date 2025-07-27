@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 from datetime import datetime
+from app.schemas.CommonResponse import PaginatedResponse, PaginationMeta
 
 
 class PersonalityConfig(BaseModel):
@@ -59,3 +60,15 @@ class DigitalHumanResponse(BaseModel):
         json_encoders = {
             datetime: lambda v: v.strftime('%Y-%m-%d %H:%M:%S')
         }
+
+
+class DigitalHumanPageRequest(BaseModel):
+    """数字人分页请求模型"""
+    page: int = Field(default=1, ge=1, description="页码,从1开始")
+    size: int = Field(default=10, ge=1, le=100, description="每页数量,最大100")
+    search: Optional[str] = Field(None, description="搜索关键词(名称、描述)")
+
+
+class DigitalHumanPageResponse(PaginatedResponse[List[DigitalHumanResponse]]):
+    """数字人分页响应模型"""
+    pass
