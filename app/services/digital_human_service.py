@@ -1,8 +1,10 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 from app.core.models import DigitalHuman, User
-from app.schemas.digital_human import DigitalHumanCreate, DigitalHumanUpdate
-from typing import List, Optional
+from app.schemas.digital_human import DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanResponse
+from app.schemas.CommonResponse import PaginationMeta
+from typing import List, Optional, Tuple
 
 
 class DigitalHumanService:
@@ -94,3 +96,30 @@ class DigitalHumanService:
         self.db.commit()
         
         return True
+    
+    def get_digital_humans_paginated(self, page_request: DigitalHumanPageRequest, user_id: Optional[int] = None) -> Tuple[List[DigitalHuman], int]:
+        """获取分页的数字人列表"""
+        query = self.db.query(DigitalHuman)
+        
+        # 搜索功能
+        if page_request.search:
+            search_term = f"%{page_request.search}%"
+            query = query.filter(
+                or_(
+                    DigitalHuman.name.ilike(search_term),
+                    DigitalHuman.short_description.ilike(search_term),
+                    DigitalHuman.detailed_description.ilike(search_term)
+                )
+            )
+        
+        # 获取总数
+        total = query.count()
+        
+        # 分页
+        offset = (page_request.page - 1) * page_request.size
+        digital_humans = query.order_by(DigitalHuman.created_at.desc())\
+                              .offset(offset)\
+                              .limit(page_request.size)\
+                              .all()
+        
+        return digital_humans, total
