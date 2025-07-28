@@ -16,20 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # 使用 SSH 密钥连接到 GCP
+    # 给虚拟机配置环境， 先配置SSH密钥，再配置Known_hosts(当第一次链接是会提示是否添加到known_hosts，我们也可以先添加进来，（ssh-keyscan -H 34.129.68.205 >> ~/.ssh/known_hosts))
     - name: Install SSH key
       uses: shimataro/ssh-key-action@v2
       with:
         key: ${{ secrets.GCP_SSH_KEY }}
         known_hosts: unnecessary
         if_key_exists: replace
-        
+    # 手动查询服务器公钥，并且添加服务器到known_hosts
     - name: Add server to known hosts
       run: |
         ssh-keyscan -H 34.129.68.205 >> ~/.ssh/known_hosts
     
     - name: Deploy to GCP
-      env:
+      env: #声明一些变量，下面会用到
         HOST: 34.129.68.205 # 替换为你的实际 GCP IP
         PROJECT_NAME: ai-agents
       run: |
@@ -41,7 +41,7 @@ jobs:
         echo "🚀 开始部署到 GCP 服务器..."
         
         # SSH 到服务器并执行部署
-        ssh -o StrictHostKeyChecking=no root@$HOST << 'ENDSSH'
+        ssh root@$HOST << 'ENDSSH'
         # 检查并进入项目目录
         if [ ! -d "/root/ai-agents" ]; then
           echo "❌ 项目目录 /root/ai-agents 不存在"
@@ -87,7 +87,7 @@ jobs:
         EOF
         
         chmod +x deploy.sh
-        ./deploy.sh
+        ./deploy.sh #执行deploy.sh脚本
     
     # 健康检查已经在部署脚本中完成，这里可以添加额外的验证
     - name: Deployment Summary
