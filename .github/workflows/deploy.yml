@@ -29,12 +29,12 @@ jobs:
       uses: shimataro/ssh-key-action@v2
       with:
         key: ${{ secrets.GCP_SSH_KEY }}
-        host: 34.123.456.789  # 替换为你的实际 GCP IP
+        host: 34.129.68.205 # 替换为你的实际 GCP IP
         username: root
     
     - name: Deploy to GCP
       env:
-        HOST: 34.123.456.789  # 替换为你的实际 GCP IP
+        HOST: 34.129.68.205 # 替换为你的实际 GCP IP
         PROJECT_NAME: ai-agents
       run: |
         # 创建部署脚本
