@@ -16,14 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
     # 使用 SSH 密钥连接到 GCP
     - name: Install SSH key
       uses: shimataro/ssh-key-action@v2
