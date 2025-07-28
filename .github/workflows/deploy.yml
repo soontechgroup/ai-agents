@@ -21,8 +21,12 @@ jobs:
       uses: shimataro/ssh-key-action@v2
       with:
         key: ${{ secrets.GCP_SSH_KEY }}
-        host: 34.129.68.205 # 替换为你的实际 GCP IP
-        username: root
+        known_hosts: unnecessary
+        if_key_exists: replace
+        
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H 34.129.68.205 >> ~/.ssh/known_hosts
     
     - name: Deploy to GCP
       env:
