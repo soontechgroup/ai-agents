@@ -41,7 +41,7 @@ jobs:
         echo "🚀 开始部署到 GCP 服务器..."
         
         # SSH 到服务器并执行部署
-        ssh -o StrictHostKeyChecking=no root@$HOST << 'ENDSSH'
+        ssh root@$HOST << 'ENDSSH'
         cd /root/$PROJECT_NAME
         
         echo "📥 拉取最新代码..."
