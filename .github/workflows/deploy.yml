@@ -42,7 +42,14 @@ jobs:
         
         # SSH 到服务器并执行部署
         ssh -o StrictHostKeyChecking=no root@$HOST << 'ENDSSH'
-        cd /root/$PROJECT_NAME
+        # 检查并进入项目目录
+        if [ ! -d "/root/ai-agents" ]; then
+          echo "❌ 项目目录 /root/ai-agents 不存在"
+          exit 1
+        fi
+        
+        cd /root/ai-agents
+        echo "📂 当前目录: $(pwd)"
         
         echo "📥 拉取最新代码..."
         git pull origin main
@@ -52,6 +59,14 @@ jobs:
         conda activate base
         
         echo "🔄 重启应用..."
+        # 检查运行脚本是否存在
+        if [ ! -f "./scripts/run.sh" ]; then
+          echo "❌ 运行脚本 ./scripts/run.sh 不存在"
+          ls -la ./scripts/
+          exit 1
+        fi
+        
+        chmod +x ./scripts/run.sh
         ./scripts/run.sh restart
         
         # 等待服务启动
