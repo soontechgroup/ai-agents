@@ -6,11 +6,12 @@ on:
   pull_request:
     branches: [ main ]
     types: [ closed ]
+  workflow_dispatch: 
 
 jobs:
   deploy:
     # 只在推送到 main 分支或 PR 合并时运行
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
     
     runs-on: ubuntu-latest
     
