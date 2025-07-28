@@ -1,0 +1,81 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+  workflow_dispatch: 
+
+jobs:
+  deploy:
+    # 只在推送到 main 分支或 PR 合并时运行
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 使用 SSH 密钥连接到 GCP
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.GCP_SSH_KEY }}
+        host: 34.129.68.205 # 替换为你的实际 GCP IP
+        username: root
+    
+    - name: Deploy to GCP
+      env:
+        HOST: 34.129.68.205 # 替换为你的实际 GCP IP
+        PROJECT_NAME: ai-agents
+      run: |
+        # 创建部署脚本
+        cat > deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 开始部署到 GCP 服务器..."
+        
+        # SSH 到服务器并执行部署
+        ssh -o StrictHostKeyChecking=no root@$HOST << 'ENDSSH'
+        cd /root/$PROJECT_NAME
+        
+        echo "📥 拉取最新代码..."
+        git pull origin main
+        
+        echo "🐍 激活 conda 环境..."
+        source /opt/miniconda3/etc/profile.d/conda.sh
+        conda activate base
+        
+        echo "🔄 重启应用..."
+        ./scripts/run.sh restart
+        
+        # 等待服务启动
+        sleep 5
+        
+        # 在服务器本地检查服务状态
+        echo "🔍 检查服务状态..."
+        if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs | grep -q "200"; then
+          echo "✅ 服务正在运行"
+        else
+          echo "❌ 服务启动失败"
+          tail -n 50 logs/app.log
+          exit 1
+        fi
+        
+        echo "✅ 部署完成!"
+        ENDSSH
+        EOF
+        
+        chmod +x deploy.sh
+        ./deploy.sh
+    
+    # 健康检查已经在部署脚本中完成，这里可以添加额外的验证
+    - name: Deployment Summary
+      run: |
+        echo "✅ 部署流程完成!"
+        echo "📋 部署信息："
+        echo "  - 服务器: 34.123.456.789"
+        echo "  - 项目路径: /root/ai-agents"
+        echo "  - Python版本: 3.11"
+        echo "  - 部署时间: $(date)"
