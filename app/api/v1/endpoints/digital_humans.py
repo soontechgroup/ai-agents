@@ -19,7 +19,7 @@ def get_digital_human_service(db: Session = Depends(get_db)) -> DigitalHumanServ
     return DigitalHumanService(db)
 
 
-@router.post("/", response_model=SuccessResponse[DigitalHumanResponse], summary="创建数字人")
+@router.post("/create", response_model=SuccessResponse[DigitalHumanResponse], summary="创建数字人")
 async def create_digital_human(
     digital_human_data: DigitalHumanCreate,
     current_user: User = Depends(get_current_active_user),
