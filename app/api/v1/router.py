@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import auth, digital_humans, user
+from .endpoints import auth, digital_humans, user, conversations
 from .admin import admin_router
 
 api_router = APIRouter()
@@ -11,11 +11,18 @@ api_router.include_router(
     tags=["认证"]
 )
 
-# 包含数字人路由
+# 包含数字人模板路由
 api_router.include_router(
     digital_humans.router,
     prefix="/digital-humans",
-    tags=["数字人"]
+    tags=["数字人模板"]
+)
+
+# 包含对话路由
+api_router.include_router(
+    conversations.router,
+    prefix="/digital-humans",
+    tags=["对话管理"]
 )
 
 # 包含用户路由
