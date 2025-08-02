@@ -135,19 +135,26 @@ class ConversationService:
             conversation.digital_human_id
         )
         
-        # 生成AI响应
-        ai_response = self.langgraph_service.chat_sync(
-            message_content,
-            conversation.thread_id,
-            digital_human_config
-        )
-        
-        # 保存AI消息
-        ai_message = self.message_repo.create_message(
-            conversation_id, "assistant", ai_response
-        )
-        
-        return MessageResponse.from_orm(ai_message)
+        try:
+            # 生成AI响应
+            ai_response = self.langgraph_service.chat_sync(
+                message_content,
+                conversation.thread_id,
+                digital_human_config
+            )
+            
+            # 保存AI消息
+            ai_message = self.message_repo.create_message(
+                conversation_id, "assistant", ai_response
+            )
+            
+            return MessageResponse.from_orm(ai_message)
+            
+        except ValueError as e:
+            # LangGraph service errors (包括API密钥错误)
+            raise ValueError(str(e))
+        except Exception as e:
+            raise ValueError(f"消息发送失败: {str(e)}")
     
     def send_message_stream(
         self,
@@ -217,6 +224,12 @@ class ConversationService:
                 }
             })
             
+        except ValueError as e:
+            # LangGraph service errors (包括API密钥错误)
+            yield json.dumps({
+                "type": "error",
+                "content": str(e)
+            })
         except Exception as e:
             yield json.dumps({
                 "type": "error",

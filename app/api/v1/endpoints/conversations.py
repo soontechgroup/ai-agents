@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.models import User
 from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
+from app.services.langgraph_service import LangGraphService
 
 router = APIRouter()
 
@@ -208,17 +209,37 @@ async def send_message(
     - **conversation_id**: 对话ID
     - **content**: 消息内容
     """
-    message = conversation_service.send_message(
-        conversation_id, message_data.content, current_user.id
-    )
-    
-    if not message:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
+    try:
+        message = conversation_service.send_message(
+            conversation_id, message_data.content, current_user.id
         )
-    
-    return ResponseUtil.success(data=message, message="消息发送成功")
+        
+        if not message:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="对话不存在"
+            )
+        
+        return ResponseUtil.success(data=message, message="消息发送成功")
+        
+    except ValueError as e:
+        # 处理API密钥错误和其他LangGraph服务错误
+        error_msg = str(e)
+        if "invalid" in error_msg.lower() and "api" in error_msg.lower() and "key" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI服务配置错误，请联系管理员"
+            )
+        elif "rate limit" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="AI服务请求过于频繁，请稍后再试"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"消息发送失败: {error_msg}"
+            )
 
 
 @router.post("/conversations/{conversation_id}/chat", summary="流式聊天")
@@ -288,3 +309,49 @@ async def clear_conversation_history(
         )
     
     return ResponseUtil.success(message="对话历史清除成功")
+
+
+@router.get("/health", response_model=SuccessResponse, summary="检查AI服务状态")
+async def check_ai_service_health():
+    """
+    检查AI服务健康状态
+    
+    检查项目：
+    - OpenAI API连接状态
+    - LangGraph服务状态
+    """
+    try:
+        # 尝试初始化LangGraph服务来测试API密钥
+        test_service = LangGraphService()
+        
+        return ResponseUtil.success(
+            data={
+                "status": "healthy",
+                "openai_connection": "ok",
+                "langgraph_service": "ok"
+            },
+            message="AI服务运行正常"
+        )
+        
+    except ValueError as e:
+        error_msg = str(e)
+        if "invalid" in error_msg.lower() and "api" in error_msg.lower() and "key" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OpenAI API密钥无效，请检查配置"
+            )
+        elif "rate limit" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="OpenAI API访问频率限制"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"AI服务初始化失败: {error_msg}"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI服务检查失败: {str(e)}"
+        )

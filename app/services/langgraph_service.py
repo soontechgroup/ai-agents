@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel
 import json
 import uuid
+import openai
 from app.core.models import DigitalHuman
 
 
@@ -23,22 +24,63 @@ class LangGraphService:
     """LangGraph集成服务"""
     
     def __init__(self):
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-        
-        self.llm = ChatOpenAI(
-            api_key=self.openai_api_key,
-            model="gpt-4o-mini",
-            temperature=0.7,
-            streaming=True
-        )
-        
-        # 内存存储器用于保存对话状态
-        self.checkpointer = MemorySaver()
-        
-        # 构建对话图
-        self.graph = self._build_conversation_graph()
+        try:
+            self.openai_api_key = os.getenv("OPENAI_API_KEY")
+            if not self.openai_api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required")
+            
+            # 验证 OpenAI API 密钥
+            self._validate_openai_api_key()
+            
+            self.llm = ChatOpenAI(
+                api_key=self.openai_api_key,
+                model="gpt-4o-mini",
+                temperature=0.7,
+                streaming=True,
+                timeout=30
+            )
+            
+            # 内存存储器用于保存对话状态
+            self.checkpointer = MemorySaver()
+            
+            # 构建对话图
+            self.graph = self._build_conversation_graph()
+            
+        except openai.AuthenticationError:
+            raise ValueError("Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.")
+        except openai.RateLimitError:
+            raise ValueError("OpenAI API rate limit exceeded. Please try again later.")
+        except openai.APIError as e:
+            raise ValueError(f"OpenAI API error during initialization: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Failed to initialize LangGraph service: {str(e)}")
+    
+    def _validate_openai_api_key(self):
+        """验证 OpenAI API 密钥是否有效"""
+        try:
+            # 创建测试客户端
+            test_client = ChatOpenAI(
+                api_key=self.openai_api_key,
+                model="gpt-4o-mini",
+                timeout=10
+            )
+            
+            # 发送简单测试消息验证API密钥
+            test_message = [HumanMessage(content="test")]
+            test_client.invoke(test_message)
+            
+        except openai.AuthenticationError:
+            raise ValueError("Invalid OpenAI API key")
+        except openai.RateLimitError:
+            raise ValueError("OpenAI API rate limit exceeded")
+        except openai.APIError as e:
+            if "invalid_api_key" in str(e).lower():
+                raise ValueError("Invalid OpenAI API key")
+            raise ValueError(f"OpenAI API validation failed: {str(e)}")
+        except Exception as e:
+            # 网络错误或其他问题，我们允许服务继续初始化
+            # 但会在实际使用时处理错误
+            pass
     
     def _build_conversation_graph(self) -> StateGraph:
         """构建对话状态图"""
@@ -148,18 +190,30 @@ class LangGraphService:
         digital_human_config: Dict[str, Any]
     ) -> str:
         """同步聊天"""
-        config = {"configurable": {"thread_id": thread_id}}
-        
-        initial_state = ConversationState(
-            thread_id=thread_id,
-            user_message=message,
-            digital_human_config=digital_human_config
-        )
-        
-        # 运行对话图
-        result = self.graph.invoke(initial_state, config)
-        
-        return result.assistant_response
+        try:
+            config = {"configurable": {"thread_id": thread_id}}
+            
+            initial_state = ConversationState(
+                thread_id=thread_id,
+                user_message=message,
+                digital_human_config=digital_human_config
+            )
+            
+            # 运行对话图
+            result = self.graph.invoke(initial_state, config)
+            
+            return result.assistant_response
+            
+        except openai.AuthenticationError:
+            raise ValueError("Invalid OpenAI API key. Please check your API configuration.")
+        except openai.RateLimitError:
+            raise ValueError("OpenAI API rate limit exceeded. Please try again later.")
+        except openai.APIError as e:
+            if "invalid_api_key" in str(e).lower():
+                raise ValueError("Invalid OpenAI API key")
+            raise ValueError(f"OpenAI API error: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Chat generation failed: {str(e)}")
     
     def chat_stream(
         self,
@@ -223,8 +277,37 @@ class LangGraphService:
                 {"messages": updated_messages}
             )
             
+        except openai.AuthenticationError:
+            yield json.dumps({
+                "type": "error",
+                "content": "Invalid OpenAI API key. Please check your API configuration."
+            })
+        except openai.RateLimitError:
+            yield json.dumps({
+                "type": "error", 
+                "content": "OpenAI API rate limit exceeded. Please try again later."
+            })
+        except openai.APIError as e:
+            if "invalid_api_key" in str(e).lower():
+                yield json.dumps({
+                    "type": "error",
+                    "content": "Invalid OpenAI API key"
+                })
+            else:
+                yield json.dumps({
+                    "type": "error",
+                    "content": f"OpenAI API error: {str(e)}"
+                })
+        except ConnectionError:
+            yield json.dumps({
+                "type": "error",
+                "content": "Network connection failed. Please check your internet connection."
+            })
         except Exception as e:
-            yield f"Error: {str(e)}"
+            yield json.dumps({
+                "type": "error",
+                "content": f"Chat error: {str(e)}"
+            })
     
     def get_conversation_history(self, thread_id: str) -> List[Dict[str, Any]]:
         """获取对话历史"""
