@@ -47,7 +47,7 @@ class DigitalHuman(Base):
     system_prompt = Column(Text, nullable=True, comment="系统提示词")
     
     # 模板状态
-    is_active = Column(Boolean, default=True, comment="模板是否激活")
+    is_active = Column(Boolean, default=True, comment="模板是否启用（启用后可用于创建对话）")
     is_public = Column(Boolean, default=False, comment="是否公开模板")
     
     # 用户关联

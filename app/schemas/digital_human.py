@@ -39,7 +39,7 @@ class DigitalHumanUpdate(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=1, le=8192, description="最大token数")
     system_prompt: Optional[str] = Field(None, description="系统提示词")
     is_public: Optional[bool] = Field(None, description="是否公开模板")
-    is_active: Optional[bool] = Field(None, description="是否激活模板")
+    is_active: Optional[bool] = Field(None, description="是否启用模板（启用后可用于对话）")
 
 
 class DigitalHumanResponse(BaseModel):
@@ -56,7 +56,7 @@ class DigitalHumanResponse(BaseModel):
     temperature: float = Field(..., description="AI温度参数")
     max_tokens: int = Field(..., description="最大token数")
     system_prompt: Optional[str] = Field(None, description="系统提示词")
-    is_active: bool = Field(..., description="模板是否激活")
+    is_active: bool = Field(..., description="模板是否启用（启用后可用于创建对话）")
     is_public: bool = Field(..., description="是否公开模板")
     owner_id: int = Field(..., description="创建者ID")
     created_at: datetime = Field(..., description="创建时间")
