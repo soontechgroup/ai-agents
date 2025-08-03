@@ -97,9 +97,23 @@ class DigitalHumanService:
         
         return True
     
-    def get_digital_humans_paginated(self, page_request: DigitalHumanPageRequest, user_id: Optional[int] = None) -> Tuple[List[DigitalHuman], int]:
+    def get_digital_humans_paginated(self, page_request: DigitalHumanPageRequest, user_id: Optional[int] = None, include_public: bool = True) -> Tuple[List[DigitalHuman], int]:
         """获取分页的数字人列表"""
         query = self.db.query(DigitalHuman)
+        
+        # 权限过滤：只显示用户自己的和公开的模板
+        if user_id is not None:
+            if include_public:
+                query = query.filter(
+                    or_(
+                        DigitalHuman.owner_id == user_id,
+                        DigitalHuman.is_public == True
+                    )
+                )
+            else:
+                query = query.filter(DigitalHuman.owner_id == user_id)
+        elif include_public:
+            query = query.filter(DigitalHuman.is_public == True)
         
         # 搜索功能
         if page_request.search:
