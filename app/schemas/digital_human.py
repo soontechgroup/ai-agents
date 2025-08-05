@@ -70,11 +70,39 @@ class DigitalHumanResponse(BaseModel):
         }
 
 
+class DigitalHumanDetailRequest(BaseModel):
+    """获取数字人详情请求模型"""
+    id: int = Field(..., description="数字人ID")
+
+
+class DigitalHumanUpdateRequest(BaseModel):
+    """更新数字人模板请求模型（包含ID）"""
+    id: int = Field(..., description="数字人ID")
+    name: Optional[str] = Field(None, max_length=100, description="数字人名称")
+    short_description: Optional[str] = Field(None, max_length=200, description="简短描述")
+    detailed_description: Optional[str] = Field(None, description="详细介绍")
+    type: Optional[str] = Field(None, description="数字人类型")
+    skills: Optional[List[str]] = Field(None, description="专业领域技能")
+    personality: Optional[PersonalityConfig] = Field(None, description="性格特征")
+    conversation_style: Optional[str] = Field(None, description="对话风格")
+    temperature: Optional[float] = Field(None, ge=0, le=2, description="AI温度参数")
+    max_tokens: Optional[int] = Field(None, ge=1, le=8192, description="最大token数")
+    system_prompt: Optional[str] = Field(None, description="系统提示词")
+    is_public: Optional[bool] = Field(None, description="是否公开模板")
+    is_active: Optional[bool] = Field(None, description="是否启用模板（启用后可用于对话）")
+
+
+class DigitalHumanDeleteRequest(BaseModel):
+    """删除数字人请求模型"""
+    id: int = Field(..., description="数字人ID")
+
+
 class DigitalHumanPageRequest(BaseModel):
     """数字人分页请求模型"""
     page: int = Field(default=1, ge=1, description="页码,从1开始")
     size: int = Field(default=10, ge=1, le=100, description="每页数量,最大100")
     search: Optional[str] = Field(None, description="搜索关键词(名称、描述)")
+    include_public: bool = Field(default=True, description="是否包含公开模板")
 
 
 class DigitalHumanPageResponse(PaginatedResponse[List[DigitalHumanResponse]]):

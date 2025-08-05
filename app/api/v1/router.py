@@ -18,17 +18,18 @@ api_router.include_router(
     tags=["数字人模板"]
 )
 
-# 包含对话路由
+# 包含对话路由（独立路径）
 api_router.include_router(
     conversations.router,
-    prefix="/digital-humans",
+    prefix="/conversations",
     tags=["对话管理"]
 )
 
 # 包含用户路由
 api_router.include_router(
     user.router,
-    tags=["用户"]
+    prefix="/users",
+    tags=["用户管理"]
 )
 
 # 包含管理后台路由
