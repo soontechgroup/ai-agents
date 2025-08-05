@@ -22,7 +22,7 @@ class User(Base):
 
 
 class DigitalHuman(Base):
-    """数字人模型 - 完全匹配前端DigitalHumanData接口"""
+    """数字人模板模型 - 可重用的AI助手模板"""
     __tablename__ = "digital_humans"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -44,11 +44,18 @@ class DigitalHuman(Base):
     # AI配置参数
     temperature = Column(Float, default=0.7, comment="AI温度参数")
     max_tokens = Column(Integer, default=2048, comment="最大token数")
+    system_prompt = Column(Text, nullable=True, comment="系统提示词")
     
+    # 模板状态
+    is_active = Column(Boolean, default=True, comment="模板是否启用（启用后可用于创建对话）")
+    is_public = Column(Boolean, default=False, comment="是否公开模板")
     
     # 用户关联
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="digital_humans")
+    
+    # 关联关系
+    conversations = relationship("Conversation", back_populates="digital_human_template")
     
     # 时间戳
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -56,37 +63,37 @@ class DigitalHuman(Base):
     last_trained_at = Column(DateTime(timezone=True), nullable=True)
 
 
-class Session(Base):
-    """会话模型"""
-    __tablename__ = "sessions"
+class Conversation(Base):
+    """对话会话模型 - 使用数字人模板创建的具体对话实例"""
+    __tablename__ = "conversations"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
     title = Column(String(200), nullable=True, comment="会话标题")
+    thread_id = Column(String(100), nullable=False, unique=True, comment="LangChain线程ID")
+    status = Column(Enum("active", "archived", "deleted", name="conversation_status"), default="active", comment="会话状态")
+    last_message_at = Column(DateTime(timezone=True), nullable=True, comment="最后消息时间")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # 关联关系
     user = relationship("User")
-    digital_human = relationship("DigitalHuman")
-    chats = relationship("DigitalHumanChat", back_populates="session")
+    digital_human_template = relationship("DigitalHuman", back_populates="conversations")
+    messages = relationship("Message", back_populates="conversation")
 
 
-class DigitalHumanChat(Base):
-    """数字人对话记录"""
-    __tablename__ = "digital_human_chats"
+class Message(Base):
+    """消息记录模型"""
+    __tablename__ = "messages"
     
     id = Column(Integer, primary_key=True, index=True)
-    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, comment="会话ID")
-    message_type = Column(Enum("user", "assistant", name="message_type"), nullable=False)
-    content = Column(Text, nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, comment="对话ID")
+    role = Column(Enum("user", "assistant", "system", name="message_role"), nullable=False, comment="消息角色")
+    content = Column(Text, nullable=False, comment="消息内容")
+    tokens_used = Column(Integer, nullable=True, comment="使用的token数量")
     message_metadata = Column(JSON, nullable=True, comment="消息元数据")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 关联关系
-    digital_human = relationship("DigitalHuman")
-    user = relationship("User")
-    session = relationship("Session", back_populates="chats") 
+    conversation = relationship("Conversation", back_populates="messages") 
