@@ -56,7 +56,7 @@ jobs:
         
         echo "🐍 激活 conda 环境..."
         source /opt/miniconda3/etc/profile.d/conda.sh
-        conda activate base
+        conda activate ai-agents
         
         echo "🔄 重启应用..."
         # 检查运行脚本是否存在
