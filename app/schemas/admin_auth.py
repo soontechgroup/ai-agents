@@ -31,6 +31,11 @@ class AdminAccountInfo(BaseModel):
         from_attributes = True
 
 
+class AdminAccountRequest(BaseModel):
+    """获取管理员账户信息请求"""
+    pass  # 空body
+
+
 class AdminAccountUpdateRequest(BaseModel):
     """管理员账户更新请求"""
     email: Optional[EmailStr] = Field(None, description="新邮箱地址")

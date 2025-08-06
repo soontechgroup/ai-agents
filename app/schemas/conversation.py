@@ -86,3 +86,44 @@ class ChatStreamChunk(BaseModel):
     type: str = Field(..., description="数据类型: message, token, error, done")
     content: str = Field(default="", description="内容")
     metadata: Optional[Dict] = Field(None, description="元数据")
+
+
+class ConversationDetailRequest(BaseModel):
+    """获取对话详情请求模型"""
+    id: int = Field(..., description="对话ID")
+
+
+class ConversationUpdateRequest(BaseModel):
+    """更新对话请求模型（包含ID）"""
+    id: int = Field(..., description="对话ID")
+    title: Optional[str] = Field(None, max_length=200, description="对话标题")
+    status: Optional[str] = Field(None, description="对话状态: active, archived, deleted")
+
+
+class ConversationDeleteRequest(BaseModel):
+    """删除对话请求模型"""
+    id: int = Field(..., description="对话ID")
+
+
+class ConversationMessagesRequest(BaseModel):
+    """获取对话消息请求模型"""
+    conversation_id: int = Field(..., description="对话ID")
+    limit: Optional[int] = Field(None, description="消息数量限制")
+
+
+class ConversationSendRequest(BaseModel):
+    """发送消息请求模型"""
+    conversation_id: int = Field(..., description="对话ID")
+    content: str = Field(..., description="消息内容")
+
+
+class ConversationChatRequest(BaseModel):
+    """聊天请求模型"""
+    conversation_id: int = Field(..., description="对话ID")
+    message: str = Field(..., description="用户消息内容")
+    stream: bool = Field(default=True, description="是否流式响应")
+
+
+class ConversationClearRequest(BaseModel):
+    """清除对话历史请求模型"""
+    conversation_id: int = Field(..., description="对话ID")

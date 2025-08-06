@@ -62,3 +62,26 @@ class TokenResponse(BaseModel):
     success: Literal[True] = True
     access_token: str = Field(..., description="访问令牌")
     token_type: str = Field(..., description="令牌类型")
+
+
+class UserListRequest(BaseModel):
+    """用户列表请求模型"""
+    pass  # 暂时没有筛选参数
+
+
+class UserDetailRequest(BaseModel):
+    """获取用户详情请求模型"""
+    id: int = Field(..., description="用户ID")
+
+
+class UserUpdateRequest(BaseModel):
+    """更新用户请求模型（包含ID）"""
+    id: int = Field(..., description="用户ID")
+    username: Optional[str] = Field(None, description="用户名")
+    email: Optional[str] = Field(None, description="邮箱地址")
+    password_hash: Optional[str] = Field(None, description="密码哈希")
+
+
+class UserDeleteRequest(BaseModel):
+    """删除用户请求模型"""
+    id: int = Field(..., description="用户ID")
