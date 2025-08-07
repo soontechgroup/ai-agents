@@ -15,6 +15,9 @@ import traceback
 # 导入 loguru logger
 from app.core.logger import logger, set_request_id, get_request_id
 
+# 导入 MongoDB 相关
+from app.core.mongodb import init_mongodb, close_mongodb
+
 # 创建FastAPI应用
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -123,14 +126,15 @@ async def startup_event():
     max_retries = 2
     retry_interval = 1
     
+    # 初始化 MySQL
     for attempt in range(max_retries):
         try:
-            logger.info(f"🔄 尝试连接数据库 (第{attempt + 1}次尝试)")
+            logger.info(f"🔄 尝试连接 MySQL 数据库 (第{attempt + 1}次尝试)")
             # 测试数据库连接
             with engine.connect() as conn:
                 from sqlalchemy import text
                 conn.execute(text("SELECT 1"))
-            logger.success("✅ 数据库连接成功!")
+            logger.success("✅ MySQL 数据库连接成功!")
             
             # 使用 Alembic 自动执行数据库迁移
             try:
@@ -147,13 +151,34 @@ async def startup_event():
             
             break
         except Exception as e:
-            logger.warning(f"⚠️ 数据库连接失败: {e}")
+            logger.warning(f"⚠️ MySQL 数据库连接失败: {e}")
             if attempt < max_retries - 1:
                 logger.info(f"⏳ 等待 {retry_interval} 秒后重试...")
                 time.sleep(retry_interval)
             else:
-                logger.error("❌ 数据库连接失败，已达到最大重试次数")
+                logger.error("❌ MySQL 数据库连接失败，已达到最大重试次数")
                 raise
+    
+    # 初始化 MongoDB
+    try:
+        logger.info("🔄 正在初始化 MongoDB...")
+        await init_mongodb(
+            mongodb_url=settings.MONGODB_URL,
+            database_name=settings.MONGODB_DATABASE,
+            document_models=[]  # 暂时没有模型，未来添加记忆体相关模型
+        )
+        logger.success("✅ MongoDB 初始化成功!")
+    except Exception as e:
+        logger.error(f"❌ MongoDB 初始化失败: {e}")
+        logger.warning("⚠️ 应用将继续运行，但 MongoDB 相关功能将不可用")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时清理资源"""
+    logger.info("🔄 正在关闭 MongoDB 连接...")
+    await close_mongodb()
+    logger.info("✅ MongoDB 连接已关闭")
 
 
 # 包含API路由

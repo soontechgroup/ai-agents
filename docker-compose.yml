@@ -10,3 +10,16 @@ services:
     - "3306:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
+
+  mongodb:
+    image: mongo:7.0
+    container_name: ai-agent-mongodb
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password123
+    volumes:
+      - ./data/mongodb/data:/data/db
+      - ./data/mongodb/config:/data/configdb
+    restart: always
