@@ -6,6 +6,8 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.models import Base  # 移到顶部导入
 from app.api.v1.router import api_router
+from alembic.config import Config
+from alembic import command
 import os
 import time
 import logging
@@ -47,10 +49,18 @@ async def startup_event():
                 conn.execute(text("SELECT 1"))
             logger.info("数据库连接成功!")
             
-            # 自动创建/更新表结构（类似 GORM 的 AutoMigrate）
-            logger.info("开始自动同步数据库表结构...")
-            Base.metadata.create_all(bind=engine)
-            logger.info("✅ 数据库表结构同步完成!")
+            # 使用 Alembic 自动执行数据库迁移
+            try:
+                logger.info("开始执行数据库迁移...")
+                alembic_cfg = Config("alembic.ini")
+                command.upgrade(alembic_cfg, "head")
+                logger.info("✅ 数据库迁移完成!")
+            except Exception as migration_error:
+                logger.warning(f"数据库迁移失败: {migration_error}")
+                # 如果迁移失败，尝试使用原来的方式创建表（用于首次部署）
+                logger.info("尝试使用 SQLAlchemy 创建表结构...")
+                Base.metadata.create_all(bind=engine)
+                logger.info("✅ 数据库表结构同步完成!")
             
             break
         except Exception as e:
