@@ -14,3 +14,4 @@ langgraph==0.2.34
 openai>=1.55.3
 sse-starlette==1.8.2
 alembic==1.13.1
+loguru==0.7.2

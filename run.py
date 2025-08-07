@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument(
         "--host", 
         type=str, 
-        default="127.0.0.1",
+        default="0.0.0.0",
         help="服务器主机地址 (默认: 127.0.0.1)"
     )
     parser.add_argument(
@@ -64,6 +64,6 @@ if __name__ == "__main__":
         host=host,
         port=port,
         reload=reload,
-        log_level="info",
+        log_level="info",  # 改为info级别，与应用配置一致
         access_log=True  # 显示访问日志
     ) 

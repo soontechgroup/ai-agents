@@ -10,13 +10,10 @@ from alembic.config import Config
 from alembic import command
 import os
 import time
-import logging
 import traceback
 
-# 配置日志
-log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-logging.basicConfig(level=log_level)
-logger = logging.getLogger(__name__)
+# 导入 loguru logger
+from app.core.logger import logger, set_request_id, get_request_id
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -40,10 +37,18 @@ async def log_requests(request: Request, call_next):
     """记录所有HTTP请求和响应"""
     start_time = time.time()
     
-    # 记录请求信息
-    logger.info(f"收到请求: {request.method} {request.url.path}")
+    # 生成并设置请求ID
+    request_id = set_request_id()
+    
+    # 记录请求信息（在消息中包含请求ID）
+    logger.bind(request_id=request_id).info(f"📥 [{request_id}] 收到请求: {request.method} {request.url.path}")
+    
     if request.url.query:
-        logger.debug(f"查询参数: {request.url.query}")
+        logger.bind(request_id=request_id).debug(f"查询参数: {request.url.query}")
+    
+    # 记录请求头（调试模式）
+    if settings.DEBUG:
+        logger.bind(request_id=request_id).debug(f"请求头: {dict(request.headers)}")
     
     try:
         # 处理请求
@@ -52,23 +57,37 @@ async def log_requests(request: Request, call_next):
         # 计算处理时间
         process_time = time.time() - start_time
         
-        # 记录响应信息
-        logger.info(f"请求完成: {request.method} {request.url.path} - 状态码: {response.status_code} - 耗时: {process_time:.3f}s")
+        # 根据状态码使用不同级别
+        if response.status_code < 400:
+            logger.bind(request_id=request_id).success(
+                f"✅ [{request_id}] 请求完成: {request.method} {request.url.path} | "
+                f"状态: {response.status_code} | 耗时: {process_time:.3f}s"
+            )
+        elif response.status_code < 500:
+            logger.bind(request_id=request_id).warning(
+                f"⚠️ [{request_id}] 客户端错误: {request.method} {request.url.path} | "
+                f"状态: {response.status_code} | 耗时: {process_time:.3f}s"
+            )
+        else:
+            logger.bind(request_id=request_id).error(
+                f"❌ [{request_id}] 服务器错误: {request.method} {request.url.path} | "
+                f"状态: {response.status_code} | 耗时: {process_time:.3f}s"
+            )
         
-        # 如果是错误响应，记录更多信息
-        if response.status_code >= 400:
-            logger.warning(f"错误响应: {request.method} {request.url.path} - 状态码: {response.status_code}")
+        # 添加请求ID到响应头
+        response.headers["X-Request-ID"] = request_id
         
         return response
+        
     except Exception as e:
         # 计算处理时间
         process_time = time.time() - start_time
         
-        # 记录异常详情
-        logger.error(f"请求处理异常: {request.method} {request.url.path} - 耗时: {process_time:.3f}s")
-        logger.error(f"异常类型: {type(e).__name__}")
-        logger.error(f"异常信息: {str(e)}")
-        logger.error(f"异常堆栈:\n{traceback.format_exc()}")
+        # 使用 loguru 的异常处理
+        logger.bind(request_id=request_id).exception(
+            f"💥 [{request_id}] 请求处理异常: {request.method} {request.url.path} | "
+            f"耗时: {process_time:.3f}s | 异常: {type(e).__name__}"
+        )
         
         # 重新抛出异常，让FastAPI处理
         raise
@@ -77,11 +96,14 @@ async def log_requests(request: Request, call_next):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """全局异常处理器"""
-    # 记录未处理的异常
-    logger.error(f"未处理异常 - 路径: {request.url.path}")
-    logger.error(f"异常类型: {type(exc).__name__}")
-    logger.error(f"异常信息: {str(exc)}")
-    logger.error(f"完整堆栈:\n{traceback.format_exc()}")
+    # 使用当前请求的 request_id
+    request_id = get_request_id() or "no-request-id"
+    
+    # 使用 loguru 的异常记录
+    logger.bind(request_id=request_id).exception(
+        f"🔥 [{request_id}] 未处理异常 | 路径: {request.url.path} | "
+        f"异常: {type(exc).__name__}: {str(exc)}"
+    )
     
     # 返回友好的错误响应
     return JSONResponse(
@@ -89,7 +111,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "code": 500,
             "message": "内部服务器错误",
-            "detail": str(exc) if settings.DEBUG else "服务器处理请求时发生错误"
+            "detail": str(exc) if settings.DEBUG else "服务器处理请求时发生错误",
+            "request_id": request_id  # 返回请求ID便于追踪
         }
     )
 
@@ -102,34 +125,34 @@ async def startup_event():
     
     for attempt in range(max_retries):
         try:
-            logger.info(f"尝试连接数据库 (第{attempt + 1}次尝试)")
+            logger.info(f"🔄 尝试连接数据库 (第{attempt + 1}次尝试)")
             # 测试数据库连接
             with engine.connect() as conn:
                 from sqlalchemy import text
                 conn.execute(text("SELECT 1"))
-            logger.info("数据库连接成功!")
+            logger.success("✅ 数据库连接成功!")
             
             # 使用 Alembic 自动执行数据库迁移
             try:
-                logger.info("开始执行数据库迁移...")
+                logger.info("📦 开始执行数据库迁移...")
                 alembic_cfg = Config("alembic.ini")
                 command.upgrade(alembic_cfg, "head")
-                logger.info("✅ 数据库迁移完成!")
+                logger.success("✅ 数据库迁移完成!")
             except Exception as migration_error:
-                logger.warning(f"数据库迁移失败: {migration_error}")
+                logger.warning(f"⚠️ 数据库迁移失败: {migration_error}")
                 # 如果迁移失败，尝试使用原来的方式创建表（用于首次部署）
-                logger.info("尝试使用 SQLAlchemy 创建表结构...")
+                logger.info("🔧 尝试使用 SQLAlchemy 创建表结构...")
                 Base.metadata.create_all(bind=engine)
-                logger.info("✅ 数据库表结构同步完成!")
+                logger.success("✅ 数据库表结构同步完成!")
             
             break
         except Exception as e:
-            logger.warning(f"数据库连接失败: {e}")
+            logger.warning(f"⚠️ 数据库连接失败: {e}")
             if attempt < max_retries - 1:
-                logger.info(f"等待 {retry_interval} 秒后重试...")
+                logger.info(f"⏳ 等待 {retry_interval} 秒后重试...")
                 time.sleep(retry_interval)
             else:
-                logger.error("数据库连接失败，已达到最大重试次数")
+                logger.error("❌ 数据库连接失败，已达到最大重试次数")
                 raise
 
 
