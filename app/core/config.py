@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # 数据库配置 (与 docker-compose.yml 匹配)
     DATABASE_URL: str = "mysql+pymysql://root:123456@localhost:3306/ai_agents"
     
+    # MongoDB 配置
+    MONGODB_URL: str = "mongodb://admin:password123@localhost:27018/?authSource=admin"
+    MONGODB_DATABASE: str = "ai_agents"
+    
     # 应用配置
     PROJECT_NAME: str = "AI Agents API"
     VERSION: str = "1.0.0"
@@ -71,4 +75,5 @@ settings = Settings()
 # 打印当前环境信息
 print(f"🚀 当前运行环境: {settings.ENVIRONMENT}")
 print(f"📊 调试模式: {'开启' if settings.DEBUG else '关闭'}")
-print(f"🔗 数据库连接: {settings.DATABASE_URL}")
+print(f"🔗 MySQL 数据库: {settings.DATABASE_URL}")
+print(f"🔗 MongoDB 数据库: {settings.MONGODB_URL}")
