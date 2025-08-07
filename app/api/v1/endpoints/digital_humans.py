@@ -5,6 +5,7 @@ from app.schemas.common import SuccessResponse
 from app.schemas.CommonResponse import PaginationMeta
 from typing import Optional
 import math
+import logging
 from app.services.digital_human_service import DigitalHumanService
 from app.core.database import get_db
 from app.core.models import User
@@ -12,6 +13,7 @@ from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_digital_human_service(db: Session = Depends(get_db)) -> DigitalHumanService:
@@ -40,7 +42,9 @@ async def create_digital_human_template(
     - **system_prompt**: 系统提示词
     - **is_public**: 是否公开模板
     """
+    logger.info(f"用户 {current_user.id} 创建数字人模板: {digital_human_data.name}")
     digital_human = digital_human_service.create_digital_human(digital_human_data, current_user.id)
+    logger.info(f"数字人模板创建成功: ID={digital_human.id}, 名称={digital_human.name}")
     return ResponseUtil.success(data=digital_human, message="数字人模板创建成功")
 
 
@@ -60,10 +64,14 @@ async def get_digital_human_templates(
     
     返回数据包含分页信息和数字人模板列表
     """
+    logger.info(f"用户 {current_user.id} 获取数字人列表 - 页码: {request.page}, 每页: {request.size}, 包含公开: {request.include_public}")
+    
     # 获取分页数据
     digital_humans, total = digital_human_service.get_digital_humans_paginated(
         request, current_user.id, request.include_public
     )
+    
+    logger.debug(f"查询到 {len(digital_humans)} 个数字人模板，总计 {total} 个")
     
     # 计算总页数
     total_pages = math.ceil(total / request.size)
@@ -78,6 +86,8 @@ async def get_digital_human_templates(
     
     # 转换为响应模型
     digital_human_responses = [DigitalHumanResponse.from_orm(dh) for dh in digital_humans]
+    
+    logger.info(f"成功返回 {len(digital_human_responses)} 个数字人模板给用户 {current_user.id}")
     
     return DigitalHumanPageResponse(
         code=200,
@@ -98,7 +108,9 @@ async def get_digital_human_template(
     
     - **id**: 数字人模板ID
     """
+    logger.info(f"用户 {current_user.id} 获取数字人详情: ID={request.id}")
     digital_human = digital_human_service.get_digital_human_by_id(request.id, current_user.id)
+    logger.info(f"成功获取数字人详情: ID={request.id}, 名称={digital_human.name}")
     return ResponseUtil.success(data=digital_human, message="获取数字人模板详情成功")
 
 
@@ -114,9 +126,11 @@ async def update_digital_human_template(
     - **id**: 数字人模板ID
     - 其他字段均为可选，只更新提供的字段
     """
+    logger.info(f"用户 {current_user.id} 更新数字人: ID={request.id}")
     # 将DigitalHumanUpdateRequest转换为DigitalHumanUpdate（不包含id）
     update_data = DigitalHumanUpdate(**request.model_dump(exclude={'id'}))
     digital_human = digital_human_service.update_digital_human(request.id, update_data, current_user.id)
+    logger.info(f"数字人更新成功: ID={request.id}, 名称={digital_human.name}")
     return ResponseUtil.success(data=digital_human, message="数字人模板更新成功")
 
 
@@ -131,5 +145,7 @@ async def delete_digital_human_template(
     
     - **id**: 数字人模板ID
     """
+    logger.info(f"用户 {current_user.id} 删除数字人: ID={request.id}")
     digital_human_service.delete_digital_human(request.id, current_user.id)
+    logger.info(f"数字人删除成功: ID={request.id}")
     return ResponseUtil.success(message="数字人模板删除成功")

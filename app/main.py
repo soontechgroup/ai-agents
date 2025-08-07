@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
@@ -11,6 +11,7 @@ from alembic import command
 import os
 import time
 import logging
+import traceback
 
 # 配置日志
 log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
@@ -32,6 +33,65 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """记录所有HTTP请求和响应"""
+    start_time = time.time()
+    
+    # 记录请求信息
+    logger.info(f"收到请求: {request.method} {request.url.path}")
+    if request.url.query:
+        logger.debug(f"查询参数: {request.url.query}")
+    
+    try:
+        # 处理请求
+        response = await call_next(request)
+        
+        # 计算处理时间
+        process_time = time.time() - start_time
+        
+        # 记录响应信息
+        logger.info(f"请求完成: {request.method} {request.url.path} - 状态码: {response.status_code} - 耗时: {process_time:.3f}s")
+        
+        # 如果是错误响应，记录更多信息
+        if response.status_code >= 400:
+            logger.warning(f"错误响应: {request.method} {request.url.path} - 状态码: {response.status_code}")
+        
+        return response
+    except Exception as e:
+        # 计算处理时间
+        process_time = time.time() - start_time
+        
+        # 记录异常详情
+        logger.error(f"请求处理异常: {request.method} {request.url.path} - 耗时: {process_time:.3f}s")
+        logger.error(f"异常类型: {type(e).__name__}")
+        logger.error(f"异常信息: {str(e)}")
+        logger.error(f"异常堆栈:\n{traceback.format_exc()}")
+        
+        # 重新抛出异常，让FastAPI处理
+        raise
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全局异常处理器"""
+    # 记录未处理的异常
+    logger.error(f"未处理异常 - 路径: {request.url.path}")
+    logger.error(f"异常类型: {type(exc).__name__}")
+    logger.error(f"异常信息: {str(exc)}")
+    logger.error(f"完整堆栈:\n{traceback.format_exc()}")
+    
+    # 返回友好的错误响应
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": 500,
+            "message": "内部服务器错误",
+            "detail": str(exc) if settings.DEBUG else "服务器处理请求时发生错误"
+        }
+    )
 
 
 @app.on_event("startup")
