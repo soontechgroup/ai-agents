@@ -50,6 +50,9 @@ class Settings(BaseSettings):
 
     # 可选配置
     LOG_LEVEL: str = "INFO"
+    LOG_PATH: str = "logs"
+    LOG_ROTATION: str = "00:00"
+    LOG_RETENTION: str = "30 days"
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
 
     # 服务器配置

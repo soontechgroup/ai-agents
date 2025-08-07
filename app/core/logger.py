@@ -34,7 +34,7 @@ CONSOLE_FORMAT = (
 )
 
 # 创建日志目录
-LOG_DIR = Path("logs")
+LOG_DIR = Path(settings.LOG_PATH)
 LOG_DIR.mkdir(exist_ok=True)
 
 
@@ -57,8 +57,8 @@ def setup_logger():
         LOG_DIR / "app_{time:YYYY-MM-DD}.log",
         format=LOG_FORMAT,
         level="DEBUG",
-        rotation="00:00",  # 每天午夜轮转
-        retention="30 days",  # 保留30天
+        rotation=settings.LOG_ROTATION,  # 使用配置的轮转策略
+        retention=settings.LOG_RETENTION,  # 使用配置的保留时间
         compression="zip",  # 压缩旧文件
         enqueue=True,
         encoding="utf-8",
@@ -71,7 +71,7 @@ def setup_logger():
         LOG_DIR / "error_{time:YYYY-MM-DD}.log",
         format=LOG_FORMAT,
         level="ERROR",
-        rotation="00:00",
+        rotation=settings.LOG_ROTATION,
         retention="90 days",  # 错误日志保留更久
         compression="zip",
         enqueue=True,
