@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post(
-    "/documents",
+    "/addDocuments",
     response_model=SuccessResponse[ChromaAddResponse],
     summary="添加文档到 Chroma 数据库",
     description="批量添加文档到指定的 Chroma 集合中，支持自定义元数据和文档ID"
