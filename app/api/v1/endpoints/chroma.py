@@ -10,7 +10,9 @@ from app.schemas.chroma import (
     ChromaListCollectionsRequest,
     ChromaGetCollectionRequest,
     ChromaDeleteCollectionRequest,
-    ChromaDeleteDocumentsRequest
+    ChromaDeleteDocumentsRequest,
+    ChromaCreateCollectionRequest,
+    ChromaCreateCollectionResponse
 )
 from app.utils.response import ResponseUtil
 from app.schemas.common import SuccessResponse, ErrorResponse
@@ -67,6 +69,32 @@ async def query_documents(
     return ResponseUtil.success(
         data=result,
         message=f"查询完成，找到 {result.total_results} 个相关文档"
+    )
+
+
+@router.post(
+    "/collection/create",
+    response_model=SuccessResponse[ChromaCreateCollectionResponse],
+    summary="创建集合",
+    description="创建一个新的 Chroma 集合，支持自定义元数据"
+)
+async def create_collection(
+    request: ChromaCreateCollectionRequest,
+    chroma_service: ChromaService = Depends(get_chroma_service)
+):
+    """
+    创建集合
+    
+    - **collection_name**: 集合名称
+    - **metadata**: 可选的集合元数据
+    
+    如果集合已存在，会返回已存在的集合信息
+    """
+    result = chroma_service.create_collection(request)
+    message = f"成功创建集合 {result.collection_name}" if result.created else f"集合 {result.collection_name} 已存在"
+    return ResponseUtil.success(
+        data=result,
+        message=message
     )
 
 

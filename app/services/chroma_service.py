@@ -7,7 +7,9 @@ from app.schemas.chroma import (
     ChromaQueryResponse,
     ChromaDocument,
     ChromaAddResponse,
-    ChromaCollectionInfo
+    ChromaCollectionInfo,
+    ChromaCreateCollectionRequest,
+    ChromaCreateCollectionResponse
 )
 from app.core.logger import logger
 import uuid
@@ -94,8 +96,8 @@ class ChromaService:
                 
                 metadatas.append(final_metadata)
                 
-                # 处理文档ID
-                doc_id = doc_input.document_id or str(uuid.uuid4())
+                # 处理文档ID - 自动生成
+                doc_id = str(uuid.uuid4())
                 ids.append(doc_id)
             
             # 调用仓库层添加文档
@@ -197,6 +199,37 @@ class ChromaService:
             
         except Exception as e:
             logger.error(f"服务层: 获取集合信息失败: {e}")
+            raise
+    
+    def create_collection(self, request: ChromaCreateCollectionRequest) -> ChromaCreateCollectionResponse:
+        """
+        创建集合
+        
+        Args:
+            request: 创建集合请求
+            
+        Returns:
+            ChromaCreateCollectionResponse: 创建结果
+        """
+        try:
+            created, collection_info = self.chroma_repository.create_collection(
+                collection_name=request.collection_name,
+                metadata=request.metadata
+            )
+            
+            if created:
+                logger.info(f"服务层: 成功创建新集合 {request.collection_name}")
+            else:
+                logger.info(f"服务层: 集合 {request.collection_name} 已存在")
+            
+            return ChromaCreateCollectionResponse(
+                collection_name=request.collection_name,
+                created=created,
+                metadata=collection_info.get("metadata")
+            )
+            
+        except Exception as e:
+            logger.error(f"服务层: 创建集合失败: {e}")
             raise
     
     def list_collections(self) -> List[ChromaCollectionInfo]:

@@ -201,6 +201,48 @@ class ChromaRepository:
             logger.error(f"获取集合列表失败: {e}")
             raise
     
+    def create_collection(self, collection_name: str, metadata: Optional[Dict[str, Any]] = None) -> Tuple[bool, Dict[str, Any]]:
+        """
+        创建集合
+        
+        Args:
+            collection_name: 集合名称
+            metadata: 集合元数据
+            
+        Returns:
+            Tuple[bool, Dict[str, Any]]: (是否新创建, 集合信息)
+        """
+        try:
+            # 检查集合是否已存在
+            existing_collections = [col.name for col in self.client.list_collections()]
+            
+            if collection_name in existing_collections:
+                # 集合已存在，获取其信息
+                collection = self.client.get_collection(name=collection_name)
+                logger.info(f"集合 {collection_name} 已存在")
+                return False, {
+                    "name": collection_name,
+                    "metadata": collection.metadata,
+                    "count": collection.count()
+                }
+            
+            # 创建新集合
+            collection_metadata = metadata or {"created_by": "ai_agents_system"}
+            collection = self.client.create_collection(
+                name=collection_name,
+                metadata=collection_metadata
+            )
+            logger.info(f"创建新集合 {collection_name} 成功")
+            return True, {
+                "name": collection_name,
+                "metadata": collection_metadata,
+                "count": 0
+            }
+            
+        except Exception as e:
+            logger.error(f"创建集合失败: {e}")
+            raise
+    
     def delete_collection(self, collection_name: str) -> bool:
         """
         删除集合
