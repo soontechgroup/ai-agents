@@ -51,4 +51,26 @@ class ChromaAddResponse(BaseModel):
     """Chroma 添加文档响应模型"""
     collection_name: str = Field(..., description="集合名称")
     added_count: int = Field(..., description="添加的文档数量")
-    document_ids: List[str] = Field(..., description="添加的文档ID列表") 
+    document_ids: List[str] = Field(..., description="添加的文档ID列表")
+
+
+class ChromaListCollectionsRequest(BaseModel):
+    """Chroma 列出集合请求模型"""
+    pass  # 暂时不需要参数，但保持接口一致性
+
+
+class ChromaGetCollectionRequest(BaseModel):
+    """Chroma 获取集合信息请求模型"""
+    collection_name: str = Field(..., description="集合名称")
+
+
+class ChromaDeleteCollectionRequest(BaseModel):
+    """Chroma 删除集合请求模型"""
+    collection_name: str = Field(..., description="集合名称")
+
+
+class ChromaDeleteDocumentsRequest(BaseModel):
+    """Chroma 删除文档请求模型"""
+    collection_name: str = Field(..., description="集合名称")
+    document_ids: Optional[List[str]] = Field(default=None, description="要删除的文档ID列表")
+    where: Optional[Dict[str, Any]] = Field(default=None, description="元数据过滤条件") 

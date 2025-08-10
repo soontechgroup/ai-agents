@@ -6,7 +6,11 @@ from app.schemas.chroma import (
     ChromaQueryRequest,
     ChromaQueryResponse,
     ChromaAddResponse,
-    ChromaCollectionInfo
+    ChromaCollectionInfo,
+    ChromaListCollectionsRequest,
+    ChromaGetCollectionRequest,
+    ChromaDeleteCollectionRequest,
+    ChromaDeleteDocumentsRequest
 )
 from app.utils.response import ResponseUtil
 from app.schemas.common import SuccessResponse, ErrorResponse
@@ -16,7 +20,7 @@ router = APIRouter()
 
 
 @router.post(
-    "/addDocuments",
+    "/document/add",
     response_model=SuccessResponse[ChromaAddResponse],
     summary="添加文档到 Chroma 数据库",
     description="批量添加文档到指定的 Chroma 集合中，支持自定义元数据和文档ID"
@@ -33,21 +37,15 @@ async def add_documents(
     
     注意：文档ID将由系统自动生成，确保唯一性
     """
-    try:
-        result = chroma_service.add_documents(document_batch)
-        return ResponseUtil.success(
-            data=result,
-            message=f"成功添加 {result.added_count} 个文档到集合 {result.collection_name}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加文档失败: {str(e)}"
-        )
+    result = chroma_service.add_documents(document_batch)
+    return ResponseUtil.success(
+        data=result,
+        message=f"成功添加 {result.added_count} 个文档到集合 {result.collection_name}"
+    )
 
 
 @router.post(
-    "/query",
+    "/document/query",
     response_model=SuccessResponse[ChromaQueryResponse],
     summary="查询 Chroma 数据库",
     description="根据文本内容查询相似的文档，支持元数据过滤和结果数量限制"
@@ -65,26 +63,21 @@ async def query_documents(
     - **where**: 可选的元数据过滤条件
     - **include**: 返回字段列表，默认包含文档、元数据和距离
     """
-    try:
-        result = chroma_service.query_documents(query_request)
-        return ResponseUtil.success(
-            data=result,
-            message=f"查询完成，找到 {result.total_results} 个相关文档"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"查询文档失败: {str(e)}"
-        )
+    result = chroma_service.query_documents(query_request)
+    return ResponseUtil.success(
+        data=result,
+        message=f"查询完成，找到 {result.total_results} 个相关文档"
+    )
 
 
-@router.get(
-    "/collections",
+@router.post(
+    "/collection/list",
     response_model=SuccessResponse[List[ChromaCollectionInfo]],
     summary="获取所有集合信息",
     description="列出所有 Chroma 集合及其基本信息"
 )
 async def list_collections(
+    request: ChromaListCollectionsRequest,
     chroma_service: ChromaService = Depends(get_chroma_service)
 ):
     """
@@ -92,27 +85,21 @@ async def list_collections(
     
     返回所有集合的名称、文档数量和元数据
     """
-    try:
-        collections = chroma_service.list_collections()
-        return ResponseUtil.success(
-            data=collections,
-            message=f"获取集合列表成功，共 {len(collections)} 个集合"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取集合列表失败: {str(e)}"
-        )
+    collections = chroma_service.list_collections()
+    return ResponseUtil.success(
+        data=collections,
+        message=f"获取集合列表成功，共 {len(collections)} 个集合"
+    )
 
 
-@router.get(
-    "/collections/{collection_name}",
+@router.post(
+    "/collection/info",
     response_model=SuccessResponse[ChromaCollectionInfo],
     summary="获取指定集合信息",
     description="获取指定集合的详细信息，包括文档数量和元数据"
 )
 async def get_collection_info(
-    collection_name: str,
+    request: ChromaGetCollectionRequest,
     chroma_service: ChromaService = Depends(get_chroma_service)
 ):
     """
@@ -120,27 +107,21 @@ async def get_collection_info(
     
     - **collection_name**: 集合名称
     """
-    try:
-        collection_info = chroma_service.get_collection_info(collection_name)
-        return ResponseUtil.success(
-            data=collection_info,
-            message=f"获取集合 {collection_name} 信息成功"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取集合信息失败: {str(e)}"
-        )
+    collection_info = chroma_service.get_collection_info(request.collection_name)
+    return ResponseUtil.success(
+        data=collection_info,
+        message=f"获取集合 {request.collection_name} 信息成功"
+    )
 
 
-@router.delete(
-    "/collections/{collection_name}",
+@router.post(
+    "/collection/delete",
     response_model=SuccessResponse[Dict[str, str]],
     summary="删除集合",
     description="删除指定的 Chroma 集合及其所有文档"
 )
 async def delete_collection(
-    collection_name: str,
+    request: ChromaDeleteCollectionRequest,
     chroma_service: ChromaService = Depends(get_chroma_service)
 ):
     """
@@ -150,35 +131,27 @@ async def delete_collection(
     
     ⚠️ 警告：此操作会删除集合中的所有文档，且不可恢复
     """
-    try:
-        success = chroma_service.delete_collection(collection_name)
-        if success:
-            return ResponseUtil.success(
-                data={"collection_name": collection_name},
-                message=f"成功删除集合 {collection_name}"
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="删除集合失败"
-            )
-    except Exception as e:
+    success = chroma_service.delete_collection(request.collection_name)
+    if success:
+        return ResponseUtil.success(
+            data={"collection_name": request.collection_name},
+            message=f"成功删除集合 {request.collection_name}"
+        )
+    else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除集合失败: {str(e)}"
+            detail="删除集合失败"
         )
 
 
-@router.delete(
-    "/collections/{collection_name}/documents",
+@router.post(
+    "/document/delete",
     response_model=SuccessResponse[Dict[str, str]],
     summary="删除文档",
     description="根据文档ID或元数据过滤条件删除文档"
 )
 async def delete_documents(
-    collection_name: str,
-    document_ids: Optional[List[str]] = None,
-    where: Optional[Dict[str, Any]] = None,
+    request: ChromaDeleteDocumentsRequest,
     chroma_service: ChromaService = Depends(get_chroma_service)
 ):
     """
@@ -190,31 +163,25 @@ async def delete_documents(
     
     注意：document_ids 和 where 至少需要提供一个
     """
-    if not document_ids and not where:
+    if not request.document_ids and not request.where:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="必须提供 document_ids 或 where 过滤条件"
         )
     
-    try:
-        success = chroma_service.delete_documents(
-            collection_name=collection_name,
-            document_ids=document_ids,
-            where=where
+    success = chroma_service.delete_documents(
+        collection_name=request.collection_name,
+        document_ids=request.document_ids,
+        where=request.where
+    )
+    
+    if success:
+        return ResponseUtil.success(
+            data={"collection_name": request.collection_name},
+            message=f"成功删除集合 {request.collection_name} 中的文档"
         )
-        
-        if success:
-            return ResponseUtil.success(
-                data={"collection_name": collection_name},
-                message=f"成功删除集合 {collection_name} 中的文档"
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="删除文档失败"
-            )
-    except Exception as e:
+    else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除文档失败: {str(e)}"
+            detail="删除文档失败"
         ) 
