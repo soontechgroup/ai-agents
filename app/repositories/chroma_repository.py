@@ -124,7 +124,8 @@ class ChromaRepository:
     def query_documents(
         self,
         collection_name: str,
-        query_texts: List[str],
+        query_texts: Optional[List[str]] = None,
+        query_embeddings: Optional[List[List[float]]] = None,
         n_results: int = 10,
         where: Optional[Dict[str, Any]] = None,
         include: List[str] = None
@@ -134,7 +135,8 @@ class ChromaRepository:
         
         Args:
             collection_name: 集合名称
-            query_texts: 查询文本列表
+            query_texts: 查询文本列表（与 query_embeddings 二选一）
+            query_embeddings: 查询向量列表（与 query_texts 二选一）
             n_results: 返回结果数量
             where: 元数据过滤条件
             include: 包含的字段列表
@@ -148,12 +150,24 @@ class ChromaRepository:
             if include is None:
                 include = ["documents", "metadatas", "distances"]
             
-            results = collection.query(
-                query_texts=query_texts,
-                n_results=n_results,
-                where=where,
-                include=include
-            )
+            # 构建查询参数
+            query_params = {
+                "n_results": n_results,
+                "where": where,
+                "include": include
+            }
+            
+            # 使用自定义向量或文本查询
+            if query_embeddings is not None:
+                query_params["query_embeddings"] = query_embeddings
+                logger.debug(f"使用自定义查询向量，维度: {len(query_embeddings[0]) if query_embeddings else 0}")
+            elif query_texts is not None:
+                query_params["query_texts"] = query_texts
+                logger.debug("使用 Chroma 默认查询向量化")
+            else:
+                raise ValueError("必须提供 query_texts 或 query_embeddings 之一")
+            
+            results = collection.query(**query_params)
             
             logger.debug(f"查询集合 {collection_name} 完成，返回 {len(results.get('ids', [[]]))} 个结果")
             return results

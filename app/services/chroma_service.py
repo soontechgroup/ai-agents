@@ -151,10 +151,14 @@ class ChromaService:
             ChromaQueryResponse: 查询结果
         """
         try:
-            # 调用仓库层查询
+            # 使用 EmbeddingService 生成查询向量
+            logger.info(f"正在为查询文本生成嵌入向量: {query_request.query_text[:50]}...")
+            query_embedding = self.embedding_service.generate_query_embedding(query_request.query_text)
+            
+            # 调用仓库层查询（使用自定义向量）
             results = self.chroma_repository.query_documents(
                 collection_name=query_request.collection_name,
-                query_texts=[query_request.query_text],
+                query_embeddings=[query_embedding],  # 使用我们生成的向量
                 n_results=query_request.n_results,
                 where=query_request.where,
                 include=query_request.include
