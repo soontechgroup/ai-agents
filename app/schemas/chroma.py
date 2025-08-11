@@ -7,6 +7,7 @@ class ChromaDocumentInput(BaseModel):
     """Chroma 文档输入模型"""
     content: str = Field(..., description="文档内容")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="文档元数据")
+    # document_id 由系统自动生成，用户无需提供
 
 
 class ChromaDocumentBatch(BaseModel):
@@ -52,6 +53,7 @@ class ChromaAddResponse(BaseModel):
     collection_name: str = Field(..., description="集合名称")
     added_count: int = Field(..., description="添加的文档数量")
     document_ids: List[str] = Field(..., description="添加的文档ID列表")
+    sample_embeddings: Optional[List[List[float]]] = Field(default=None, description="前5个文档的嵌入向量（用于测试）")
 
 
 class ChromaListCollectionsRequest(BaseModel):

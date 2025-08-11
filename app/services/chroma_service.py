@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 from app.repositories.chroma_repository import ChromaRepository
+from app.services.embedding_service import EmbeddingService
 from app.schemas.chroma import (
     ChromaDocumentInput,
     ChromaDocumentBatch,
@@ -53,8 +54,9 @@ def clean_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 class ChromaService:
     """Chroma 服务层"""
     
-    def __init__(self, chroma_repository: ChromaRepository):
+    def __init__(self, chroma_repository: ChromaRepository, embedding_service: EmbeddingService):
         self.chroma_repository = chroma_repository
+        self.embedding_service = embedding_service
     
     def add_documents(self, document_batch: ChromaDocumentBatch) -> ChromaAddResponse:
         """
@@ -94,24 +96,42 @@ class ChromaService:
                 
                 metadatas.append(final_metadata)
                 
-                # 处理文档ID
-                doc_id = doc_input.document_id or str(uuid.uuid4())
+                # 自动生成文档ID
+                doc_id = str(uuid.uuid4())
                 ids.append(doc_id)
             
-            # 调用仓库层添加文档
+            # 使用 EmbeddingService 生成嵌入向量
+            logger.info(f"正在为 {len(documents)} 个文档生成嵌入向量")
+            embeddings = self.embedding_service.generate_embeddings(documents)
+            
+            # 调用仓库层添加文档（包含嵌入向量）
             added_ids = self.chroma_repository.add_documents(
                 collection_name=document_batch.collection_name,
                 documents=documents,
                 metadatas=metadatas,
-                ids=ids
+                ids=ids,
+                embeddings=embeddings
             )
             
             logger.info(f"服务层: 成功添加 {len(added_ids)} 个文档到集合 {document_batch.collection_name}")
             
+            # 准备返回前5个文档的嵌入向量维度（用于测试）
+            sample_embeddings = None
+            if embeddings:
+                # 取前5个文档的前5个维度
+                sample_count = min(5, len(embeddings))
+                sample_embeddings = []
+                for i in range(sample_count):
+                    # 每个文档取前5个维度
+                    embedding_sample = embeddings[i][:5] if len(embeddings[i]) >= 5 else embeddings[i]
+                    sample_embeddings.append(embedding_sample)
+                logger.info(f"返回 {len(sample_embeddings)} 个文档的前5个维度用于测试")
+            
             return ChromaAddResponse(
                 collection_name=document_batch.collection_name,
                 added_count=len(added_ids),
-                document_ids=added_ids
+                document_ids=added_ids,
+                sample_embeddings=sample_embeddings
             )
             
         except Exception as e:

@@ -61,7 +61,8 @@ class ChromaRepository:
         collection_name: str,
         documents: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None,
-        ids: Optional[List[str]] = None
+        ids: Optional[List[str]] = None,
+        embeddings: Optional[List[List[float]]] = None
     ) -> List[str]:
         """
         向集合中添加文档
@@ -71,6 +72,7 @@ class ChromaRepository:
             documents: 文档内容列表
             metadatas: 文档元数据列表
             ids: 文档ID列表，如果不提供则自动生成
+            embeddings: 嵌入向量列表，如果不提供则使用 Chroma 默认向量化
             
         Returns:
             List[str]: 添加的文档ID列表
@@ -97,11 +99,20 @@ class ChromaRepository:
                 logger.debug(f"文档 {i} 元数据: {metadatas[i]}")
             
             # 添加文档到集合
-            collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids
-            )
+            add_params = {
+                "documents": documents,
+                "metadatas": metadatas,
+                "ids": ids
+            }
+            
+            # 如果提供了嵌入向量，则使用自定义向量
+            if embeddings is not None:
+                add_params["embeddings"] = embeddings
+                logger.debug(f"使用自定义嵌入向量添加 {len(embeddings)} 个文档")
+            else:
+                logger.debug("使用 Chroma 默认嵌入向量")
+            
+            collection.add(**add_params)
             
             logger.info(f"成功添加 {len(documents)} 个文档到集合 {collection_name}")
             return ids

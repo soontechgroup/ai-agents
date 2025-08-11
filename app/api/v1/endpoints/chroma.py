@@ -35,7 +35,10 @@ async def add_documents(
     - **documents**: 文档列表，每个文档包含内容和可选的元数据
     - **collection_name**: 目标集合名称，如果不存在会自动创建
     
-    注意：文档ID将由系统自动生成，确保唯一性
+    注意：
+    - 文档ID将由系统自动生成UUID，确保唯一性
+    - 使用 OpenAI text-embedding-3-small 模型进行向量化
+    - 返回结果包含前5个文档的前5个维度用于测试验证
     """
     result = chroma_service.add_documents(document_batch)
     return ResponseUtil.success(
