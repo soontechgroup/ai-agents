@@ -75,4 +75,17 @@ class ChromaDeleteDocumentsRequest(BaseModel):
     """Chroma 删除文档请求模型"""
     collection_name: str = Field(..., description="集合名称")
     document_ids: Optional[List[str]] = Field(default=None, description="要删除的文档ID列表")
-    where: Optional[Dict[str, Any]] = Field(default=None, description="元数据过滤条件") 
+    where: Optional[Dict[str, Any]] = Field(default=None, description="元数据过滤条件")
+
+
+class ChromaCreateCollectionRequest(BaseModel):
+    """Chroma 创建集合请求模型"""
+    collection_name: str = Field(..., description="集合名称")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="集合元数据")
+
+
+class ChromaCreateCollectionResponse(BaseModel):
+    """Chroma 创建集合响应模型"""
+    collection_name: str = Field(..., description="集合名称")
+    created: bool = Field(..., description="是否新创建（false表示集合已存在）")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="集合元数据") 

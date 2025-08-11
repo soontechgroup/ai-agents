@@ -17,19 +17,11 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 # 移除默认的日志处理器
 logger.remove()
 
-# 定义日志格式（移除 request_id，将在上下文中添加）
+# 统一的日志格式（包含完整路径，支持 PyCharm 点击跳转）
 LOG_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    "<level>{level: <8}</level> | "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-    "<level>{message}</level>"
-)
-
-# 简化的控制台格式（开发环境）
-CONSOLE_FORMAT = (
     "<green>{time:HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
-    "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
+    'File "<cyan>{file.path}</cyan>", line <cyan>{line}</cyan>, in <cyan>{function}</cyan> | '
     "<level>{message}</level>"
 )
 
@@ -42,9 +34,10 @@ def setup_logger():
     """配置日志系统"""
     
     # 控制台输出（彩色）
+    # 直接使用带完整路径的格式，PyCharm 会自动识别
     logger.add(
         sys.stdout,
-        format=CONSOLE_FORMAT if settings.DEBUG else LOG_FORMAT,
+        format=LOG_FORMAT,  # 统一格式，包含完整路径
         level=settings.LOG_LEVEL.upper(),
         colorize=True,
         enqueue=True,  # 异步日志
