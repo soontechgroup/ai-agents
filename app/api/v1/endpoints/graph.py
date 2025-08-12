@@ -8,11 +8,11 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 from ....services.graph_service import graph_service
 from ....guards.auth import get_current_user
-from ....schemas.user import User
+from ....core.models import User
 from ....schemas.CommonResponse import SuccessResponse
 from ....utils.response import ResponseUtil
 
-router = APIRouter(prefix="/graph", tags=["Graph Database"])
+router = APIRouter(tags=["Graph Database"])
 
 
 # ==================== 请求模型 ====================
