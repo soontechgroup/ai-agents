@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     PORT: int = 8000
     RELOAD: bool = False
 
+    # Chroma 数据库配置
+    CHROMA_PERSIST_DIRECTORY: str = "./data/chroma_db"
+    CHROMA_COLLECTION_NAME: str = "default_collection"
+
     class Config:
         # 不在这里指定 env_file，因为我们已经手动加载了
         env_file_encoding = 'utf-8'
