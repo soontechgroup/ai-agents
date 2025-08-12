@@ -43,6 +43,9 @@ class LangGraphService:
             # 内存存储器用于保存对话状态
             self.checkpointer = MemorySaver()
             
+            # 内存缓存用于临时保存对话历史
+            self._conversation_cache = {}
+            
             # 构建对话图
             self.graph = self._build_conversation_graph()
             
@@ -193,10 +196,21 @@ class LangGraphService:
         try:
             config = {"configurable": {"thread_id": thread_id}}
             
+            # 获取历史消息
+            try:
+                checkpoint = self.checkpointer.get(config["configurable"])
+                if checkpoint and checkpoint.get("channel_values"):
+                    existing_messages = checkpoint["channel_values"].get("messages", [])
+                else:
+                    existing_messages = []
+            except:
+                existing_messages = []
+            
             initial_state = ConversationState(
                 thread_id=thread_id,
                 user_message=message,
-                digital_human_config=digital_human_config
+                digital_human_config=digital_human_config,
+                messages=existing_messages  # 包含历史消息
             )
             
             # 运行对话图
@@ -230,13 +244,16 @@ class LangGraphService:
             system_prompt = self._build_system_prompt(digital_human_config)
             
             # 获取历史消息
+            messages = []
             try:
-                # 尝试获取之前的状态
-                checkpoint = self.checkpointer.get(config_dict["configurable"])
-                if checkpoint and checkpoint.get("channel_values"):
-                    messages = checkpoint["channel_values"].get("messages", [])
+                # 首先尝试从内存缓存获取
+                if hasattr(self, '_conversation_cache') and thread_id in self._conversation_cache:
+                    messages = self._conversation_cache[thread_id]
                 else:
-                    messages = []
+                    # 尝试从 checkpointer 获取
+                    checkpoint = self.checkpointer.get(config_dict["configurable"])
+                    if checkpoint and checkpoint.get("channel_values"):
+                        messages = checkpoint["channel_values"].get("messages", [])
             except:
                 messages = []
             
@@ -268,25 +285,31 @@ class LangGraphService:
                     full_response += chunk.content
                     yield chunk.content
             
-            # 保存对话状态 - 使用图来管理状态而不是直接操作checkpointer
+            # 保存对话状态 - 简化方案：在流式响应中暂时不保存状态
+            # 而是依赖同步方法或改进图的设计
             try:
-                # 创建新的状态并通过图来保存
-                final_state = ConversationState(
-                    thread_id=thread_id,
-                    messages=messages + [
-                        HumanMessage(content=message),
-                        AIMessage(content=full_response)
-                    ],
-                    digital_human_config=digital_human_config,
-                    user_message=message,
-                    assistant_response=full_response
-                )
+                # 更新消息历史
+                updated_messages = messages + [
+                    HumanMessage(content=message),
+                    AIMessage(content=full_response)
+                ]
                 
-                # 通过 invoke 触发状态保存
-                self.graph.invoke(final_state, config_dict)
-            except:
-                # 如果保存失败，继续运行但不保存历史
-                pass
+                # 临时解决方案：将消息保存到内存中
+                # 这样至少在同一个服务实例内可以保持历史
+                if not hasattr(self, '_conversation_cache'):
+                    self._conversation_cache = {}
+                
+                self._conversation_cache[thread_id] = updated_messages
+                
+                # TODO: 后续需要改进 LangGraph 的集成方式
+                # 可能的方案：
+                # 1. 使用 LangGraph 的官方流式 API
+                # 2. 自定义 checkpointer 实现
+                # 3. 使用数据库来持久化对话历史
+                
+            except Exception as e:
+                # 记录错误但不中断响应
+                print(f"Warning: Failed to save conversation history: {str(e)}")
             
         except openai.AuthenticationError:
             yield json.dumps({
@@ -323,15 +346,22 @@ class LangGraphService:
     def get_conversation_history(self, thread_id: str) -> List[Dict[str, Any]]:
         """获取对话历史"""
         try:
-            config = {"configurable": {"thread_id": thread_id}}
-            checkpoint = self.checkpointer.get(config["configurable"])
+            # 首先尝试从内存缓存获取
+            messages = []
+            if hasattr(self, '_conversation_cache') and thread_id in self._conversation_cache:
+                messages = self._conversation_cache[thread_id]
+            else:
+                # 尝试从 checkpointer 获取
+                config = {"configurable": {"thread_id": thread_id}}
+                checkpoint = self.checkpointer.get(config["configurable"])
+                
+                if checkpoint and checkpoint.get("channel_values"):
+                    messages = checkpoint["channel_values"].get("messages", [])
             
-            if not checkpoint or not checkpoint.get("channel_values"):
+            if not messages:
                 return []
             
-            messages = checkpoint["channel_values"].get("messages", [])
             history = []
-            
             for msg in messages:
                 if isinstance(msg, HumanMessage):
                     history.append({"role": "user", "content": msg.content})
