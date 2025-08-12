@@ -6,6 +6,7 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.chroma_repository import ChromaRepository
 from app.services.auth_service import AuthService
 from app.services.chroma_service import ChromaService
+from app.services.embedding_service import EmbeddingService
 
 
 def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
@@ -25,8 +26,14 @@ def get_chroma_repository() -> ChromaRepository:
     return ChromaRepository()
 
 
+def get_embedding_service() -> EmbeddingService:
+    """获取嵌入向量服务实例"""
+    return EmbeddingService()
+
+
 def get_chroma_service(
-    chroma_repository: ChromaRepository = Depends(get_chroma_repository)
+    chroma_repository: ChromaRepository = Depends(get_chroma_repository),
+    embedding_service: EmbeddingService = Depends(get_embedding_service)
 ) -> ChromaService:
     """获取 Chroma 服务实例"""
-    return ChromaService(chroma_repository)
+    return ChromaService(chroma_repository, embedding_service)
