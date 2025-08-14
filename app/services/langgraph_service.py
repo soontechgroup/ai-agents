@@ -278,17 +278,9 @@ class LangGraphService:
                     full_response += chunk.content
                     yield chunk.content
             
-            # 保存对话状态 - 简化方案：在流式响应中暂时不保存状态
-            # 而是依赖同步方法或改进图的设计
-            try:
-                # 更新消息历史
-                # PostgreSQL checkpointer 会自动从数据库读取历史
-                # 消息已经通过 conversation_service 保存到数据库
-                # 无需再手动缓存
-                
-            except Exception as e:
-                # 记录错误但不中断响应
-                print(f"Warning: Failed to save conversation history: {str(e)}")
+            # PostgreSQL checkpointer 会自动从数据库读取历史
+            # 消息已经通过 conversation_service 保存到数据库
+            # 无需再手动缓存或保存状态
             
         except openai.AuthenticationError:
             yield json.dumps({
