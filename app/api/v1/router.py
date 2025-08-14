@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import auth, digital_humans, user, conversations, chroma
+from .endpoints import auth, digital_humans, user, conversations, chroma, graph
 from .admin import admin_router
 
 api_router = APIRouter()
@@ -37,6 +37,13 @@ api_router.include_router(
     chroma.router,
     prefix="/chroma",
     tags=["Chroma 向量数据库"]
+)
+
+# 包含 Neo4j 图数据库路由
+api_router.include_router(
+    graph.router,
+    prefix="/graph",
+    tags=["Neo4j 图数据库"]
 )
 
 # 包含管理后台路由
