@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 from neo4j import GraphDatabase, Driver
 from contextlib import contextmanager
 import logging
-from ..core.config import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
