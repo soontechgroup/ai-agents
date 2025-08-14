@@ -1,18 +1,16 @@
-"""
-Neo4j 图数据库 API 端点
-用于测试和演示 Neo4j 功能
-"""
+"""Neo4j 图数据库 API 端点"""
 
-from typing import Dict, List, Any
-
+from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.core.models import User
 from app.guards.auth import get_current_user
 from app.schemas.CommonResponse import SuccessResponse
-from app.services.graph_service import graph_service
 from app.utils.response import ResponseUtil
+from app.dependencies.graph import get_graph_repository
+from app.repositories.graph import GraphRepository
+from app.services.graph_service import GraphService
 
 router = APIRouter(tags=["Graph Database"])
 
@@ -20,111 +18,102 @@ router = APIRouter(tags=["Graph Database"])
 # ==================== 请求模型 ====================
 
 class CreateNodeRequest(BaseModel):
-    """创建节点请求"""
     label: str
     properties: Dict[str, Any]
 
 
 class CreateRelationshipRequest(BaseModel):
-    """创建关系请求"""
     from_node_id: int
     to_node_id: int
     rel_type: str
     properties: Dict[str, Any] = {}
 
 
+class UpdateNodeRequest(BaseModel):
+    properties: Dict[str, Any]
+
+
 class SearchRequest(BaseModel):
-    """搜索请求"""
     label: str
     keyword: str
     properties: List[str]
 
 
 class FindNodesRequest(BaseModel):
-    """查找节点请求"""
-    label: str
-    limit: int = 10
+    label: Optional[str] = None
+    limit: int = 100
 
 
-class GetMessagesRequest(BaseModel):
-    """获取消息请求"""
-    conversation_id: str
+# ==================== 基础 CRUD 操作 ====================
 
-
-class GetPopularRequest(BaseModel):
-    """获取热门数字人请求"""
-    limit: int = 10
-
-
-# ==================== 测试端点 ====================
-
-@router.post("/test/create-node", response_model=SuccessResponse, summary="测试创建节点")
-async def test_create_node(request: CreateNodeRequest):
-    """
-    测试创建节点
-    
-    Example:
-        POST /graph/test/create-node
-        {
-            "label": "TestUser",
-            "properties": {
-                "name": "张三",
-                "age": 25
-            }
-        }
-    """
+@router.post("/nodes", response_model=SuccessResponse, summary="创建节点")
+async def create_node(
+    request: CreateNodeRequest,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        from app.utils.neo4j_util import neo4j_util
-        node = neo4j_util.create_node(request.label, request.properties)
+        node = graph.nodes.create(request.label, request.properties)
         return ResponseUtil.success(data=node, message="节点创建成功")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/test/create-relationship", response_model=SuccessResponse, summary="测试创建关系")
-async def test_create_relationship(request: CreateRelationshipRequest):
-    """
-    测试创建关系
-    
-    Example:
-        POST /graph/test/create-relationship
-        {
-            "from_node_id": 1,
-            "to_node_id": 2,
-            "rel_type": "FOLLOWS"
-        }
-    """
+@router.get("/nodes/{node_id}", response_model=SuccessResponse, summary="获取节点")
+async def get_node(
+    node_id: int,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        from app.utils.neo4j_util import neo4j_util
-        success = neo4j_util.create_relationship(
-            request.from_node_id,
-            request.to_node_id,
-            request.rel_type,
-            request.properties
-        )
-        return ResponseUtil.success(
-            data={"success": success},
-            message="关系创建成功" if success else "关系创建失败"
-        )
+        node = graph.nodes.find_by_id(node_id)
+        if not node:
+            return ResponseUtil.error(message="节点不存在")
+        return ResponseUtil.success(data=node)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/test/find-nodes", response_model=SuccessResponse, summary="测试查找节点")
-async def test_find_nodes(request: FindNodesRequest):
-    """
-    测试查找节点
-    
-    Example:
-        POST /graph/test/find-nodes
-        {
-            "label": "User",
-            "limit": 5
-        }
-    """
+@router.put("/nodes/{node_id}", response_model=SuccessResponse, summary="更新节点")
+async def update_node(
+    node_id: int,
+    request: UpdateNodeRequest,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        from app.utils.neo4j_util import neo4j_util
-        nodes = neo4j_util.find_all_nodes(request.label, request.limit)
+        node = graph.nodes.update(node_id, request.properties)
+        if not node:
+            return ResponseUtil.error(message="节点不存在或更新失败")
+        return ResponseUtil.success(data=node, message="节点更新成功")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/nodes/{node_id}", response_model=SuccessResponse, summary="删除节点")
+async def delete_node(
+    node_id: int,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        success = graph.delete_node_cascade(node_id)
+        if not success:
+            return ResponseUtil.error(message="节点不存在或删除失败")
+        return ResponseUtil.success(message="节点删除成功")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/nodes", response_model=SuccessResponse, summary="查找节点")
+async def find_nodes(
+    label: Optional[str] = None,
+    limit: int = 100,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        nodes = graph.nodes.find_all(label, limit)
         return ResponseUtil.success(
             data={"nodes": nodes, "count": len(nodes)},
             message="查询成功"
@@ -133,43 +122,141 @@ async def test_find_nodes(request: FindNodesRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/test/search", response_model=SuccessResponse, summary="测试搜索功能")
-async def test_search(request: SearchRequest):
-    """
-    测试搜索功能
-    
-    Example:
-        POST /graph/test/search
-        {
-            "label": "User",
-            "keyword": "张",
-            "properties": ["name", "username"]
-        }
-    """
+@router.post("/search", response_model=SuccessResponse, summary="搜索节点")
+async def search_nodes(
+    request: SearchRequest,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        from app.utils.neo4j_util import neo4j_util
-        nodes = neo4j_util.search_nodes_by_keyword(
+        nodes = graph.nodes.search(
             request.label,
             request.keyword,
             request.properties
         )
         return ResponseUtil.success(
             data={"nodes": nodes, "count": len(nodes)},
-            message="搜索成功"
+            message=f"找到 {len(nodes)} 个匹配节点"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== 业务端点 ====================
+# ==================== 关系操作 ====================
+
+@router.post("/relationships", response_model=SuccessResponse, summary="创建关系")
+async def create_relationship(
+    request: CreateRelationshipRequest,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        relationship = graph.relationships.create(
+            request.from_node_id,
+            request.to_node_id,
+            request.rel_type,
+            request.properties
+        )
+        if not relationship:
+            return ResponseUtil.error(message="创建关系失败，请检查节点是否存在")
+        return ResponseUtil.success(data=relationship, message="关系创建成功")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/nodes/{node_id}/connections", response_model=SuccessResponse, summary="获取节点连接")
+async def get_node_connections(
+    node_id: int,
+    rel_type: Optional[str] = None,
+    direction: str = "both",
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        node_with_connections = graph.find_node_with_connections(
+            node_id, rel_type, direction
+        )
+        if not node_with_connections:
+            return ResponseUtil.error(message="节点不存在")
+        return ResponseUtil.success(data=node_with_connections)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 高级操作 ====================
+
+@router.post("/batch/nodes", response_model=SuccessResponse, summary="批量创建节点")
+async def create_nodes_batch(
+    nodes_data: List[Dict[str, Any]],
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        created_nodes = graph.create_nodes_batch(nodes_data)
+        return ResponseUtil.success(
+            data={"nodes": created_nodes, "count": len(created_nodes)},
+            message=f"成功创建 {len(created_nodes)} 个节点"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch/relationships", response_model=SuccessResponse, summary="批量创建关系")
+async def create_relationships_batch(
+    relationships_data: List[Dict[str, Any]],
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        created_relationships = graph.create_relationships_batch(relationships_data)
+        return ResponseUtil.success(
+            data={"relationships": created_relationships, "count": len(created_relationships)},
+            message=f"成功创建 {len(created_relationships)} 个关系"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/clone/{node_id}", response_model=SuccessResponse, summary="克隆节点")
+async def clone_node(
+    node_id: int,
+    new_properties: Optional[Dict[str, Any]] = None,
+    clone_relationships: bool = False,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        cloned_node = graph.clone_node(node_id, new_properties, clone_relationships)
+        if not cloned_node:
+            return ResponseUtil.error(message="节点不存在或克隆失败")
+        return ResponseUtil.success(data=cloned_node, message="节点克隆成功")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/statistics", response_model=SuccessResponse, summary="获取统计信息")
+async def get_statistics(
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        stats = graph.get_statistics()
+        return ResponseUtil.success(data=stats)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 业务相关端点 ====================
 
 @router.post("/sync/user", response_model=SuccessResponse, summary="同步用户到图数据库")
-async def sync_user_to_graph(current_user: User = Depends(get_current_user)):
-    """
-    同步当前用户到图数据库
-    """
+async def sync_user_to_graph(
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        node = await graph_service.create_user_node(
+        # 使用 Service 层处理业务逻辑
+        service = GraphService(graph)
+        node = await service.create_user_node(
             current_user.id,
             current_user.username,
             current_user.email
@@ -179,73 +266,66 @@ async def sync_user_to_graph(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/user/digital-humans", response_model=SuccessResponse, summary="获取用户的数字人")
-async def get_user_digital_humans(current_user: User = Depends(get_current_user)):
-    """
-    获取用户的数字人（从图数据库）
-    """
+@router.get("/user/profile", response_model=SuccessResponse, summary="获取用户完整画像")
+async def get_user_profile(
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        digital_humans = await graph_service.get_user_digital_humans(current_user.id)
-        return ResponseUtil.success(
-            data={"digital_humans": digital_humans, "count": len(digital_humans)},
-            message="查询成功"
-        )
+        service = GraphService(graph)
+        profile = await service.get_user_profile_complete(current_user.id)
+        if not profile:
+            return ResponseUtil.error(message="用户画像不存在")
+        return ResponseUtil.success(data=profile)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/popular/digital-humans", response_model=SuccessResponse, summary="获取热门数字人")
-async def get_popular_digital_humans(request: GetPopularRequest):
-    """
-    获取热门数字人
-    
-    Example:
-        POST /graph/popular/digital-humans
-        {
-            "limit": 10
-        }
-    """
+@router.post("/digital-human", response_model=SuccessResponse, summary="创建数字人")
+async def create_digital_human(
+    digital_human_id: int,
+    name: str,
+    description: str,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        popular = await graph_service.get_popular_digital_humans(request.limit)
-        return ResponseUtil.success(
-            data={"digital_humans": popular, "count": len(popular)},
-            message="查询成功"
+        service = GraphService(graph)
+        dh_node = await service.create_digital_human_with_owner(
+            digital_human_id,
+            name,
+            description,
+            current_user.id
         )
+        if not dh_node:
+            return ResponseUtil.error(message="创建数字人失败")
+        return ResponseUtil.success(data=dh_node, message="数字人创建成功")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/similar-users", response_model=SuccessResponse, summary="查找相似用户")
-async def find_similar_users(current_user: User = Depends(get_current_user)):
-    """
-    查找相似用户
-    """
+@router.get("/digital-human/{digital_human_id}/analytics", response_model=SuccessResponse, summary="获取数字人分析")
+async def get_digital_human_analytics(
+    digital_human_id: int,
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        similar = await graph_service.find_similar_users(current_user.id)
-        return ResponseUtil.success(
-            data={"users": similar, "count": len(similar)},
-            message="查询成功"
-        )
+        service = GraphService(graph)
+        analytics = await service.get_digital_human_analytics(digital_human_id)
+        return ResponseUtil.success(data=analytics)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/conversation/messages", response_model=SuccessResponse, summary="获取对话消息")
-async def get_conversation_messages(request: GetMessagesRequest):
-    """
-    获取对话消息
-    
-    Example:
-        POST /graph/conversation/messages
-        {
-            "conversation_id": "conv_123456"
-        }
-    """
+@router.get("/system/statistics", response_model=SuccessResponse, summary="获取系统统计")
+async def get_system_statistics(
+    graph: GraphRepository = Depends(get_graph_repository),
+    current_user: User = Depends(get_current_user)
+):
     try:
-        messages = await graph_service.get_conversation_messages(request.conversation_id)
-        return ResponseUtil.success(
-            data={"messages": messages, "count": len(messages)},
-            message="查询成功"
-        )
+        service = GraphService(graph)
+        stats = await service.get_system_statistics()
+        return ResponseUtil.success(data=stats)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
