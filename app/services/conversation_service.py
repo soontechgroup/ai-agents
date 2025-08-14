@@ -1,20 +1,22 @@
-from sqlalchemy.orm import Session
-from typing import List, Optional, Tuple, Generator, Dict, Any
-from app.repositories.conversation_repository import ConversationRepository, MessageRepository
-from app.services.langgraph_service import LangGraphService
-from app.core.models import Conversation, Message, DigitalHuman
-from app.schemas.conversation import *
 import json
+from typing import Tuple, Generator, Any
+
+from sqlalchemy.orm import Session
+
+from app.core.models import DigitalHuman
+from app.repositories.conversation_repository import ConversationRepository, MessageRepository
+from app.schemas.conversation import *
+from app.services.langgraph_service import LangGraphService
 
 
 class ConversationService:
     """对话服务层"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, langgraph_service: LangGraphService):
         self.db = db
         self.conversation_repo = ConversationRepository(db)
         self.message_repo = MessageRepository(db)
-        self.langgraph_service = LangGraphService()
+        self.langgraph_service = langgraph_service
     
     def create_conversation(
         self,

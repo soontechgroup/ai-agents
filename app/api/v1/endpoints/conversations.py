@@ -1,9 +1,14 @@
+import json
+import math
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-import math
-import json
 
+from app.core.models import User
+from app.dependencies.services import get_conversation_service
+from app.guards import get_current_active_user
+from app.schemas.CommonResponse import PaginationMeta
+from app.schemas.common import SuccessResponse
 from app.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
     ConversationPageRequest, ConversationPageResponse,
@@ -13,20 +18,10 @@ from app.schemas.conversation import (
     ConversationSendRequest, ConversationChatRequest,
     ConversationClearRequest
 )
-from app.schemas.common import SuccessResponse
-from app.schemas.CommonResponse import PaginationMeta
 from app.services.conversation_service import ConversationService
-from app.core.database import get_db
-from app.core.models import User
-from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
 
 router = APIRouter()
-
-
-def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:
-    """获取对话服务实例"""
-    return ConversationService(db)
 
 
 @router.post("/create", response_model=SuccessResponse[ConversationResponse], summary="创建对话")
