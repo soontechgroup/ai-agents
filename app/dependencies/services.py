@@ -46,5 +46,7 @@ def get_langgraph_service() -> LangGraphService:
     """
     获取 LangGraph 服务单例实例
     使用 lru_cache 确保整个应用生命周期只创建一次
+    使用 PostgreSQL checkpointer 避免双层缓存
     """
-    return LangGraphService()
+    from app.core.database import get_db
+    return LangGraphService(db_session_factory=get_db)

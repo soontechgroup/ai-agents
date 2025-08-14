@@ -348,15 +348,12 @@ class LangGraphService:
         try:
             # 首先尝试从内存缓存获取
             messages = []
-            if hasattr(self, '_conversation_cache') and thread_id in self._conversation_cache:
-                messages = self._conversation_cache[thread_id]
-            else:
-                # 尝试从 checkpointer 获取
-                config = {"configurable": {"thread_id": thread_id}}
-                checkpoint = self.checkpointer.get(config["configurable"])
-                
-                if checkpoint and checkpoint.get("channel_values"):
-                    messages = checkpoint["channel_values"].get("messages", [])
+            # 直接从 PostgreSQL checkpointer 获取
+            config = {"configurable": {"thread_id": thread_id}}
+            checkpoint = self.checkpointer.get(config["configurable"])
+            
+            if checkpoint and checkpoint.get("channel_values"):
+                messages = checkpoint["channel_values"].get("messages", [])
             
             if not messages:
                 return []
