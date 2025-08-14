@@ -6,7 +6,7 @@
 from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
-from ..utils.neo4j_util import neo4j_util
+from app.utils.neo4j_util import neo4j_util
 
 logger = logging.getLogger(__name__)
 

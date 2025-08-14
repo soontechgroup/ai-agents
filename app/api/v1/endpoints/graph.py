@@ -3,14 +3,16 @@ Neo4j 图数据库 API 端点
 用于测试和演示 Neo4j 功能
 """
 
+from typing import Dict, List, Any
+
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
-from ....services.graph_service import graph_service
-from ....guards.auth import get_current_user
-from ....core.models import User
-from ....schemas.CommonResponse import SuccessResponse
-from ....utils.response import ResponseUtil
+
+from app.core.models import User
+from app.guards.auth import get_current_user
+from app.schemas.CommonResponse import SuccessResponse
+from app.services.graph_service import graph_service
+from app.utils.response import ResponseUtil
 
 router = APIRouter(tags=["Graph Database"])
 
@@ -72,7 +74,7 @@ async def test_create_node(request: CreateNodeRequest):
         }
     """
     try:
-        from ....utils.neo4j_util import neo4j_util
+        from app.utils.neo4j_util import neo4j_util
         node = neo4j_util.create_node(request.label, request.properties)
         return ResponseUtil.success(data=node, message="节点创建成功")
     except Exception as e:
@@ -93,7 +95,7 @@ async def test_create_relationship(request: CreateRelationshipRequest):
         }
     """
     try:
-        from ....utils.neo4j_util import neo4j_util
+        from app.utils.neo4j_util import neo4j_util
         success = neo4j_util.create_relationship(
             request.from_node_id,
             request.to_node_id,
@@ -121,7 +123,7 @@ async def test_find_nodes(request: FindNodesRequest):
         }
     """
     try:
-        from ....utils.neo4j_util import neo4j_util
+        from app.utils.neo4j_util import neo4j_util
         nodes = neo4j_util.find_all_nodes(request.label, request.limit)
         return ResponseUtil.success(
             data={"nodes": nodes, "count": len(nodes)},
@@ -145,7 +147,7 @@ async def test_search(request: SearchRequest):
         }
     """
     try:
-        from ....utils.neo4j_util import neo4j_util
+        from app.utils.neo4j_util import neo4j_util
         nodes = neo4j_util.search_nodes_by_keyword(
             request.label,
             request.keyword,
