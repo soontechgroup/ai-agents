@@ -3,7 +3,8 @@ from typing import Generator, Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from app.core.checkpointer import PostgresCheckpointer
+from app.core.database import get_db
 from pydantic import BaseModel
 import json
 import uuid
@@ -23,7 +24,7 @@ class ConversationState(BaseModel):
 class LangGraphService:
     """LangGraph集成服务"""
     
-    def __init__(self):
+    def __init__(self, db_session_factory=None):
         try:
             self.openai_api_key = os.getenv("OPENAI_API_KEY")
             if not self.openai_api_key:
@@ -40,11 +41,8 @@ class LangGraphService:
                 timeout=30
             )
             
-            # 内存存储器用于保存对话状态
-            self.checkpointer = MemorySaver()
-            
-            # 内存缓存用于临时保存对话历史
-            self._conversation_cache = {}
+            # 使用 PostgreSQL 检查点保存器，避免双层缓存
+            self.checkpointer = PostgresCheckpointer(db_session_factory or get_db)
             
             # 构建对话图
             self.graph = self._build_conversation_graph()
@@ -243,17 +241,12 @@ class LangGraphService:
             # 构建系统提示
             system_prompt = self._build_system_prompt(digital_human_config)
             
-            # 获取历史消息
+            # 从 PostgreSQL checkpointer 获取历史消息
             messages = []
             try:
-                # 首先尝试从内存缓存获取
-                if hasattr(self, '_conversation_cache') and thread_id in self._conversation_cache:
-                    messages = self._conversation_cache[thread_id]
-                else:
-                    # 尝试从 checkpointer 获取
-                    checkpoint = self.checkpointer.get(config_dict["configurable"])
-                    if checkpoint and checkpoint.get("channel_values"):
-                        messages = checkpoint["channel_values"].get("messages", [])
+                checkpoint = self.checkpointer.get(config_dict["configurable"])
+                if checkpoint and checkpoint.get("channel_values"):
+                    messages = checkpoint["channel_values"].get("messages", [])
             except:
                 messages = []
             
@@ -289,23 +282,9 @@ class LangGraphService:
             # 而是依赖同步方法或改进图的设计
             try:
                 # 更新消息历史
-                updated_messages = messages + [
-                    HumanMessage(content=message),
-                    AIMessage(content=full_response)
-                ]
-                
-                # 临时解决方案：将消息保存到内存中
-                # 这样至少在同一个服务实例内可以保持历史
-                if not hasattr(self, '_conversation_cache'):
-                    self._conversation_cache = {}
-                
-                self._conversation_cache[thread_id] = updated_messages
-                
-                # TODO: 后续需要改进 LangGraph 的集成方式
-                # 可能的方案：
-                # 1. 使用 LangGraph 的官方流式 API
-                # 2. 自定义 checkpointer 实现
-                # 3. 使用数据库来持久化对话历史
+                # PostgreSQL checkpointer 会自动从数据库读取历史
+                # 消息已经通过 conversation_service 保存到数据库
+                # 无需再手动缓存
                 
             except Exception as e:
                 # 记录错误但不中断响应
