@@ -1,15 +1,35 @@
 """
 Neo4j 数据库连接和基础操作工具类
 提供简单的节点创建、关系创建和搜索功能
+
+⚠️ 废弃警告 (DEPRECATED) ⚠️
+此模块已被废弃，仅保留用于向后兼容。
+请使用新的 Repository 模式：
+  - app.repositories.graph.GraphRepository (推荐)
+  - app.dependencies.graph.get_graph_repository()
+  
+新代码示例：
+    from app.dependencies.graph import get_graph_repository
+    
+    def my_function(graph = Depends(get_graph_repository)):
+        node = graph.nodes.create("User", {"name": "张三"})
 """
 
 from typing import Dict, List, Any, Optional
 from neo4j import GraphDatabase, Driver
 from contextlib import contextmanager
 import logging
+import warnings
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 发出废弃警告
+warnings.warn(
+    "neo4j_util 模块已废弃，请使用 app.repositories.graph.GraphRepository",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 class Neo4jConnection:
