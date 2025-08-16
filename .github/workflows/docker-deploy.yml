@@ -117,55 +117,69 @@ jobs:
         docker compose -f docker-compose.prod.yml down || true
         
                          echo "📝 创建生产环境 docker-compose 文件..."
-        cat > docker-compose.prod.yml << EOF
-        services:
-          ai-agents-app:
-            image: \$IMAGE_TAG
-            container_name: ai-agents-app
-            restart: unless-stopped
-            ports:
-              - "8000:8000"
-            environment:
-              - ENVIRONMENT=production
-              - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
-              - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
-            volumes:
-              - ./data/chroma_db:/app/data/chroma_db
-              - ./logs:/app/logs
-              - ./.env.prod:/app/.env.prod
-            depends_on:
-              - mysql
-            healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-              interval: 30s
-              timeout: 10s
-              retries: 3
-              start_period: 40s
+        cat > docker-compose.prod.yml << 'COMPOSE_EOF'
+services:
+  ai-agents-app:
+    image: IMAGE_TAG_PLACEHOLDER
+    container_name: ai-agents-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
+      - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
+    volumes:
+      - ./data/chroma_db:/app/data/chroma_db
+      - ./logs:/app/logs
+      - ./.env.prod:/app/.env.prod
+    depends_on:
+      - mysql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mysql:
+    image: mysql:8.0
+    container_name: ai-agents-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: ai_agents
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+COMPOSE_EOF
+
+        # 替换镜像标签
+        sed -i "s/IMAGE_TAG_PLACEHOLDER/\$IMAGE_TAG/g" docker-compose.prod.yml
         
-          mysql:
-            image: mysql:8.0
-            container_name: ai-agents-mysql
-            restart: unless-stopped
-            environment:
-              MYSQL_ROOT_PASSWORD: 123456
-              MYSQL_DATABASE: ai_agents
-            ports:
-              - "3306:3306"
-            volumes:
-              - ./data/mysql:/var/lib/mysql
-        EOF
+        # 验证文件创建
+        if [ -f "docker-compose.prod.yml" ]; then
+            echo "✅ docker-compose.prod.yml 创建成功"
+            echo "📄 文件内容："
+            cat docker-compose.prod.yml
+        else
+            echo "❌ docker-compose.prod.yml 创建失败"
+            ls -la
+            exit 1
+        fi
         
         echo "📁 创建必要的目录..."
         mkdir -p data/chroma_db data/mysql logs
         
         echo "🔧 创建生产环境配置文件..."
-        cat > .env.prod << EOF
-        ENVIRONMENT=production
-        DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
-        CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
-        # 添加你的其他环境变量
-        # OPENAI_API_KEY=your_openai_api_key_here
-        EOF
+        cat > .env.prod << 'ENV_EOF'
+ENVIRONMENT=production
+DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
+CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
+# 添加你的其他环境变量
+# OPENAI_API_KEY=your_openai_api_key_here
+ENV_EOF
         
         echo "🚀 启动新容器..."
         docker compose -f docker-compose.prod.yml up -d
