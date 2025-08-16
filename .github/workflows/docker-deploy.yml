@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: deuspio/ai-agents  # 使用你的个人仓库
+  REGISTRY: docker.io
+  IMAGE_NAME: deuspio/ai-agents  # 使用 Docker Hub
 
 jobs:
   build-and-deploy:
@@ -22,6 +22,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     
     steps:
     # 1. 检出代码
@@ -32,13 +34,13 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
-    # 3. 登录到 GitHub Container Registry
-    - name: Log in to Container Registry
+    # 3. 登录到 Docker Hub
+    - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
     
     # 4. 提取元数据
     - name: Extract metadata
@@ -96,8 +98,8 @@ jobs:
         mkdir -p /root/ai-agents-docker
         cd /root/ai-agents-docker
         
-        echo "🔑 登录到 GitHub Container Registry..."
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        echo "🔑 登录到 Docker Hub..."
+        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
         
         echo "📥 拉取最新 Docker 镜像..."
         docker pull $IMAGE_TAG
