@@ -100,6 +100,9 @@ jobs:
         echo "🔍 调试信息："
         echo "IMAGE_TAG: \$IMAGE_TAG"
         
+        echo "🔧 检查 Docker Compose 版本..."
+        docker compose version
+        
         echo "📂 准备部署目录..."
         mkdir -p /root/ai-agents-docker
         cd /root/ai-agents-docker
@@ -111,7 +114,7 @@ jobs:
         docker pull $IMAGE_TAG
         
         echo "🛑 停止现有容器..."
-        docker-compose -f docker-compose.prod.yml down || true
+        docker compose -f docker-compose.prod.yml down || true
         
                          echo "📝 创建生产环境 docker-compose 文件..."
         cat > docker-compose.prod.yml << EOF
@@ -165,23 +168,23 @@ jobs:
         EOF
         
         echo "🚀 启动新容器..."
-        docker-compose -f docker-compose.prod.yml up -d
+        docker compose -f docker-compose.prod.yml up -d
         
         echo "⏳ 等待服务启动..."
         sleep 30
         
         echo "🔍 检查容器状态..."
-        docker-compose -f docker-compose.prod.yml ps
+        docker compose -f docker-compose.prod.yml ps
         
         echo "📋 检查应用日志..."
-        docker-compose -f docker-compose.prod.yml logs --tail=20 ai-agents-app
+        docker compose -f docker-compose.prod.yml logs --tail=20 ai-agents-app
         
         echo "🩺 健康检查..."
         if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs | grep -q "200"; then
           echo "✅ 应用服务正在运行"
         else
           echo "❌ 应用服务启动失败"
-          docker-compose -f docker-compose.prod.yml logs ai-agents-app
+          docker compose -f docker-compose.prod.yml logs ai-agents-app
           exit 1
         fi
         
