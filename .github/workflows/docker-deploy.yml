@@ -35,14 +35,6 @@ jobs:
       uses: docker/setup-buildx-action@v3
     
     # 3. 登录到 Docker Hub
-    - name: Debug Docker Hub credentials
-      run: |
-        echo "Registry: ${{ env.REGISTRY }}"
-        echo "Username: ${{ secrets.DOCKERHUB_USERNAME }}"
-        echo "Token length: ${#DOCKERHUB_TOKEN}"
-      env:
-        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
@@ -102,6 +94,12 @@ jobs:
         # SSH 到服务器并执行 Docker 部署
         ssh root@$HOST << ENDSSH
         
+        # 设置环境变量
+        IMAGE_TAG="$IMAGE_TAG"
+        
+        echo "🔍 调试信息："
+        echo "IMAGE_TAG: \$IMAGE_TAG"
+        
         echo "📂 准备部署目录..."
         mkdir -p /root/ai-agents-docker
         cd /root/ai-agents-docker
@@ -115,56 +113,56 @@ jobs:
         echo "🛑 停止现有容器..."
         docker-compose -f docker-compose.prod.yml down || true
         
-                 echo "📝 创建生产环境 docker-compose 文件..."
-         cat > docker-compose.prod.yml << 'COMPOSE_EOF'
-         services:
-           ai-agents-app:
-             image: $IMAGE_TAG
-             container_name: ai-agents-app
-             restart: unless-stopped
-             ports:
-               - "8000:8000"
-             environment:
-               - ENVIRONMENT=production
-               - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
-               - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
-             volumes:
-               - ./data/chroma_db:/app/data/chroma_db
-               - ./logs:/app/logs
-               - ./.env.prod:/app/.env.prod
-             depends_on:
-               - mysql
-             healthcheck:
-               test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-               interval: 30s
-               timeout: 10s
-               retries: 3
-               start_period: 40s
-         
-           mysql:
-             image: mysql:8.0
-             container_name: ai-agents-mysql
-             restart: unless-stopped
-             environment:
-               MYSQL_ROOT_PASSWORD: 123456
-               MYSQL_DATABASE: ai_agents
-             ports:
-               - "3306:3306"
-             volumes:
-               - ./data/mysql:/var/lib/mysql
-         COMPOSE_EOF
+                         echo "📝 创建生产环境 docker-compose 文件..."
+        cat > docker-compose.prod.yml << EOF
+        services:
+          ai-agents-app:
+            image: \$IMAGE_TAG
+            container_name: ai-agents-app
+            restart: unless-stopped
+            ports:
+              - "8000:8000"
+            environment:
+              - ENVIRONMENT=production
+              - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
+              - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
+            volumes:
+              - ./data/chroma_db:/app/data/chroma_db
+              - ./logs:/app/logs
+              - ./.env.prod:/app/.env.prod
+            depends_on:
+              - mysql
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+              start_period: 40s
+        
+          mysql:
+            image: mysql:8.0
+            container_name: ai-agents-mysql
+            restart: unless-stopped
+            environment:
+              MYSQL_ROOT_PASSWORD: 123456
+              MYSQL_DATABASE: ai_agents
+            ports:
+              - "3306:3306"
+            volumes:
+              - ./data/mysql:/var/lib/mysql
+        EOF
         
         echo "📁 创建必要的目录..."
         mkdir -p data/chroma_db data/mysql logs
         
         echo "🔧 创建生产环境配置文件..."
-        cat > .env.prod << 'ENV_EOF'
+        cat > .env.prod << EOF
         ENVIRONMENT=production
         DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
         CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
         # 添加你的其他环境变量
         # OPENAI_API_KEY=your_openai_api_key_here
-        ENV_EOF
+        EOF
         
         echo "🚀 启动新容器..."
         docker-compose -f docker-compose.prod.yml up -d
@@ -207,4 +205,4 @@ jobs:
         echo "  - 容器名称: ai-agents-app"
         echo "  - 端口映射: 8000:8000"
         echo "  - 部署时间: $(date)"
-        echo "  - 健康检查: http://34.129.68.205:8000/docs" 
+        echo "  - 健康检查: http://34.129.46.22:8000/docs" 
