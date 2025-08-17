@@ -13,7 +13,8 @@ env:
   IMAGE_NAME: deuspio/ai-agents  # 使用 Docker Hub
 
 jobs:
-  build-and-deploy:
+  ci:
+    name: "🏗️ CI - 构建和推送镜像"
     # 只在推送到指定分支或 PR 合并时运行
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
     
@@ -24,6 +25,10 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    
+    outputs:
+      image-tags: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
     
     steps:
     # 1. 检出代码
@@ -56,6 +61,7 @@ jobs:
     
     # 5. 构建并推送 Docker 镜像
     - name: Build and push Docker image
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -65,161 +71,48 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    # 6. 配置 SSH
-    - name: Install SSH key
-      uses: shimataro/ssh-key-action@v2
-      with:
-        key: ${{ secrets.GCP_SSH_KEY }}
-        known_hosts: unnecessary
-        if_key_exists: replace
-    
-    - name: Add server to known hosts
+        # 6. CI 构建总结和测试输出
+    - name: CI Build Summary
       run: |
-        ssh-keyscan -H 34.129.46.22 >> ~/.ssh/known_hosts
-    
-    # 7. 部署到服务器
-    - name: Deploy to GCP with Docker
-      env:
-        HOST: 34.129.46.22
-        PROJECT_NAME: ai-agents
-        IMAGE_TAG: ${{ steps.meta.outputs.tags }}
+        echo "🎉 ============================================="
+        echo "✅ CI 构建流程完成！"
+        echo "🎉 ============================================="
+        echo ""
+        echo "📋 构建信息："
+        echo "  - 🏷️  镜像标签: ${{ steps.meta.outputs.tags }}"
+        echo "  - 🔐 镜像摘要: ${{ steps.build.outputs.digest }}"
+        echo "  - 📦 镜像仓库: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+        echo "  - 🕐 构建时间: $(date)"
+        echo "  - 🌿 分支: ${{ github.ref_name }}"
+        echo "  - 📝 提交: ${{ github.sha }}"
+        echo ""
+        echo "🧪 测试用的镜像拉取命令："
+        echo "  docker pull ${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "🚀 本地测试运行命令："
+        echo "  docker run -d -p 8000:8000 \\"
+        echo "    -e ENVIRONMENT=production \\"
+        echo "    -e DATABASE_URL=mysql+pymysql://root:123456@host.docker.internal:3306/ai_agents \\"
+        echo "    --name ai-agents-test \\"
+        echo "    ${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "🌐 测试 API 端点："
+        echo "  curl http://localhost:8000/docs"
+        echo "  curl http://localhost:8000/"
+        echo ""
+        echo "📊 镜像详细信息："
+        
+    - name: Display Image Details
       run: |
-        # 创建 Docker 部署脚本
-        cat > docker-deploy.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        
-        echo "🐳 开始 Docker 容器化部署到 GCP 服务器..."
-        
-        # SSH 到服务器并执行 Docker 部署
-        ssh root@$HOST << ENDSSH
-        
-        # 设置环境变量
-        IMAGE_TAG="$IMAGE_TAG"
-        
-        echo "🔍 调试信息："
-        echo "IMAGE_TAG: \$IMAGE_TAG"
-        
-        echo "🔧 检查 Docker Compose..."
-        docker compose version
-        
-        echo "📂 准备部署目录..."
-        mkdir -p /root/ai-agents-docker
-        cd /root/ai-agents-docker
-        
-        echo "🔑 登录到 Docker Hub..."
-        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-        
-        echo "📥 拉取最新 Docker 镜像..."
-        docker pull $IMAGE_TAG
-        
-        echo "🛑 停止现有容器..."
-        docker compose -f docker-compose.prod.yml down || true
-        
-        echo "📝 创建生产环境 docker-compose 文件..."
-        cat > docker-compose.prod.yml << 'COMPOSE_EOF'
-services:
-  ai-agents-app:
-    image: IMAGE_TAG_PLACEHOLDER
-    container_name: ai-agents-app
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - ENVIRONMENT=production
-      - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
-      - CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
-    volumes:
-      - ./data/chroma_db:/app/data/chroma_db
-      - ./logs:/app/logs
-      - ./.env.prod:/app/.env.prod
-    depends_on:
-      - mysql
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  mysql:
-    image: mysql:8.0
-    container_name: ai-agents-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: ai_agents
-    ports:
-      - "3306:3306"
-    volumes:
-      - ./data/mysql:/var/lib/mysql
-COMPOSE_EOF
-
-        # 替换镜像标签
-        sed -i "s/IMAGE_TAG_PLACEHOLDER/\$IMAGE_TAG/g" docker-compose.prod.yml
-        
-        # 验证文件创建
-        if [ -f "docker-compose.prod.yml" ]; then
-            echo "✅ docker-compose.prod.yml 创建成功"
-            echo "📄 文件内容："
-            cat docker-compose.prod.yml
-        else
-            echo "❌ docker-compose.prod.yml 创建失败"
-            ls -la
-            exit 1
-        fi
-        
-        echo "📁 创建必要的目录..."
-        mkdir -p data/chroma_db data/mysql logs
-        
-        echo "🔧 创建生产环境配置文件..."
-        cat > .env.prod << 'ENV_EOF'
-ENVIRONMENT=production
-DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/ai_agents
-CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
-# 添加你的其他环境变量
-# OPENAI_API_KEY=your_openai_api_key_here
-ENV_EOF
-        
-        echo "🚀 启动新容器..."
-        docker compose -f docker-compose.prod.yml up -d
-        
-        echo "⏳ 等待服务启动..."
-        sleep 30
-        
-        echo "🔍 检查容器状态..."
-        docker compose -f docker-compose.prod.yml ps
-        
-        echo "📋 检查应用日志..."
-        docker compose -f docker-compose.prod.yml logs --tail=20 ai-agents-app
-        
-        echo "🩺 健康检查..."
-        if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs | grep -q "200"; then
-          echo "✅ 应用服务正在运行"
-        else
-          echo "❌ 应用服务启动失败"
-          docker compose -f docker-compose.prod.yml logs ai-agents-app
-          exit 1
-        fi
-        
-        echo "🧹 清理旧镜像..."
-        docker image prune -f
-        
-        echo "✅ Docker 容器化部署完成!"
-        
-        ENDSSH
-        EOF
-        
-        chmod +x docker-deploy.sh
-        ./docker-deploy.sh
-    
-    # 8. 部署总结
-    - name: Deployment Summary
-      run: |
-        echo "✅ Docker 容器化部署流程完成!"
-        echo "📋 部署信息："
-        echo "  - 镜像: ${{ steps.meta.outputs.tags }}"
-        echo "  - 容器名称: ai-agents-app"
-        echo "  - 端口映射: 8000:8000"
-        echo "  - 部署时间: $(date)"
-        echo "  - 健康检查: http://34.129.46.22:8000/docs" 
+        echo "🔍 镜像标签详情："
+        echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
+          if [ -n "$tag" ]; then
+            echo "  📌 $tag"
+          fi
+        done
+        echo ""
+        echo "🏷️ 镜像标签（JSON格式）："
+        echo '${{ steps.meta.outputs.json }}' | jq '.'
+        echo ""
+        echo "📋 构建标签："
+        echo "${{ steps.meta.outputs.labels }}" | tr ',' '\n' 
