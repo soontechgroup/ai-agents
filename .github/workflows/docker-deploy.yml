@@ -115,4 +115,134 @@ jobs:
         echo '${{ steps.meta.outputs.json }}' | jq '.'
         echo ""
         echo "📋 构建标签："
-        echo "${{ steps.meta.outputs.labels }}" | tr ',' '\n' 
+        echo "${{ steps.meta.outputs.labels }}" | tr ',' '\n'
+
+  cd:
+    name: "🚀 CD - 部署到服务器"
+    needs: ci
+    runs-on: ubuntu-latest
+    
+    # 只有在 CI 成功后才运行 CD
+    if: ${{ needs.ci.result == 'success' }}
+    
+    steps:
+    # 1. 配置 SSH
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.GCP_SSH_KEY }}
+        known_hosts: unnecessary
+        if_key_exists: replace
+    
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H 34.129.46.22 >> ~/.ssh/known_hosts
+    
+    # 2. 部署到服务器
+    - name: Deploy to GCP Server
+      env:
+        HOST: 34.129.46.22
+        IMAGE_TAG: ${{ needs.ci.outputs.image-tags }}
+      run: |
+        echo "🚀 开始 CD 部署流程..."
+        echo "📋 部署信息："
+        echo "  - 目标服务器: $HOST"
+        echo "  - 镜像标签: $IMAGE_TAG"
+        
+        # SSH 到服务器并执行部署
+        ssh root@$HOST << ENDSSH
+        
+        echo "🐳 开始在服务器上部署 Docker 容器..."
+        
+        # 设置镜像标签
+        IMAGE_TAG="$IMAGE_TAG"
+        echo "📋 使用镜像: \$IMAGE_TAG"
+        
+        # 登录 Docker Hub
+        echo "🔑 登录到 Docker Hub..."
+        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+        
+        # 拉取最新镜像
+        echo "📥 拉取最新镜像..."
+        docker pull \$IMAGE_TAG
+        
+        # 停止并删除现有容器（如果存在）
+        echo "🛑 停止现有容器..."
+        if docker ps -a | grep -q "ai-agents-app"; then
+            docker stop ai-agents-app || true
+            docker rm ai-agents-app || true
+        fi
+        
+        # 创建必要的目录
+        echo "📁 创建数据目录..."
+        mkdir -p /root/ai-agents-data/{chroma_db,logs}
+        
+        # 运行新容器
+        echo "🚀 启动新容器..."
+        docker run -d \
+          --name ai-agents-app \
+          --restart unless-stopped \
+          -p 8000:8000 \
+          -e ENVIRONMENT=production \
+          -e DATABASE_URL=mysql+pymysql://root:123456@host.docker.internal:3306/ai_agents \
+          -e CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db \
+          -v /root/ai-agents-data/chroma_db:/app/data/chroma_db \
+          -v /root/ai-agents-data/logs:/app/logs \
+          \$IMAGE_TAG
+        
+        # 等待容器启动
+        echo "⏳ 等待容器启动..."
+        sleep 15
+        
+        # 检查容器状态
+        echo "🔍 检查容器状态..."
+        docker ps -a | grep ai-agents-app
+        
+        # 检查容器日志
+        echo "📋 检查应用日志..."
+        docker logs --tail=20 ai-agents-app
+        
+        # 健康检查
+        echo "🩺 执行健康检查..."
+        sleep 10
+        
+        if curl -s -f http://localhost:8000/docs > /dev/null; then
+            echo "✅ 应用健康检查通过！"
+        else
+            echo "❌ 应用健康检查失败，查看详细日志："
+            docker logs ai-agents-app
+            exit 1
+        fi
+        
+        # 清理旧镜像
+        echo "🧹 清理旧的 Docker 镜像..."
+        docker image prune -f
+        
+        echo "✅ CD 部署完成！"
+        
+        ENDSSH
+        
+    # 3. 部署总结
+    - name: CD Deployment Summary
+      if: always()
+      run: |
+        echo "🎉 ============================================="
+        echo "✅ CD 部署流程完成！"
+        echo "🎉 ============================================="
+        echo ""
+        echo "📋 部署信息："
+        echo "  - 🏷️  部署镜像: ${{ needs.ci.outputs.image-tags }}"
+        echo "  - 🖥️  目标服务器: 34.129.46.22"
+        echo "  - 📦 容器名称: ai-agents-app"
+        echo "  - 🌐 端口映射: 8000:8000"
+        echo "  - 🕐 部署时间: $(date)"
+        echo ""
+        echo "🌐 服务访问地址："
+        echo "  - API 文档: http://34.129.46.22:8000/docs"
+        echo "  - 应用首页: http://34.129.46.22:8000/"
+        echo ""
+        echo "🔧 服务器管理命令："
+        echo "  - 查看容器状态: docker ps | grep ai-agents-app"
+        echo "  - 查看容器日志: docker logs ai-agents-app"
+        echo "  - 重启容器: docker restart ai-agents-app"
+        echo "  - 停止容器: docker stop ai-agents-app" 
