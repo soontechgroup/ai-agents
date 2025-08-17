@@ -46,6 +46,20 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     
+    - name: Prepare clean branch name
+      id: branch
+      run: |
+        # 获取分支名并替换斜杠
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BRANCH_NAME="pr-${{ github.event.pull_request.number }}"
+        else
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | tr '/' '-')
+        fi
+        echo "name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+
+
+
     # 4. 提取元数据
     - name: Extract metadata
       id: meta
@@ -53,10 +67,13 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
+          # 对于分支，替换斜杠为连字符
+          type=raw,value={{branch}},enable=${{ github.event_name != 'pull_request' }}
+          type=raw,value=pr-{{number}},enable=${{ github.event_name == 'pull_request' }}
+          type=sha,prefix={{branch}}-,format=short
           type=raw,value=latest,enable={{is_default_branch}}
+        flavor: |
+          latest=false
     
     # 5. 构建并推送 Docker 镜像
     - name: Build and push Docker image
