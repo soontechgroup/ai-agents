@@ -130,7 +130,7 @@ jobs:
     - name: Install SSH key
       uses: shimataro/ssh-key-action@v2
       with:
-        key: ${{ secrets.GCP_SSH_KEY }}
+        key: ${{ secrets.GCP_SSH_KEY_DOCKER }}
         known_hosts: unnecessary
         if_key_exists: replace
     
@@ -148,6 +148,7 @@ jobs:
         echo "📋 部署信息："
         echo "  - 目标服务器: $HOST"
         echo "  - 镜像标签: $IMAGE_TAG"
+        echo "test"
         
         # SSH 到服务器并执行部署
         ssh root@$HOST << ENDSSH
