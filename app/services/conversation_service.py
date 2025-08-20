@@ -186,7 +186,7 @@ class ConversationService:
                 "content": f"保存消息失败: {str(e)}"
             })
             return
-        
+
         # 发送用户消息确认
         yield json.dumps({
             "type": "message",
@@ -197,12 +197,12 @@ class ConversationService:
                 "content": message_content
             }
         })
-        
+
         # 获取数字人配置
         digital_human_config = self._get_digital_human_config(
             conversation.digital_human_id
         )
-        
+
         # 流式生成AI响应
         full_response = ""
         try:
@@ -229,7 +229,7 @@ class ConversationService:
                 "content": f"AI响应生成失败: {str(e)}"
             })
             return
-        
+
         # 保存AI消息
         try:
             ai_message = self.message_repo.create_message(
@@ -239,7 +239,7 @@ class ConversationService:
             # 即使保存失败，用户已经收到响应，记录警告即可
             print(f"Warning: Failed to save AI message: {str(e)}")
             ai_message = None
-        
+
         # 发送完成消息
         yield json.dumps({
             "type": "done",
