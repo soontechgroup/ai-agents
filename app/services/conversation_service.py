@@ -1,12 +1,10 @@
-import json
-from typing import Tuple, Generator, Any
-
 from sqlalchemy.orm import Session
-
-from app.core.models import DigitalHuman
+from typing import List, Optional, Tuple, Generator, Dict, Any
 from app.repositories.conversation_repository import ConversationRepository, MessageRepository
-from app.schemas.conversation import *
 from app.services.langgraph_service import LangGraphService
+from app.core.models import Conversation, Message, DigitalHuman
+from app.schemas.conversation import *
+import json
 
 
 class ConversationService:
@@ -16,6 +14,7 @@ class ConversationService:
         self.db = db
         self.conversation_repo = ConversationRepository(db)
         self.message_repo = MessageRepository(db)
+        # 通过依赖注入获取 LangGraphService 实例
         self.langgraph_service = langgraph_service
     
     def create_conversation(
@@ -176,30 +175,37 @@ class ConversationService:
             })
             return
         
+        # 保存用户消息
         try:
-            # 保存用户消息
             user_message = self.message_repo.create_message(
                 conversation_id, "user", message_content
             )
-            
-            # 发送用户消息确认
+        except Exception as e:
             yield json.dumps({
-                "type": "message",
-                "content": "",
-                "metadata": {
-                    "message_id": user_message.id,
-                    "role": "user",
-                    "content": message_content
-                }
+                "type": "error",
+                "content": f"保存消息失败: {str(e)}"
             })
-            
-            # 获取数字人配置
-            digital_human_config = self._get_digital_human_config(
-                conversation.digital_human_id
-            )
-            
-            # 流式生成AI响应
-            full_response = ""
+            return
+        
+        # 发送用户消息确认
+        yield json.dumps({
+            "type": "message",
+            "content": "",
+            "metadata": {
+                "message_id": user_message.id,
+                "role": "user",
+                "content": message_content
+            }
+        })
+        
+        # 获取数字人配置
+        digital_human_config = self._get_digital_human_config(
+            conversation.digital_human_id
+        )
+        
+        # 流式生成AI响应
+        full_response = ""
+        try:
             for chunk in self.langgraph_service.chat_stream(
                 message_content,
                 conversation.thread_id,
@@ -210,33 +216,39 @@ class ConversationService:
                     "type": "token",
                     "content": chunk
                 })
-            
-            # 保存AI消息
-            ai_message = self.message_repo.create_message(
-                conversation_id, "assistant", full_response
-            )
-            
-            # 发送完成消息
-            yield json.dumps({
-                "type": "done",
-                "content": "",
-                "metadata": {
-                    "message_id": ai_message.id,
-                    "tokens_used": ai_message.tokens_used
-                }
-            })
-            
         except ValueError as e:
             # LangGraph service errors (包括API密钥错误)
             yield json.dumps({
                 "type": "error",
                 "content": str(e)
             })
+            return
         except Exception as e:
             yield json.dumps({
                 "type": "error",
-                "content": f"发送消息失败: {str(e)}"
+                "content": f"AI响应生成失败: {str(e)}"
             })
+            return
+        
+        # 保存AI消息
+        try:
+            ai_message = self.message_repo.create_message(
+                conversation_id, "assistant", full_response
+            )
+        except Exception as e:
+            # 即使保存失败，用户已经收到响应，记录警告即可
+            print(f"Warning: Failed to save AI message: {str(e)}")
+            ai_message = None
+        
+        # 发送完成消息
+        yield json.dumps({
+            "type": "done",
+            "content": "",
+            "metadata": {
+                "message_id": ai_message.id if ai_message else None,
+                "tokens_used": ai_message.tokens_used if ai_message else None
+            }
+        })
     
     def _get_digital_human_config(self, digital_human_id: int) -> Dict[str, Any]:
         """获取数字人配置"""

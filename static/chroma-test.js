@@ -1,5 +1,6 @@
 // API 基础配置
-const API_BASE_URL = '/api/v1/chroma';
+// 本地测试用，直接写死后端地址
+const API_BASE_URL = 'http://localhost:8000/api/v1/chroma';
 let documentCounter = 1;
 let requestLogs = [];
 
@@ -447,7 +448,82 @@ async function submitDocuments() {
         
         const resultBox = document.getElementById('add-documents-result');
         resultBox.className = 'result-box success';
-        resultBox.innerHTML = `<pre>${JSON.stringify(response.data, null, 2)}</pre>`;
+        
+        // 构建更丰富的结果展示
+        let resultHTML = '<div class="add-result-container">';
+        
+        // 基本信息
+        resultHTML += `
+            <div class="result-section">
+                <h4><i class="fas fa-info-circle"></i> 基本信息</h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">集合名称:</span>
+                        <span class="info-value">${response.data.collection_name}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">添加数量:</span>
+                        <span class="info-value">${response.data.added_count} 个文档</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">文档ID:</span>
+                        <span class="info-value">${response.data.document_ids.slice(0, 3).join(', ')}${response.data.document_ids.length > 3 ? '...' : ''}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 向量信息
+        if (response.data.sample_embeddings && response.data.sample_embeddings.length > 0) {
+            const embeddings = response.data.sample_embeddings;
+            const embeddingDimension = embeddings[0].length;
+            
+            resultHTML += `
+                <div class="result-section">
+                    <h4><i class="fas fa-project-diagram"></i> 向量信息</h4>
+                    <div class="vector-info">
+                        <div class="info-item">
+                            <span class="info-label">向量模型:</span>
+                            <span class="info-value">text-embedding-3-small (OpenAI)</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">向量维度:</span>
+                            <span class="info-value">${embeddingDimension} 维</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">展示样例:</span>
+                            <span class="info-value">前 ${embeddings.length} 个文档的向量</span>
+                        </div>
+                    </div>
+                    
+                    <div class="embeddings-preview">
+                        <h5>向量预览（前10个维度）</h5>
+                        <div class="embeddings-table">
+                            ${embeddings.map((embedding, idx) => `
+                                <div class="embedding-row">
+                                    <div class="doc-label">文档 ${idx + 1}:</div>
+                                    <div class="embedding-values">
+                                        ${embedding.slice(0, 10).map(val => `<span class="embedding-val">${val.toFixed(4)}</span>`).join('')}
+                                        <span class="embedding-more">... +${embeddingDimension - 10} 更多维度</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 原始数据（折叠显示）
+        resultHTML += `
+            <details class="raw-data-details">
+                <summary><i class="fas fa-code"></i> 查看原始响应数据</summary>
+                <pre>${JSON.stringify(response.data, null, 2)}</pre>
+            </details>
+        `;
+        
+        resultHTML += '</div>';
+        resultBox.innerHTML = resultHTML;
         
         showToast(response.message);
         
@@ -583,24 +659,84 @@ async function performSearch() {
         if (results.documents.length === 0) {
             resultsContainer.innerHTML = '<p class="info-text">未找到匹配的文档</p>';
         } else {
-            resultsContainer.innerHTML = results.documents.map((doc, index) => `
-                <div class="result-item">
-                    <div class="result-header">
-                        <span class="result-id">ID: ${doc.id}</span>
-                        ${doc.distance !== null ? `
-                            <span class="result-distance">相似度: ${(1 - doc.distance).toFixed(4)}</span>
-                        ` : ''}
+            // 添加向量搜索统计信息
+            let searchHTML = `
+                <div class="search-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-chart-line"></i>
+                        <span>找到 <strong>${results.total_results}</strong> 个相关文档</span>
                     </div>
-                    <div class="result-content">
-                        ${doc.content}
+                    <div class="stat-item">
+                        <i class="fas fa-robot"></i>
+                        <span>向量模型: <strong>text-embedding-3-small</strong></span>
                     </div>
-                    ${doc.metadata ? `
-                        <div class="result-metadata">
-                            元数据: ${JSON.stringify(doc.metadata, null, 2)}
-                        </div>
-                    ` : ''}
+                    <div class="stat-item">
+                        <i class="fas fa-cube"></i>
+                        <span>向量维度: <strong>1536</strong> 维</span>
+                    </div>
                 </div>
-            `).join('');
+            `;
+            
+            searchHTML += results.documents.map((doc, index) => {
+                // 计算相似度百分比和相似度等级
+                const similarity = doc.distance !== null ? (1 - doc.distance) : 0;
+                const similarityPercent = (similarity * 100).toFixed(1);
+                let similarityClass = 'low';
+                let similarityLabel = '低';
+                
+                if (similarity > 0.9) {
+                    similarityClass = 'very-high';
+                    similarityLabel = '极高';
+                } else if (similarity > 0.8) {
+                    similarityClass = 'high';
+                    similarityLabel = '高';
+                } else if (similarity > 0.7) {
+                    similarityClass = 'medium';
+                    similarityLabel = '中';
+                } else if (similarity > 0.5) {
+                    similarityClass = 'low-medium';
+                    similarityLabel = '中低';
+                }
+                
+                return `
+                    <div class="result-item rank-${index + 1}">
+                        <div class="result-header">
+                            <div class="result-rank">#${index + 1}</div>
+                            <div class="result-similarity similarity-${similarityClass}">
+                                <div class="similarity-bar">
+                                    <div class="similarity-fill" style="width: ${similarityPercent}%"></div>
+                                </div>
+                                <div class="similarity-text">
+                                    <span class="similarity-percent">${similarityPercent}%</span>
+                                    <span class="similarity-label">${similarityLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="result-body">
+                            <div class="result-content">
+                                <i class="fas fa-file-alt"></i>
+                                ${doc.content}
+                            </div>
+                            ${doc.metadata ? `
+                                <div class="result-metadata">
+                                    <details>
+                                        <summary><i class="fas fa-tags"></i> 元数据</summary>
+                                        <pre>${JSON.stringify(doc.metadata, null, 2)}</pre>
+                                    </details>
+                                </div>
+                            ` : ''}
+                            <div class="result-footer">
+                                <span class="result-id"><i class="fas fa-fingerprint"></i> ${doc.id.substring(0, 8)}...</span>
+                                ${doc.distance !== null ? `
+                                    <span class="result-distance"><i class="fas fa-ruler"></i> 距离: ${doc.distance.toFixed(6)}</span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            resultsContainer.innerHTML = searchHTML;
         }
         
         showToast(response.message);

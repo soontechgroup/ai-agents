@@ -1,14 +1,9 @@
-import json
-import math
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+import math
+import json
 
-from app.core.models import User
-from app.dependencies.services import get_conversation_service
-from app.guards import get_current_active_user
-from app.schemas.CommonResponse import PaginationMeta
-from app.schemas.common import SuccessResponse
 from app.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
     ConversationPageRequest, ConversationPageResponse,
@@ -18,10 +13,25 @@ from app.schemas.conversation import (
     ConversationSendRequest, ConversationChatRequest,
     ConversationClearRequest
 )
+from app.schemas.common import SuccessResponse
+from app.schemas.CommonResponse import PaginationMeta
 from app.services.conversation_service import ConversationService
+from app.services.langgraph_service import LangGraphService
+from app.core.database import get_db
+from app.dependencies.services import get_langgraph_service
+from app.core.models import User
+from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
 
 router = APIRouter()
+
+
+def get_conversation_service(
+    db: Session = Depends(get_db),
+    langgraph_service: LangGraphService = Depends(get_langgraph_service)
+) -> ConversationService:
+    """获取对话服务实例，注入所需依赖"""
+    return ConversationService(db, langgraph_service)
 
 
 @router.post("/create", response_model=SuccessResponse[ConversationResponse], summary="创建对话")
@@ -59,16 +69,16 @@ async def get_conversations(
     conversations, total = conversation_service.get_conversations_paginated(
         request, current_user.id
     )
-    
+
     total_pages = math.ceil(total / request.size)
-    
+
     pagination = PaginationMeta(
         page=request.page,
         size=request.size,
         total=total,
         pages=total_pages
     )
-    
+
     return ConversationPageResponse(
         code=200,
         message="获取对话列表成功",
@@ -91,13 +101,13 @@ async def get_conversation(
     conversation = conversation_service.get_conversation_by_id(
         request.id, current_user.id
     )
-    
+
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-    
+
     return ResponseUtil.success(data=conversation, message="获取对话详情成功")
 
 
@@ -119,13 +129,13 @@ async def update_conversation(
     conversation = conversation_service.update_conversation(
         request.id, update_data, current_user.id
     )
-    
+
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-    
+
     return ResponseUtil.success(data=conversation, message="对话更新成功")
 
 
@@ -143,13 +153,13 @@ async def delete_conversation(
     success = conversation_service.delete_conversation(
         request.id, current_user.id
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-    
+
     return ResponseUtil.success(message="对话删除成功")
 
 
@@ -168,13 +178,13 @@ async def get_conversation_messages(
     conversation_with_messages = conversation_service.get_conversation_with_messages(
         request.conversation_id, current_user.id, request.limit
     )
-    
+
     if not conversation_with_messages:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-    
+
     return ResponseUtil.success(
         data=conversation_with_messages,
         message="获取对话消息成功"
@@ -197,15 +207,15 @@ async def send_message(
         message = conversation_service.send_message(
             request.conversation_id, request.content, current_user.id
         )
-        
+
         if not message:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="对话不存在"
             )
-        
+
         return ResponseUtil.success(data=message, message="消息发送成功")
-        
+
     except ValueError as e:
         # 处理API密钥错误和其他LangGraph服务错误
         error_msg = str(e)
@@ -246,18 +256,11 @@ async def chat_stream(
     - **error**: 错误信息
     """
     def generate():
-        try:
-            for chunk in conversation_service.send_message_stream(
-                request.conversation_id, request.message, current_user.id
-            ):
-                yield f"data: {chunk}\n\n"
-        except Exception as e:
-            error_data = json.dumps({
-                "type": "error",
-                "content": f"聊天流式响应失败: {str(e)}"
-            })
-            yield f"data: {error_data}\n\n"
-    
+        for chunk in conversation_service.send_message_stream(
+            request.conversation_id, request.message, current_user.id
+        ):
+            yield f"data: {chunk}\n\n"
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -284,13 +287,13 @@ async def clear_conversation_history(
     success = conversation_service.clear_conversation_history(
         request.conversation_id, current_user.id
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-    
+
     return ResponseUtil.success(message="对话历史清除成功")
 
 
