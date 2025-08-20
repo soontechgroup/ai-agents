@@ -1,5 +1,5 @@
 from typing import Any, Optional, List
-from app.schemas.common import BaseResponse, SuccessResponse, ErrorResponse
+from app.schemas.common_response import BaseResponse, SuccessResponse, ErrorResponse, PaginatedResponse, PaginationMeta
 import math
 
 
@@ -37,20 +37,20 @@ class ResponseUtil:
         size: int,
         total: int,
         message: str = "查询成功"
-    ) -> dict:
+    ) -> PaginatedResponse:
         """构造分页成功响应"""
         total_pages = math.ceil(total / size) if size > 0 else 0
-        return {
-            "code": 200,
-            "message": message,
-            "data": data,
-            "pagination": {
-                "page": page,
-                "size": size,
-                "total": total,
-                "pages": total_pages
-            }
-        }
+        return PaginatedResponse(
+            code=200,
+            message=message,
+            data=data,
+            pagination=PaginationMeta(
+                page=page,
+                size=size,
+                total=total,
+                pages=total_pages
+            )
+        )
     
     @staticmethod
     def unauthorized(message: str = "未授权访问") -> ErrorResponse:
