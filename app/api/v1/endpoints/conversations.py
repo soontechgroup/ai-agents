@@ -1,14 +1,9 @@
-import json
-import math
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+import math
+import json
 
-from app.core.models import User
-from app.dependencies.services import get_conversation_service
-from app.guards import get_current_active_user
-from app.schemas.common_response import PaginationMeta
-from app.schemas.common_response import SuccessResponse
 from app.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
     ConversationPageRequest, ConversationPageResponse,
@@ -18,10 +13,25 @@ from app.schemas.conversation import (
     ConversationSendRequest, ConversationChatRequest,
     ConversationClearRequest
 )
+from app.schemas.common_response import SuccessResponse
+from app.schemas.common_response import PaginationMeta
 from app.services.conversation_service import ConversationService
+from app.services.langgraph_service import LangGraphService
+from app.core.database import get_db
+from app.dependencies.services import get_langgraph_service
+from app.core.models import User
+from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
 
 router = APIRouter()
+
+
+def get_conversation_service(
+    db: Session = Depends(get_db),
+    langgraph_service: LangGraphService = Depends(get_langgraph_service)
+) -> ConversationService:
+    """获取对话服务实例，注入所需依赖"""
+    return ConversationService(db, langgraph_service)
 
 
 @router.post("/create", response_model=SuccessResponse[ConversationResponse], summary="创建对话")
@@ -246,18 +256,11 @@ async def chat_stream(
     - **error**: 错误信息
     """
     def generate():
-        try:
-            for chunk in conversation_service.send_message_stream(
-                request.conversation_id, request.message, current_user.id
-            ):
-                yield f"data: {chunk}\n\n"
-        except Exception as e:
-            error_data = json.dumps({
-                "type": "error",
-                "content": f"聊天流式响应失败: {str(e)}"
-            })
-            yield f"data: {error_data}\n\n"
-    
+        for chunk in conversation_service.send_message_stream(
+            request.conversation_id, request.message, current_user.id
+        ):
+            yield f"data: {chunk}\n\n"
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
