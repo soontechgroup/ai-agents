@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.core.models import User
 from app.guards.auth import get_current_user
-from app.schemas.CommonResponse import SuccessResponse
+from app.schemas.common_response import SuccessResponse
 from app.utils.response import ResponseUtil
 from app.dependencies.graph import get_graph_repository
 from app.repositories.graph import GraphRepository

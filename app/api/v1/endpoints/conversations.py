@@ -7,8 +7,8 @@ from fastapi.responses import StreamingResponse
 from app.core.models import User
 from app.dependencies.services import get_conversation_service
 from app.guards import get_current_active_user
-from app.schemas.CommonResponse import PaginationMeta
-from app.schemas.common import SuccessResponse
+from app.schemas.common_response import PaginationMeta
+from app.schemas.common_response import SuccessResponse
 from app.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
     ConversationPageRequest, ConversationPageResponse,

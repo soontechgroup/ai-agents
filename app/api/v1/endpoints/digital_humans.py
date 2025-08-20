@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.schemas.digital_human import DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse, DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, DigitalHumanUpdateRequest, DigitalHumanDeleteRequest
-from app.schemas.common import SuccessResponse
-from app.schemas.CommonResponse import PaginationMeta
+from app.schemas.common_response import SuccessResponse
+from app.schemas.common_response import PaginationMeta
 from typing import Optional
 import math
 from app.core.logger import logger  # 使用 loguru logger
