@@ -113,19 +113,19 @@ class PersonNode(Node):
     
     interests: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="兴趣爱好"
     )
     
     skills: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="技能特长"
     )
     
     tags: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="标签"
     )
     
@@ -163,7 +163,7 @@ class PersonNode(Node):
     
     languages: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="语言能力"
     )
     

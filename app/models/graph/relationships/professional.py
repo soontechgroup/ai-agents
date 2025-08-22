@@ -88,14 +88,14 @@ class WorksAtRelationship(BaseRelationship):
     # 主要职责
     responsibilities: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="主要职责"
     )
     
     # 成就
     achievements: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="主要成就"
     )
     
@@ -204,7 +204,7 @@ class ColleagueRelationship(BaseRelationship):
     # 共同项目
     shared_projects: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="共同参与的项目"
     )
     
@@ -301,7 +301,7 @@ class MentorshipRelationship(BaseRelationship):
     # 专业技能
     skills_taught: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="传授的技能"
     )
     
@@ -335,7 +335,7 @@ class MentorshipRelationship(BaseRelationship):
     # 成果
     outcomes: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="指导成果"
     )
     
@@ -418,14 +418,14 @@ class BusinessPartnershipRelationship(BaseRelationship):
     # 合作项目
     projects: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="合作项目列表"
     )
     
     # 主要联系人
     key_contacts: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="主要联系人"
     )
     
