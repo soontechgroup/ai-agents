@@ -43,7 +43,9 @@ MANIFEST
 # Project specific
 pids/
 logs/
-data/
+data/chroma_db
+data/mongodb
+data/mysql
 
 # Logs and databases
 *.log
