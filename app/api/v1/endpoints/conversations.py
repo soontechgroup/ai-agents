@@ -13,8 +13,8 @@ from app.schemas.conversation import (
     ConversationSendRequest, ConversationChatRequest,
     ConversationClearRequest
 )
-from app.schemas.common import SuccessResponse
-from app.schemas.CommonResponse import PaginationMeta
+from app.schemas.common_response import SuccessResponse
+from app.schemas.common_response import PaginationMeta
 from app.services.conversation_service import ConversationService
 from app.services.langgraph_service import LangGraphService
 from app.core.database import get_db
@@ -69,16 +69,16 @@ async def get_conversations(
     conversations, total = conversation_service.get_conversations_paginated(
         request, current_user.id
     )
-
+    
     total_pages = math.ceil(total / request.size)
-
+    
     pagination = PaginationMeta(
         page=request.page,
         size=request.size,
         total=total,
         pages=total_pages
     )
-
+    
     return ConversationPageResponse(
         code=200,
         message="获取对话列表成功",
@@ -101,13 +101,13 @@ async def get_conversation(
     conversation = conversation_service.get_conversation_by_id(
         request.id, current_user.id
     )
-
+    
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-
+    
     return ResponseUtil.success(data=conversation, message="获取对话详情成功")
 
 
@@ -129,13 +129,13 @@ async def update_conversation(
     conversation = conversation_service.update_conversation(
         request.id, update_data, current_user.id
     )
-
+    
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-
+    
     return ResponseUtil.success(data=conversation, message="对话更新成功")
 
 
@@ -153,13 +153,13 @@ async def delete_conversation(
     success = conversation_service.delete_conversation(
         request.id, current_user.id
     )
-
+    
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-
+    
     return ResponseUtil.success(message="对话删除成功")
 
 
@@ -178,13 +178,13 @@ async def get_conversation_messages(
     conversation_with_messages = conversation_service.get_conversation_with_messages(
         request.conversation_id, current_user.id, request.limit
     )
-
+    
     if not conversation_with_messages:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-
+    
     return ResponseUtil.success(
         data=conversation_with_messages,
         message="获取对话消息成功"
@@ -207,15 +207,15 @@ async def send_message(
         message = conversation_service.send_message(
             request.conversation_id, request.content, current_user.id
         )
-
+        
         if not message:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="对话不存在"
             )
-
+        
         return ResponseUtil.success(data=message, message="消息发送成功")
-
+        
     except ValueError as e:
         # 处理API密钥错误和其他LangGraph服务错误
         error_msg = str(e)
@@ -287,13 +287,13 @@ async def clear_conversation_history(
     success = conversation_service.clear_conversation_history(
         request.conversation_id, current_user.id
     )
-
+    
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="对话不存在"
         )
-
+    
     return ResponseUtil.success(message="对话历史清除成功")
 
 

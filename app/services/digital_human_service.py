@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from app.core.models import DigitalHuman, User
 from app.schemas.digital_human import DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanResponse
-from app.schemas.CommonResponse import PaginationMeta
+from app.schemas.common_response import PaginationMeta
 from typing import List, Optional, Tuple
 
 

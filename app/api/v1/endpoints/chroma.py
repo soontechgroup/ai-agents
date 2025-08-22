@@ -15,7 +15,7 @@ from app.schemas.chroma import (
     ChromaCreateCollectionResponse
 )
 from app.utils.response import ResponseUtil
-from app.schemas.common import SuccessResponse, ErrorResponse
+from app.schemas.common_response import SuccessResponse, ErrorResponse
 from typing import List, Dict, Any, Optional
 
 router = APIRouter()

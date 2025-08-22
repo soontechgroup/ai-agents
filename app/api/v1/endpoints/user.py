@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListRequest, UserDetailRequest, UserUpdateRequest, UserDeleteRequest
-from app.schemas.common import SuccessResponse, ErrorResponse
+from app.schemas.common_response import SuccessResponse, ErrorResponse
 from app.services.user_service import UserService
 from app.core.database import get_db
 from app.core.models import User
