@@ -2,9 +2,9 @@
 关系模型包
 """
 
-from .base import BaseRelationship
-from .social import FriendRelationship, FamilyRelationship, KnowsRelationship
-from .professional import (
+from app.models.graph.relationships.base import BaseRelationship
+from app.models.graph.relationships.social import FriendRelationship, FamilyRelationship, KnowsRelationship
+from app.models.graph.relationships.professional import (
     WorksAtRelationship,
     ColleagueRelationship,
     MentorshipRelationship,

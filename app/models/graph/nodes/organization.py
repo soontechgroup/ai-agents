@@ -6,8 +6,8 @@ from typing import Optional, List
 from datetime import date
 from pydantic import Field, field_validator, model_validator, HttpUrl
 
-from ..base import Node
-from ..types import OrganizationType, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_TAGS_COUNT
+from app.models.graph.base import Node
+from app.models.graph.types import OrganizationType, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_TAGS_COUNT
 
 
 class OrganizationNode(Node):
