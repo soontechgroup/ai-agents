@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Type, TypeVar, Union
 from neo4j import Session
 import logging
 
-from .base import BaseGraphRepository
+from app.repositories.graph.base import BaseGraphRepository
 from app.models.graph import (
     Node,
     Relationship,

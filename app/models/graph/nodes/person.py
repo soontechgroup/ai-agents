@@ -7,8 +7,8 @@ from datetime import date
 from pydantic import Field, field_validator, EmailStr
 import re
 
-from ..base import Node
-from ..types import Gender, EMAIL_PATTERN, PHONE_PATTERN, MAX_NAME_LENGTH, MAX_TAGS_COUNT
+from app.models.graph.base import Node
+from app.models.graph.types import Gender, EMAIL_PATTERN, PHONE_PATTERN, MAX_NAME_LENGTH, MAX_TAGS_COUNT
 
 
 class PersonNode(Node):

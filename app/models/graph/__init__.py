@@ -4,10 +4,10 @@
 """
 
 # 基础类
-from .base import GraphEntity, Node, Relationship
+from app.models.graph.base import GraphEntity, Node, Relationship
 
 # 类型定义
-from .types import (
+from app.models.graph.types import (
     # 通用枚举
     Gender,
     RelationshipStatus,
@@ -37,13 +37,13 @@ from .types import (
 )
 
 # 节点模型
-from .nodes import (
+from app.models.graph.nodes import (
     PersonNode,
     OrganizationNode
 )
 
 # 关系模型
-from .relationships import (
+from app.models.graph.relationships import (
     BaseRelationship,
     # 社交关系
     FriendRelationship,
@@ -57,7 +57,7 @@ from .relationships import (
 )
 
 # 工厂类和方法
-from .factory import (
+from app.models.graph.factory import (
     GraphModelFactory,
     create_node,
     create_relationship,
