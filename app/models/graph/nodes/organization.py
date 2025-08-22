@@ -131,32 +131,32 @@ class OrganizationNode(Node):
     
     subsidiaries: List[str] = Field(
         default_factory=list,
-        max_items=100,
+        max_length=100,
         description="子公司/下属组织"
     )
     
     departments: List[str] = Field(
         default_factory=list,
-        max_items=50,
+        max_length=50,
         description="部门列表"
     )
     
     # 标签和分类
     tags: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="标签"
     )
     
     certifications: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="认证资质"
     )
     
     products: List[str] = Field(
         default_factory=list,
-        max_items=50,
+        max_length=50,
         description="主要产品/服务"
     )
     

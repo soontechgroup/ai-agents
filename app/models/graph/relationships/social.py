@@ -57,7 +57,7 @@ class FriendRelationship(BaseRelationship):
     # 共同兴趣
     shared_interests: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="共同兴趣爱好"
     )
     
