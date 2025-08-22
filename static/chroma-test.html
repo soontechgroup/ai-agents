@@ -4,7 +4,1067 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chroma 向量搜索引擎测试</title>
-    <link rel="stylesheet" href="/static/chroma-test.css">
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #4a90e2;
+    --secondary-color: #6c63ff;
+    --danger-color: #dc3545;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --bg-color: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-primary: #2c3e50;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: var(--text-primary);
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.header {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 20px 30px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo i {
+    font-size: 32px;
+    color: var(--primary-color);
+}
+
+.logo h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.api-base-url {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.api-base-url code {
+    background: var(--bg-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--primary-color);
+    font-family: 'Courier New', monospace;
+}
+
+/* Tab Navigation */
+.tab-nav {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    display: flex;
+    gap: 10px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    background: var(--bg-color);
+}
+
+.tab-btn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* Main Content */
+.main {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: var(--shadow-lg);
+    min-height: 600px;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Sections */
+.section {
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.section h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #3a7bc8;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a52d5;
+    transform: translateY(-2px);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+}
+
+.btn-warning {
+    background: var(--warning-color);
+    color: #333;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Collections List */
+.collections-list {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.collection-card {
+    background: var(--bg-color);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.collection-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.collection-name {
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 8px;
+}
+
+.collection-count {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Documents Container */
+.documents-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.document-item {
+    background: var(--bg-color);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
+}
+
+.document-item h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+/* Search Results */
+.search-results {
+    margin-top: 30px;
+}
+
+.results-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.result-item {
+    background: var(--bg-color);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.result-id {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.result-distance {
+    background: var(--success-color);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.result-content {
+    margin-bottom: 10px;
+    line-height: 1.6;
+}
+
+.result-metadata {
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    color: var(--text-secondary);
+}
+
+/* Result Box */
+.result-box {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    background: var(--bg-color);
+    min-height: 50px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.result-box.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.result-box.error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+
+.result-box pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 12px;
+}
+
+/* Logs Container */
+.logs-container {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.log-entry {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #3e3e3e;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-timestamp {
+    color: #858585;
+    margin-bottom: 5px;
+}
+
+.log-method {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.log-method.GET { background: #28a745; }
+.log-method.POST { background: #007bff; }
+.log-method.DELETE { background: #dc3545; }
+.log-method.PUT { background: #ffc107; color: #000; }
+
+.log-url {
+    color: #61dafb;
+}
+
+.log-request, .log-response {
+    margin-top: 10px;
+    padding: 10px;
+    background: #2d2d2d;
+    border-radius: 4px;
+}
+
+.log-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.loading-overlay.show {
+    display: flex;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    display: none;
+    animation: slideIn 0.3s ease;
+    z-index: 10000;
+    max-width: 400px;
+}
+
+.toast.show {
+    display: block;
+}
+
+.toast.success {
+    background: var(--success-color);
+}
+
+.toast.error {
+    background: var(--danger-color);
+}
+
+.toast.warning {
+    background: var(--warning-color);
+    color: #333;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Info Text */
+.info-text {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .tab-nav {
+        flex-direction: column;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .collections-list {
+        grid-template-columns: 1fr;
+    }
+}
+/* ========== 向量信息展示样式 ========== */
+
+/* Header 向量状态指示器 */
+.header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.vector-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border-radius: 8px;
+}
+
+.vector-status i {
+    color: var(--secondary-color);
+}
+
+.status-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.status-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active {
+    background: var(--success-color);
+    color: white;
+}
+
+/* 向量信息卡片 */
+.vector-info-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+}
+
+.vector-info-card h3 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vector-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.vector-info-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.vector-info-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.info-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 10px;
+    color: white;
+    font-size: 20px;
+}
+
+.info-content {
+    flex: 1;
+}
+
+.info-title {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.info-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* 添加文档结果增强样式 */
+.add-result-container {
+    padding: 20px;
+}
+
+.result-section {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.result-section h4 {
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-grid {
+    display: grid;
+    gap: 15px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.info-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+    min-width: 100px;
+}
+
+.info-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.vector-info {
+    margin-bottom: 20px;
+}
+
+/* 嵌入向量预览 */
+.embeddings-preview {
+    margin-top: 20px;
+}
+
+.embeddings-preview h5 {
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.embeddings-table {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    overflow-x: auto;
+}
+
+.embedding-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.embedding-row:last-child {
+    border-bottom: none;
+}
+
+.doc-label {
+    min-width: 80px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.embedding-values {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex: 1;
+}
+
+.embedding-val {
+    padding: 4px 8px;
+    background: var(--bg-color);
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--secondary-color);
+    border: 1px solid var(--border-color);
+}
+
+.embedding-more {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.raw-data-details {
+    margin-top: 20px;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.raw-data-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.raw-data-details pre {
+    margin-top: 15px;
+    padding: 15px;
+    background: white;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 12px;
+}
+
+/* 搜索结果增强样式 */
+.search-stats {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.stat-item i {
+    color: var(--primary-color);
+}
+
+.stat-item strong {
+    color: var(--secondary-color);
+}
+
+/* 搜索结果项 */
+.result-item {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.result-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.result-item.rank-1 {
+    border-left: 4px solid #ffd700;
+}
+
+.result-item.rank-2 {
+    border-left: 4px solid #c0c0c0;
+}
+
+.result-item.rank-3 {
+    border-left: 4px solid #cd7f32;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.result-rank {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    min-width: 40px;
+}
+
+.result-similarity {
+    flex: 1;
+    max-width: 300px;
+    margin-left: 20px;
+}
+
+.similarity-bar {
+    height: 20px;
+    background: var(--bg-color);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.similarity-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    transition: width 0.3s ease;
+}
+
+.similarity-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.similarity-percent {
+    font-weight: 700;
+}
+
+.similarity-label {
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+/* 相似度等级颜色 */
+.similarity-very-high .similarity-fill {
+    background: linear-gradient(90deg, #28a745, #20c997);
+}
+
+.similarity-very-high .similarity-label {
+    color: #28a745;
+}
+
+.similarity-high .similarity-fill {
+    background: linear-gradient(90deg, #20c997, #17a2b8);
+}
+
+.similarity-high .similarity-label {
+    color: #20c997;
+}
+
+.similarity-medium .similarity-fill {
+    background: linear-gradient(90deg, #ffc107, #fd7e14);
+}
+
+.similarity-medium .similarity-label {
+    color: #fd7e14;
+}
+
+.similarity-low-medium .similarity-fill {
+    background: linear-gradient(90deg, #fd7e14, #dc3545);
+}
+
+.similarity-low-medium .similarity-label {
+    color: #fd7e14;
+}
+
+.similarity-low .similarity-fill {
+    background: linear-gradient(90deg, #dc3545, #bd2130);
+}
+
+.similarity-low .similarity-label {
+    color: #dc3545;
+}
+
+/* 搜索结果内容 */
+.result-body {
+    padding-left: 50px;
+}
+
+.result-content {
+    color: var(--text-primary);
+    line-height: 1.6;
+    margin-bottom: 15px;
+}
+
+.result-content i {
+    color: var(--text-secondary);
+    margin-right: 8px;
+}
+
+.result-metadata {
+    margin-bottom: 15px;
+}
+
+.result-metadata details {
+    padding: 10px;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+
+.result-metadata summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.result-metadata pre {
+    margin-top: 10px;
+    padding: 10px;
+    background: white;
+    border-radius: 4px;
+    font-size: 12px;
+    overflow-x: auto;
+}
+
+.result-footer {
+    display: flex;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.result-id,
+.result-distance {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+    .header-info {
+        align-items: center;
+        width: 100%;
+    }
+    
+    .vector-status {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .vector-info-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .search-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .result-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .result-similarity {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+    }
+    
+    .result-body {
+        padding-left: 0;
+    }
+}
+    </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -249,6 +1309,755 @@
         <div id="toast" class="toast"></div>
     </div>
 
-    <script src="/static/chroma-test.js"></script>
+    <script>
+// API 基础配置
+// 本地测试用，直接写死后端地址
+const API_BASE_URL = 'http://localhost:8000/api/v1/chroma';
+let documentCounter = 1;
+let requestLogs = [];
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initializeTabs();
+    initializeEventListeners();
+});
+
+// 初始化选项卡切换
+function initializeTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.dataset.tab;
+            
+            // 切换按钮状态
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            
+            // 切换内容显示
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === `${targetTab}-tab`) {
+                    content.classList.add('active');
+                }
+            });
+        });
+    });
+}
+
+// 初始化事件监听器
+function initializeEventListeners() {
+    // Enter键提交搜索
+    document.getElementById('search-query').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            performSearch();
+        }
+    });
+}
+
+// 显示加载动画
+function showLoading() {
+    document.getElementById('loading-overlay').classList.add('show');
+}
+
+// 隐藏加载动画
+function hideLoading() {
+    document.getElementById('loading-overlay').classList.remove('show');
+}
+
+// 显示提示消息
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// 记录API请求
+function logRequest(method, url, requestData, responseData, status) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        method,
+        url,
+        requestData,
+        responseData,
+        status
+    };
+    
+    requestLogs.unshift(logEntry);
+    updateLogsDisplay();
+}
+
+// 更新日志显示
+function updateLogsDisplay() {
+    const logsContainer = document.getElementById('request-logs');
+    if (requestLogs.length === 0) {
+        logsContainer.innerHTML = '<p class="info-text">API 请求和响应日志将显示在这里</p>';
+        return;
+    }
+    
+    logsContainer.innerHTML = requestLogs.map(log => `
+        <div class="log-entry">
+            <div class="log-timestamp">${log.timestamp}</div>
+            <div>
+                <span class="log-method ${log.method}">${log.method}</span>
+                <span class="log-url">${log.url}</span>
+                <span style="color: ${log.status < 400 ? '#28a745' : '#dc3545'}"> [${log.status}]</span>
+            </div>
+            ${log.requestData ? `
+                <div class="log-request">
+                    <strong>Request:</strong>
+                    <pre>${JSON.stringify(log.requestData, null, 2)}</pre>
+                </div>
+            ` : ''}
+            <div class="log-response">
+                <strong>Response:</strong>
+                <pre>${JSON.stringify(log.responseData, null, 2)}</pre>
+            </div>
+        </div>
+    `).join('');
+    
+    // 自动滚动到最新
+    if (document.getElementById('auto-scroll').checked) {
+        logsContainer.scrollTop = 0;
+    }
+}
+
+// 清空日志
+function clearLogs() {
+    requestLogs = [];
+    updateLogsDisplay();
+    showToast('日志已清空');
+}
+
+// API 请求封装
+async function apiRequest(endpoint, method = 'GET', data = null) {
+    const url = `${API_BASE_URL}${endpoint}`;
+    const options = {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    };
+    
+    if (data && method !== 'GET') {
+        options.body = JSON.stringify(data);
+    }
+    
+    showLoading();
+    
+    try {
+        const response = await fetch(url, options);
+        const responseData = await response.json();
+        
+        // 记录请求
+        logRequest(method, url, data, responseData, response.status);
+        
+        hideLoading();
+        
+        if (!response.ok) {
+            throw new Error(responseData.message || responseData.detail || 'API请求失败');
+        }
+        
+        return responseData;
+    } catch (error) {
+        hideLoading();
+        throw error;
+    }
+}
+
+// 集合管理功能
+async function createCollection() {
+    const collectionName = document.getElementById('create-collection-name').value.trim();
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    const metadataText = document.getElementById('create-collection-metadata').value.trim();
+    let metadata = null;
+    
+    if (metadataText) {
+        try {
+            const parsedMetadata = JSON.parse(metadataText);
+            // 确保元数据是对象类型
+            if (typeof parsedMetadata !== 'object' || parsedMetadata === null || Array.isArray(parsedMetadata)) {
+                showToast('元数据必须是JSON对象，例如: {"description": "测试集合"}', 'error');
+                return;
+            }
+            metadata = parsedMetadata;
+        } catch (e) {
+            showToast('元数据格式错误，请输入有效的JSON对象', 'error');
+            return;
+        }
+    }
+    
+    try {
+        const response = await apiRequest('/collection/create', 'POST', {
+            collection_name: collectionName,
+            metadata: metadata
+        });
+        
+        const resultBox = document.getElementById('create-collection-result');
+        resultBox.className = 'result-box success';
+        resultBox.innerHTML = `<pre>${JSON.stringify(response.data, null, 2)}</pre>`;
+        
+        showToast(response.message);
+        
+        // 清空输入框
+        document.getElementById('create-collection-name').value = '';
+        document.getElementById('create-collection-metadata').value = '';
+        
+        // 自动刷新集合列表
+        await listCollections();
+    } catch (error) {
+        const resultBox = document.getElementById('create-collection-result');
+        resultBox.className = 'result-box error';
+        resultBox.textContent = error.message;
+        showToast(error.message, 'error');
+    }
+}
+
+async function listCollections() {
+    try {
+        const response = await apiRequest('/collection/list', 'POST', {});
+        const collections = response.data;
+        
+        const listContainer = document.getElementById('collections-list');
+        if (collections.length === 0) {
+            listContainer.innerHTML = '<p class="info-text">暂无集合</p>';
+        } else {
+            listContainer.innerHTML = collections.map(collection => `
+                <div class="collection-card">
+                    <div class="collection-name">📁 ${collection.name}</div>
+                    <div class="collection-count">文档数量: ${collection.count}</div>
+                    ${collection.metadata ? `
+                        <div class="collection-metadata">
+                            元数据: ${JSON.stringify(collection.metadata)}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+        
+        showToast(`成功获取 ${collections.length} 个集合`);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function getCollectionInfo() {
+    const collectionName = document.getElementById('collection-name-info').value.trim();
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await apiRequest('/collection/info', 'POST', {
+            collection_name: collectionName
+        });
+        
+        const resultBox = document.getElementById('collection-info-result');
+        resultBox.className = 'result-box success';
+        resultBox.innerHTML = `<pre>${JSON.stringify(response.data, null, 2)}</pre>`;
+        
+        showToast(response.message);
+    } catch (error) {
+        const resultBox = document.getElementById('collection-info-result');
+        resultBox.className = 'result-box error';
+        resultBox.textContent = error.message;
+        showToast(error.message, 'error');
+    }
+}
+
+async function deleteCollection() {
+    const collectionName = document.getElementById('collection-name-delete').value.trim();
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    if (!confirm(`确定要删除集合 "${collectionName}" 吗？此操作不可恢复！`)) {
+        return;
+    }
+    
+    try {
+        const response = await apiRequest('/collection/delete', 'POST', {
+            collection_name: collectionName
+        });
+        
+        const resultBox = document.getElementById('collection-delete-result');
+        resultBox.className = 'result-box success';
+        resultBox.textContent = response.message;
+        
+        showToast(response.message);
+        
+        // 清空输入框
+        document.getElementById('collection-name-delete').value = '';
+    } catch (error) {
+        const resultBox = document.getElementById('collection-delete-result');
+        resultBox.className = 'result-box error';
+        resultBox.textContent = error.message;
+        showToast(error.message, 'error');
+    }
+}
+
+// 文档管理功能
+// 测试数据生成器
+function generateTestData() {
+    // 测试文档内容模板
+    const testContents = [
+        "人工智能（Artificial Intelligence, AI）是计算机科学的一个分支，致力于创建能够执行通常需要人类智能的任务的系统。",
+        "机器学习是人工智能的子领域，使计算机能够从数据中学习并改进其性能，而无需明确编程。",
+        "深度学习是机器学习的一个分支，使用多层神经网络来学习数据的复杂模式。",
+        "自然语言处理（NLP）使计算机能够理解、解释和生成人类语言。",
+        "计算机视觉是AI的一个领域，使机器能够从数字图像或视频中获得高级理解。",
+        "强化学习是一种机器学习方法，通过与环境的交互来学习最优行为策略。",
+        "向量数据库是专门用于存储和检索高维向量数据的数据库系统，常用于相似性搜索。",
+        "Transformer架构彻底改变了NLP领域，成为了GPT和BERT等模型的基础。",
+        "知识图谱是一种用图结构存储实体及其关系的知识表示方法。",
+        "联邦学习允许在保护数据隐私的同时训练机器学习模型。"
+    ];
+    
+    // 测试元数据模板
+    const categories = ["技术", "科学", "教育", "研究", "应用"];
+    const authors = ["张三", "李四", "王五", "赵六", "钱七"];
+    const types = ["article", "note", "research", "tutorial", "documentation"];
+    
+    // 获取或设置集合名称
+    const collectionNameInput = document.getElementById('add-collection-name');
+    if (!collectionNameInput.value) {
+        collectionNameInput.value = `test_collection_${Date.now()}`;
+    }
+    
+    // 清空现有文档
+    const container = document.getElementById('documents-container');
+    container.innerHTML = '';
+    documentCounter = 0;
+    
+    // 随机生成3-5个文档
+    const docCount = Math.floor(Math.random() * 3) + 3;
+    
+    for (let i = 0; i < docCount; i++) {
+        documentCounter++;
+        const randomContent = testContents[Math.floor(Math.random() * testContents.length)];
+        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        const randomAuthor = authors[Math.floor(Math.random() * authors.length)];
+        const randomType = types[Math.floor(Math.random() * types.length)];
+        
+        const metadata = {
+            type: randomType,
+            category: randomCategory,
+            author: randomAuthor,
+            timestamp: new Date().toISOString(),
+            index: i + 1,
+            tags: `${randomCategory.toLowerCase()},${randomType}`,  // 改为逗号分隔的字符串
+            source: "test_generator"
+        };
+        
+        const newDocument = document.createElement('div');
+        newDocument.className = 'document-item';
+        newDocument.dataset.index = documentCounter;
+        newDocument.innerHTML = `
+            <h4>文档 ${documentCounter}</h4>
+            <div class="form-group">
+                <label>文档内容</label>
+                <textarea class="document-content">${randomContent}</textarea>
+            </div>
+            <div class="form-group">
+                <label>元数据 (JSON格式，可选)</label>
+                <textarea class="document-metadata">${JSON.stringify(metadata, null, 2)}</textarea>
+            </div>
+        `;
+        container.appendChild(newDocument);
+    }
+    
+    showToast(`已生成 ${docCount} 个测试文档`, 'success');
+    
+    // 滚动到第一个文档
+    const firstDoc = container.querySelector('.document-item');
+    if (firstDoc) {
+        firstDoc.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function addDocumentField() {
+    documentCounter++;
+    const container = document.getElementById('documents-container');
+    const newDocument = document.createElement('div');
+    newDocument.className = 'document-item';
+    newDocument.dataset.index = documentCounter;
+    newDocument.innerHTML = `
+        <h4>文档 ${documentCounter}</h4>
+        <div class="form-group">
+            <label>文档内容</label>
+            <textarea class="document-content" placeholder="输入文档内容"></textarea>
+        </div>
+        <div class="form-group">
+            <label>元数据 (JSON格式，可选)</label>
+            <textarea class="document-metadata" placeholder='例如: {"type": "article", "author": "张三"}'></textarea>
+        </div>
+    `;
+    container.appendChild(newDocument);
+    
+    // 滚动到新添加的文档
+    newDocument.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function submitDocuments() {
+    const collectionName = document.getElementById('add-collection-name').value.trim();
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    const documentItems = document.querySelectorAll('.document-item');
+    const documents = [];
+    
+    for (const item of documentItems) {
+        const content = item.querySelector('.document-content').value.trim();
+        const metadataText = item.querySelector('.document-metadata').value.trim();
+        
+        if (content) {
+            const doc = { content };
+            
+            if (metadataText) {
+                try {
+                    const parsedMetadata = JSON.parse(metadataText);
+                    // 确保元数据是对象类型，不接受数字、字符串、数组等
+                    if (typeof parsedMetadata !== 'object' || parsedMetadata === null || Array.isArray(parsedMetadata)) {
+                        showToast(`文档 ${item.dataset.index} 的元数据必须是JSON对象，例如: {"key": "value"}`, 'error');
+                        return;
+                    }
+                    doc.metadata = parsedMetadata;
+                } catch (e) {
+                    showToast(`文档 ${item.dataset.index} 的元数据格式错误，请输入有效的JSON对象`, 'error');
+                    return;
+                }
+            }
+            
+            documents.push(doc);
+        }
+    }
+    
+    if (documents.length === 0) {
+        showToast('请至少输入一个文档内容', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await apiRequest('/document/add', 'POST', {
+            collection_name: collectionName,
+            documents: documents
+        });
+        
+        const resultBox = document.getElementById('add-documents-result');
+        resultBox.className = 'result-box success';
+        
+        // 构建更丰富的结果展示
+        let resultHTML = '<div class="add-result-container">';
+        
+        // 基本信息
+        resultHTML += `
+            <div class="result-section">
+                <h4><i class="fas fa-info-circle"></i> 基本信息</h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">集合名称:</span>
+                        <span class="info-value">${response.data.collection_name}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">添加数量:</span>
+                        <span class="info-value">${response.data.added_count} 个文档</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">文档ID:</span>
+                        <span class="info-value">${response.data.document_ids.slice(0, 3).join(', ')}${response.data.document_ids.length > 3 ? '...' : ''}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 向量信息
+        if (response.data.sample_embeddings && response.data.sample_embeddings.length > 0) {
+            const embeddings = response.data.sample_embeddings;
+            const embeddingDimension = embeddings[0].length;
+            
+            resultHTML += `
+                <div class="result-section">
+                    <h4><i class="fas fa-project-diagram"></i> 向量信息</h4>
+                    <div class="vector-info">
+                        <div class="info-item">
+                            <span class="info-label">向量模型:</span>
+                            <span class="info-value">text-embedding-3-small (OpenAI)</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">向量维度:</span>
+                            <span class="info-value">${embeddingDimension} 维</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">展示样例:</span>
+                            <span class="info-value">前 ${embeddings.length} 个文档的向量</span>
+                        </div>
+                    </div>
+                    
+                    <div class="embeddings-preview">
+                        <h5>向量预览（前10个维度）</h5>
+                        <div class="embeddings-table">
+                            ${embeddings.map((embedding, idx) => `
+                                <div class="embedding-row">
+                                    <div class="doc-label">文档 ${idx + 1}:</div>
+                                    <div class="embedding-values">
+                                        ${embedding.slice(0, 10).map(val => `<span class="embedding-val">${val.toFixed(4)}</span>`).join('')}
+                                        <span class="embedding-more">... +${embeddingDimension - 10} 更多维度</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 原始数据（折叠显示）
+        resultHTML += `
+            <details class="raw-data-details">
+                <summary><i class="fas fa-code"></i> 查看原始响应数据</summary>
+                <pre>${JSON.stringify(response.data, null, 2)}</pre>
+            </details>
+        `;
+        
+        resultHTML += '</div>';
+        resultBox.innerHTML = resultHTML;
+        
+        showToast(response.message);
+        
+        // 清空表单
+        document.getElementById('add-collection-name').value = '';
+        document.getElementById('documents-container').innerHTML = `
+            <div class="document-item" data-index="0">
+                <h4>文档 1</h4>
+                <div class="form-group">
+                    <label>文档内容</label>
+                    <textarea class="document-content" placeholder="输入文档内容"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>元数据 (JSON格式，可选)</label>
+                    <textarea class="document-metadata" placeholder='例如: {"type": "article", "author": "张三"}'></textarea>
+                </div>
+            </div>
+        `;
+        documentCounter = 1;
+    } catch (error) {
+        const resultBox = document.getElementById('add-documents-result');
+        resultBox.className = 'result-box error';
+        resultBox.textContent = error.message;
+        showToast(error.message, 'error');
+    }
+}
+
+async function deleteDocuments() {
+    const collectionName = document.getElementById('delete-doc-collection').value.trim();
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    const docIds = document.getElementById('delete-doc-ids').value.trim();
+    const whereText = document.getElementById('delete-doc-where').value.trim();
+    
+    if (!docIds && !whereText) {
+        showToast('请提供文档ID或元数据过滤条件', 'warning');
+        return;
+    }
+    
+    const requestData = { collection_name: collectionName };
+    
+    if (docIds) {
+        requestData.document_ids = docIds.split(',').map(id => id.trim());
+    }
+    
+    if (whereText) {
+        try {
+            const parsedWhere = JSON.parse(whereText);
+            // 确保过滤条件是对象类型
+            if (typeof parsedWhere !== 'object' || parsedWhere === null || Array.isArray(parsedWhere)) {
+                showToast('过滤条件必须是JSON对象，例如: {"type": "article"}', 'error');
+                return;
+            }
+            requestData.where = parsedWhere;
+        } catch (e) {
+            showToast('元数据过滤条件格式错误，请输入有效的JSON对象', 'error');
+            return;
+        }
+    }
+    
+    if (!confirm('确定要删除这些文档吗？')) {
+        return;
+    }
+    
+    try {
+        const response = await apiRequest('/document/delete', 'POST', requestData);
+        
+        const resultBox = document.getElementById('delete-documents-result');
+        resultBox.className = 'result-box success';
+        resultBox.textContent = response.message;
+        
+        showToast(response.message);
+        
+        // 清空输入框
+        document.getElementById('delete-doc-collection').value = '';
+        document.getElementById('delete-doc-ids').value = '';
+        document.getElementById('delete-doc-where').value = '';
+    } catch (error) {
+        const resultBox = document.getElementById('delete-documents-result');
+        resultBox.className = 'result-box error';
+        resultBox.textContent = error.message;
+        showToast(error.message, 'error');
+    }
+}
+
+// 向量搜索功能
+async function performSearch() {
+    const collectionName = document.getElementById('search-collection').value.trim();
+    const queryText = document.getElementById('search-query').value.trim();
+    const nResults = parseInt(document.getElementById('search-n-results').value);
+    const whereText = document.getElementById('search-where').value.trim();
+    
+    if (!collectionName) {
+        showToast('请输入集合名称', 'warning');
+        return;
+    }
+    
+    if (!queryText) {
+        showToast('请输入查询文本', 'warning');
+        return;
+    }
+    
+    const requestData = {
+        collection_name: collectionName,
+        query_text: queryText,
+        n_results: nResults || 10
+    };
+    
+    if (whereText) {
+        try {
+            const parsedWhere = JSON.parse(whereText);
+            // 确保过滤条件是对象类型
+            if (typeof parsedWhere !== 'object' || parsedWhere === null || Array.isArray(parsedWhere)) {
+                showToast('过滤条件必须是JSON对象，例如: {"type": "article"}', 'error');
+                return;
+            }
+            requestData.where = parsedWhere;
+        } catch (e) {
+            showToast('元数据过滤条件格式错误，请输入有效的JSON对象', 'error');
+            return;
+        }
+    }
+    
+    try {
+        const response = await apiRequest('/document/query', 'POST', requestData);
+        const results = response.data;
+        
+        const resultsContainer = document.getElementById('search-results');
+        
+        if (results.documents.length === 0) {
+            resultsContainer.innerHTML = '<p class="info-text">未找到匹配的文档</p>';
+        } else {
+            // 添加向量搜索统计信息
+            let searchHTML = `
+                <div class="search-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-chart-line"></i>
+                        <span>找到 <strong>${results.total_results}</strong> 个相关文档</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-robot"></i>
+                        <span>向量模型: <strong>text-embedding-3-small</strong></span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-cube"></i>
+                        <span>向量维度: <strong>1536</strong> 维</span>
+                    </div>
+                </div>
+            `;
+            
+            searchHTML += results.documents.map((doc, index) => {
+                // 计算相似度百分比和相似度等级
+                const similarity = doc.distance !== null ? (1 - doc.distance) : 0;
+                const similarityPercent = (similarity * 100).toFixed(1);
+                let similarityClass = 'low';
+                let similarityLabel = '低';
+                
+                if (similarity > 0.9) {
+                    similarityClass = 'very-high';
+                    similarityLabel = '极高';
+                } else if (similarity > 0.8) {
+                    similarityClass = 'high';
+                    similarityLabel = '高';
+                } else if (similarity > 0.7) {
+                    similarityClass = 'medium';
+                    similarityLabel = '中';
+                } else if (similarity > 0.5) {
+                    similarityClass = 'low-medium';
+                    similarityLabel = '中低';
+                }
+                
+                return `
+                    <div class="result-item rank-${index + 1}">
+                        <div class="result-header">
+                            <div class="result-rank">#${index + 1}</div>
+                            <div class="result-similarity similarity-${similarityClass}">
+                                <div class="similarity-bar">
+                                    <div class="similarity-fill" style="width: ${similarityPercent}%"></div>
+                                </div>
+                                <div class="similarity-text">
+                                    <span class="similarity-percent">${similarityPercent}%</span>
+                                    <span class="similarity-label">${similarityLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="result-body">
+                            <div class="result-content">
+                                <i class="fas fa-file-alt"></i>
+                                ${doc.content}
+                            </div>
+                            ${doc.metadata ? `
+                                <div class="result-metadata">
+                                    <details>
+                                        <summary><i class="fas fa-tags"></i> 元数据</summary>
+                                        <pre>${JSON.stringify(doc.metadata, null, 2)}</pre>
+                                    </details>
+                                </div>
+                            ` : ''}
+                            <div class="result-footer">
+                                <span class="result-id"><i class="fas fa-fingerprint"></i> ${doc.id.substring(0, 8)}...</span>
+                                ${doc.distance !== null ? `
+                                    <span class="result-distance"><i class="fas fa-ruler"></i> 距离: ${doc.distance.toFixed(6)}</span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            resultsContainer.innerHTML = searchHTML;
+        }
+        
+        showToast(response.message);
+    } catch (error) {
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = `<p class="info-text" style="color: var(--danger-color);">搜索失败: ${error.message}</p>`;
+        showToast(error.message, 'error');
+    }
+}
+    </script>
 </body>
 </html>
