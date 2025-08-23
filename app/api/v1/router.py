@@ -79,6 +79,7 @@ api_router.include_router(
     tags=["图分析"]
 )
 
+
 # 包含管理后台路由
 api_router.include_router(
     admin_router,

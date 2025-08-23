@@ -387,6 +387,16 @@ body {
     color: white;
 }
 
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #ff5252;
+    transform: translateY(-2px);
+}
+
 .btn-block {
     width: 100%;
     justify-content: center;
@@ -906,6 +916,9 @@ body {
                         <button class="btn btn-success btn-block" onclick="generateTestData()">
                             <i class="fas fa-database"></i> 生成测试数据
                         </button>
+                        <button class="btn btn-danger btn-block" onclick="clearAllData()" style="margin-top: 10px;">
+                            <i class="fas fa-trash-alt"></i> 清空所有数据
+                        </button>
                     </div>
                 </div>
 
@@ -1077,7 +1090,7 @@ body {
 
     <script>
 // ==================== 全局变量 ====================
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'http://localhost:8000/api/v1/graph';
 let network = null;
 let nodes = null;
 let edges = null;
@@ -1093,6 +1106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeTagsInput();
     loadStatistics();
     loadPersonList();
+    updateGenerateButtonText();  // 初始化生成按钮文字
     
     // 绑定搜索事件
     document.getElementById('person-search').addEventListener('input', filterPersonList);
@@ -1279,9 +1293,14 @@ async function loadStatistics() {
         });
         
         const stats = response.data;
-        document.getElementById('stat-persons').textContent = stats.nodes?.Person || 0;
-        document.getElementById('stat-relations').textContent = stats.total_relationships || 0;
-        document.getElementById('stat-orgs').textContent = stats.nodes?.Organization || 0;
+        // 从nodes和relationships统计中获取数据
+        const personCount = stats.nodes?.Person || 0;
+        const relationCount = stats.total_relationships || 0;
+        const orgCount = stats.nodes?.Organization || 0;
+        
+        document.getElementById('stat-persons').textContent = personCount;
+        document.getElementById('stat-relations').textContent = relationCount;
+        document.getElementById('stat-orgs').textContent = orgCount;
     } catch (error) {
         console.error('Failed to load statistics:', error);
     }
@@ -1448,26 +1467,20 @@ async function createRelation() {
     
     // 根据关系类型调用不同的API
     try {
-        let response;
+        // 获取人物名称
+        const fromPerson = allPersons.find(p => p.uid === fromUid);
+        const toPerson = allPersons.find(p => p.uid === toUid);
         
-        if (relType === 'FRIEND_OF') {
-            response = await apiRequest('/relationships/add-friendship', 'POST', {
-                person1_uid: fromUid,
-                person2_uid: toUid
-            });
-        } else if (relType === 'WORKS_AT' || relType === 'REPORTS_TO' || relType === 'MANAGES') {
-            // 这些需要组织关系，暂时使用通用接口
-            response = await apiRequest('/relationships/add-employment', 'POST', {
-                person_uid: fromUid,
-                organization_uid: toUid,  // 这里需要改进
-                position: relType,
-                department: null
-            });
-        } else {
-            // 使用通用关系创建（需要后端支持）
-            showToast('该关系类型暂不支持，请使用朋友关系', 'warning');
+        if (!fromPerson || !toPerson) {
+            showToast('找不到选中的人物', 'error');
             return;
         }
+        
+        const response = await apiRequest('/relationships/create', 'POST', {
+            from_person: fromPerson.name,
+            to_person: toPerson.name,
+            relationship_type: relType
+        });
         
         showToast('关系创建成功', 'success');
         
@@ -1529,17 +1542,16 @@ async function analyzePerson() {
     }
     
     try {
-        // 获取人物的网络数据
-        const response = await apiRequest('/persons/network', 'POST', {
-            uid: uid,
-            depth: 2
-        });
-        
-        const networkData = response.data;
+        // 获取人物的分析数据
         const person = allPersons.find(p => p.uid === uid);
+        if (!person) {
+            showToast('找不到该人物', 'error');
+            return;
+        }
         
-        // 计算分析指标
-        const metrics = calculateMetrics(networkData);
+        const response = await apiRequest(`/analytics/person/${person.name}`, 'POST');
+        
+        const analysisData = response.data;
         
         // 显示分析结果
         const resultContainer = document.getElementById('analysis-result');
@@ -1550,25 +1562,25 @@ async function analyzePerson() {
                 </h4>
                 <div class="metric">
                     <span class="metric-label">直接连接数</span>
-                    <span class="metric-value">${metrics.directConnections}</span>
+                    <span class="metric-value">${analysisData.direct_connections || 0}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">二度连接数</span>
-                    <span class="metric-value">${metrics.secondDegree}</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">网络密度</span>
-                    <span class="metric-value">${metrics.density.toFixed(2)}</span>
+                    <span class="metric-value">${analysisData.second_degree || 0}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">影响力指数</span>
-                    <span class="metric-value">${metrics.influence}</span>
+                    <span class="metric-value">${analysisData.influence_score || 0}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">社区规模</span>
+                    <span class="metric-value">${analysisData.community_size || 0}</span>
                 </div>
             </div>
         `;
         
-        // 在图谱中显示该人物的网络
-        showPersonNetwork(uid, networkData);
+        // 可以加载该人物的个人网络图
+        loadPersonGraph(person.name, uid);
         
     } catch (error) {
         console.error('Analyze person failed:', error);
@@ -1612,10 +1624,15 @@ async function findPath() {
     }
     
     try {
-        const response = await apiRequest('/relationships/find-shortest-path', 'POST', {
-            from_uid: fromUid,
-            to_uid: toUid
-        });
+        const fromPerson = allPersons.find(p => p.uid === fromUid);
+        const toPerson = allPersons.find(p => p.uid === toUid);
+        
+        if (!fromPerson || !toPerson) {
+            showToast('找不到选中的人物', 'error');
+            return;
+        }
+        
+        const response = await apiRequest(`/analytics/shortest-path?from_person=${fromPerson.name}&to_person=${toPerson.name}`, 'GET');
         
         const path = response.data;
         
@@ -1651,29 +1668,108 @@ async function findPath() {
 }
 
 // ==================== 图谱操作 ====================
-async function loadGraphData() {
+async function loadPersonGraph(name, uid) {
     try {
-        // 加载所有人物和关系
-        const personsResponse = await apiRequest('/persons/list', 'POST', {
-            page: 1,
-            page_size: 100
-        });
+        const response = await apiRequest(`/graph/person/${name}?depth=2&limit=50`, 'GET');
+        const graphData = response.data;
         
-        const persons = personsResponse.data.items || [];
+        // 清空现有数据
+        nodes.clear();
+        edges.clear();
         
         // 添加节点
-        const nodeList = persons.map(person => ({
-            id: person.uid,
-            label: person.name,
-            title: formatNodeTooltip(person),
-            color: getNodeColor(person),
-            size: 25
-        }));
+        if (graphData.nodes) {
+            const nodeList = graphData.nodes.map(node => ({
+                id: node.id,
+                label: node.name,
+                title: formatNodeTooltip(node),
+                color: node.id === uid ? '#ff6b6b' : getNodeColor(node),
+                size: node.id === uid ? 35 : 25
+            }));
+            nodes.add(nodeList);
+        }
         
-        nodes.add(nodeList);
+        // 添加边
+        if (graphData.relationships) {
+            const edgeList = graphData.relationships.map(rel => ({
+                id: `${rel.from}-${rel.to}`,
+                from: rel.from,
+                to: rel.to,
+                label: getRelationLabel(rel.type),
+                arrows: 'to'
+            }));
+            edges.add(edgeList);
+        }
         
-        // TODO: 加载关系数据
-        // 这需要后端提供获取所有关系的接口
+        // 聚焦到中心节点
+        setTimeout(() => {
+            network.focus(uid, {
+                scale: 1.5,
+                animation: {
+                    duration: 500,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
+        }, 100);
+        
+    } catch (error) {
+        console.error('Load person graph failed:', error);
+    }
+}
+
+async function loadGraphData() {
+    try {
+        // 获取所有人员数据来构建图谱（限制在100以内）
+        const personsResponse = await apiRequest('/persons/list', 'POST', {
+            page: 1,
+            page_size: 100  // API限制最大100
+        });
+        
+        // 构建图谱数据结构
+        const graphData = {
+            nodes: [],
+            edges: []
+        };
+        
+        // 将人员转换为节点
+        if (personsResponse.data && personsResponse.data.items) {
+            personsResponse.data.items.forEach(person => {
+                graphData.nodes.push({
+                    id: person.uid || person.id,
+                    name: person.name,
+                    type: 'Person',
+                    properties: person
+                });
+            });
+        }
+        
+        // 清空现有数据
+        nodes.clear();
+        edges.clear();
+        
+        // 添加节点
+        if (graphData.nodes) {
+            const nodeList = graphData.nodes.map(node => ({
+                id: node.id,
+                label: node.name,
+                title: formatNodeTooltip(node),
+                color: getNodeColor(node),
+                size: 25
+            }));
+            nodes.add(nodeList);
+        }
+        
+        // 添加边
+        if (graphData.relationships) {
+            const edgeList = graphData.relationships.map(rel => ({
+                id: `${rel.from}-${rel.to}`,
+                from: rel.from,
+                to: rel.to,
+                label: getRelationLabel(rel.type),
+                arrows: 'to'
+            }));
+            edges.add(edgeList);
+        }
         
     } catch (error) {
         console.error('Load graph data failed:', error);
@@ -1957,36 +2053,173 @@ async function recommendConnections() {
     // TODO: 实现连接推荐
 }
 
-// ==================== 测试数据生成 ====================
-async function generateTestData() {
-    const testPersons = [
-        { name: "张伟", age: 32, gender: "male", occupation: "产品经理", organization: "互联网科技", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
-        { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", organization: "创意设计工作室", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
-        { name: "王强", age: 35, gender: "male", occupation: "技术总监", organization: "互联网科技", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
-        { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", organization: "金融科技", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
-        { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", organization: "互联网科技", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
-        { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", organization: "电商平台", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
-        { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", organization: "人工智能公司", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
-        { name: "周婷", age: 26, gender: "female", occupation: "HR经理", organization: "互联网科技", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] }
-    ];
+// ==================== 清空所有数据 ====================
+async function clearAllData() {
+    // 显示确认对话框
+    if (!confirm('⚠️ 警告：此操作将删除所有数据且不可恢复！\n\n确定要清空所有数据吗？')) {
+        return;
+    }
     
     try {
-        showToast('正在生成测试数据...');
+        showToast('正在清空数据...', 'info');
         
-        // 批量创建人物
-        for (const person of testPersons) {
-            await apiRequest('/persons/create', 'POST', person);
+        // 调用清空API
+        const response = await apiRequest('/analytics/clear-all', 'DELETE');
+        
+        if (response.success) {
+            // 清空前端的数据
+            nodes.clear();
+            edges.clear();
+            allPersons = [];
+            
+            // 刷新所有显示
+            await loadPersonList();
+            await loadStatistics();
+            await loadGraphData();
+            
+            // 清空搜索框
+            document.getElementById('person-search').value = '';
+            
+            showToast('所有数据已成功清空', 'success');
+        } else {
+            showToast('清空数据失败: ' + (response.message || '未知错误'), 'error');
+        }
+    } catch (error) {
+        console.error('Clear all data failed:', error);
+        showToast('清空数据失败', 'error');
+    }
+}
+
+// ==================== 测试数据生成 ====================
+// 测试人物数据池
+const testPersons = [
+    { name: "张伟", age: 32, gender: "male", occupation: "产品经理", organization: "互联网科技", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
+    { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", organization: "创意设计工作室", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
+    { name: "王强", age: 35, gender: "male", occupation: "技术总监", organization: "互联网科技", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
+    { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", organization: "金融科技", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
+    { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", organization: "互联网科技", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
+    { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", organization: "电商平台", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
+    { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", organization: "人工智能公司", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
+    { name: "周婷", age: 26, gender: "female", occupation: "HR经理", organization: "互联网科技", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] },
+    { name: "马云", age: 45, gender: "male", occupation: "CEO", organization: "大型集团", skills: ["战略规划", "企业管理"], interests: ["太极", "公益"] },
+    { name: "林静", age: 31, gender: "female", occupation: "投资经理", organization: "风投基金", skills: ["投资分析", "风险控制"], interests: ["金融", "艺术"] },
+    { name: "黄磊", age: 29, gender: "male", occupation: "后端工程师", organization: "游戏公司", skills: ["Go", "Kubernetes"], interests: ["开源", "摄影"] },
+    { name: "杨柳", age: 27, gender: "female", occupation: "内容运营", organization: "新媒体公司", skills: ["文案", "数据分析"], interests: ["写作", "旅行"] }
+];
+
+// 记录当前要创建的人物索引
+let currentPersonIndex = 0;
+let isCreating = false;  // 防止重复点击
+
+async function generateTestData() {
+    // 防止重复点击
+    if (isCreating) {
+        showToast('正在创建中，请稍候...', 'info');
+        return;
+    }
+    
+    // 如果所有测试数据都已创建，重置索引
+    if (currentPersonIndex >= testPersons.length) {
+        currentPersonIndex = 0;
+        showToast('已创建所有测试人物，将从头开始', 'info');
+    }
+    
+    const person = testPersons[currentPersonIndex];
+    
+    try {
+        isCreating = true;
+        
+        // 显示正在创建的人物信息
+        showToast(`正在创建人物 (${currentPersonIndex + 1}/${testPersons.length}): ${person.name}`, 'info');
+        
+        // 创建人物
+        const response = await apiRequest('/persons/create', 'POST', person);
+        
+        if (response.success) {
+            // 如果创建成功，立即添加到图谱中显示
+            if (response.data && (response.data.uid || response.data.id)) {
+                const nodeId = response.data.uid || response.data.id;
+                
+                // 添加到图谱节点
+                const newNode = {
+                    id: nodeId,
+                    label: person.name,
+                    title: `${person.name}\n${person.occupation}\n${person.age}岁`,
+                    color: {
+                        background: person.gender === 'female' ? '#ff6b6b' : '#00d9ff',
+                        border: person.gender === 'female' ? '#ff5252' : '#00b8d4',
+                        highlight: {
+                            background: person.gender === 'female' ? '#ff8a80' : '#40c4ff',
+                            border: person.gender === 'female' ? '#ff5252' : '#00b8d4'
+                        }
+                    },
+                    font: { color: '#ffffff' },
+                    borderWidth: 2,
+                    shape: 'dot',
+                    size: 20
+                };
+                
+                // 检查节点是否已存在
+                if (!nodes.get(nodeId)) {
+                    nodes.add(newNode);
+                    
+                    // 添加一些随机关系（如果有其他节点）
+                    const existingNodes = nodes.getIds();
+                    if (existingNodes.length > 1) {
+                        // 随机选择一个已存在的节点建立关系
+                        const randomIndex = Math.floor(Math.random() * (existingNodes.length - 1));
+                        const targetNodeId = existingNodes[randomIndex] === nodeId ? 
+                            existingNodes[randomIndex + 1] : existingNodes[randomIndex];
+                        
+                        // 添加边
+                        const edgeId = `${nodeId}-${targetNodeId}`;
+                        if (!edges.get(edgeId) && !edges.get(`${targetNodeId}-${nodeId}`)) {
+                            edges.add({
+                                id: edgeId,
+                                from: nodeId,
+                                to: targetNodeId,
+                                label: '认识',
+                                color: { color: '#666', highlight: '#00d9ff' },
+                                width: 1,
+                                smooth: { type: 'curvedCW', roundness: 0.2 }
+                            });
+                        }
+                    }
+                }
+            }
+            
+            showToast(`✅ 成功创建: ${person.name} (${person.occupation})`, 'success');
+            currentPersonIndex++;
+            
+            // 刷新列表和统计
+            await loadPersonList();
+            await loadStatistics();
+            
+            // 更新按钮文字（可选）
+            updateGenerateButtonText();
+            
+        } else {
+            showToast(`❌ 创建失败: ${person.name}`, 'error');
         }
         
-        showToast(`成功创建 ${testPersons.length} 个测试人物`, 'success');
-        
-        // 刷新数据
-        loadPersonList();
-        loadStatistics();
-        loadGraphData();
-        
     } catch (error) {
-        console.error('Generate test data failed:', error);
+        console.error(`创建 ${person.name} 失败:`, error);
+        showToast('创建人物失败', 'error');
+    } finally {
+        isCreating = false;
+    }
+}
+
+// 更新生成按钮的文字
+function updateGenerateButtonText() {
+    const btn = document.querySelector('button[onclick="generateTestData()"]');
+    if (btn) {
+        if (currentPersonIndex >= testPersons.length) {
+            btn.innerHTML = '<i class="fas fa-database"></i> 生成测试数据（重新开始）';
+        } else {
+            const nextPerson = testPersons[currentPersonIndex];
+            btn.innerHTML = `<i class="fas fa-user-plus"></i> 添加: ${nextPerson.name} (${currentPersonIndex + 1}/${testPersons.length})`;
+        }
     }
 }
 
@@ -2098,24 +2331,27 @@ function hideNode() {
 }
 
 // ==================== 初始化时添加一些示例节点 ====================
-function addSampleNodes() {
-    const sampleNodes = [
-        { id: 'sample1', label: '示例人物1', color: '#00d9ff' },
-        { id: 'sample2', label: '示例人物2', color: '#ff6b6b' },
-        { id: 'sample3', label: '示例人物3', color: '#51cf66' }
-    ];
-    
-    const sampleEdges = [
-        { from: 'sample1', to: 'sample2', label: '朋友' },
-        { from: 'sample2', to: 'sample3', label: '同事' }
-    ];
-    
-    nodes.add(sampleNodes);
-    edges.add(sampleEdges);
-}
+// 注释掉示例数据，改为加载真实数据
+// function addSampleNodes() {
+//     const sampleNodes = [
+//         { id: 'sample1', label: '示例人物1', color: '#00d9ff' },
+//         { id: 'sample2', label: '示例人物2', color: '#ff6b6b' },
+//         { id: 'sample3', label: '示例人物3', color: '#51cf66' }
+//     ];
+//     
+//     const sampleEdges = [
+//         { from: 'sample1', to: 'sample2', label: '朋友' },
+//         { from: 'sample2', to: 'sample3', label: '同事' }
+//     ];
+//     
+//     nodes.add(sampleNodes);
+//     edges.add(sampleEdges);
+// }
 
-// 页面加载完成后添加示例数据
-setTimeout(addSampleNodes, 500);
+// 页面加载完成后加载真实数据而不是示例数据
+setTimeout(() => {
+    loadGraphData();  // 加载真实的图谱数据
+}, 500);
     </script>
 </body>
 </html>

@@ -7,8 +7,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from app.core.models import User
-from app.guards.auth import get_current_user
+# from app.core.models import User  # 暂时禁用认证
+# from app.guards.auth import get_current_user  # 暂时禁用认证
 from app.schemas.common_response import SuccessResponse
 from app.utils.response import ResponseUtil
 from app.dependencies.graph import get_graph_service
@@ -66,8 +66,8 @@ class BatchImportRequest(BaseModel):
 @router.post("/create", response_model=SuccessResponse, summary="创建人员")
 async def create_person(
     person: PersonNode,
-    service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    service: GraphService = Depends(get_graph_service)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """创建新人员"""
     try:
@@ -83,7 +83,7 @@ async def create_person(
 async def get_person(
     request: GetPersonRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员详细信息"""
     person = await service.get_person(request.uid)
@@ -96,7 +96,7 @@ async def get_person(
 async def update_person(
     request: UpdatePersonRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """更新人员信息"""
     updated = await service.update_person(request.uid, request.data)
@@ -109,7 +109,7 @@ async def update_person(
 async def delete_person(
     request: DeletePersonRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """删除人员"""
     success = await service.delete_person(request.uid)
@@ -122,7 +122,7 @@ async def delete_person(
 async def search_persons(
     request: SearchPersonsRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """搜索人员"""
     persons = await service.search_persons(request.keyword)
@@ -141,7 +141,7 @@ async def search_persons(
 async def list_persons(
     request: ListPersonsRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员列表（带分页）"""
     from app.repositories.neomodel import PersonRepository
@@ -170,7 +170,7 @@ async def list_persons(
 async def get_person_network(
     request: PersonNetworkRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员的社交网络"""
     network = await service.get_person_network(request.uid, request.depth)
@@ -183,7 +183,7 @@ async def get_person_network(
 async def batch_import_persons(
     request: BatchImportRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """批量导入人员"""
     created = await service.import_persons_batch(request.persons)

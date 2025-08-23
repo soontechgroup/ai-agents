@@ -5,8 +5,8 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 
-from app.core.models import User
-from app.guards.auth import get_current_user
+# from app.core.models import User  # 暂时禁用认证
+# from app.guards.auth import get_current_user  # 暂时禁用认证
 from app.schemas.common_response import SuccessResponse
 from app.schemas.graph.relationship import EmploymentRequest, FriendshipRequest, PathRequest
 from app.utils.response import ResponseUtil
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/relationships", tags=["Relationships"])
 async def add_employment(
     request: EmploymentRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """添加人员与组织的雇佣关系"""
     success = await service.add_employment(
@@ -40,7 +40,7 @@ async def add_employment(
 async def add_friendship(
     request: FriendshipRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """添加两个人之间的朋友关系"""
     success = await service.add_friendship(
@@ -56,7 +56,7 @@ async def add_friendship(
 async def find_shortest_path(
     request: PathRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """查找两个人之间的最短路径"""
     path = await service.find_shortest_path(

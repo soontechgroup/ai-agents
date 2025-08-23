@@ -7,8 +7,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from app.core.models import User
-from app.guards.auth import get_current_user
+# from app.core.models import User  # 暂时禁用认证
+# from app.guards.auth import get_current_user  # 暂时禁用认证
 from app.schemas.common_response import SuccessResponse
 from app.utils.response import ResponseUtil
 from app.dependencies.graph import get_graph_service
@@ -55,7 +55,7 @@ class SearchOrganizationsRequest(BaseModel):
 async def create_organization(
     organization: OrganizationNode,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """创建新组织"""
     try:
@@ -71,7 +71,7 @@ async def create_organization(
 async def get_organization(
     request: GetOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取组织详细信息"""
     org = await service.get_organization(request.uid)
@@ -84,7 +84,7 @@ async def get_organization(
 async def update_organization(
     request: UpdateOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """更新组织信息"""
     # TODO: 在GraphService中实现update_organization方法
@@ -95,7 +95,7 @@ async def update_organization(
 async def delete_organization(
     request: DeleteOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """删除组织"""
     # TODO: 在GraphService中实现delete_organization方法
@@ -106,7 +106,7 @@ async def delete_organization(
 async def search_organizations(
     request: SearchOrganizationsRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """搜索组织"""
     # TODO: 在GraphService中实现search_organizations方法
@@ -136,7 +136,7 @@ async def search_organizations(
 async def get_organization_employees(
     request: GetEmployeesRequest,
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取组织及其所有员工"""
     result = await service.get_organization_with_employees(request.uid)

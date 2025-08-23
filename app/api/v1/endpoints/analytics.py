@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.core.models import User
-from app.guards.auth import get_current_user
+# from app.core.models import User  # 暂时禁用认证
+# from app.guards.auth import get_current_user  # 暂时禁用认证
 from app.schemas.common_response import SuccessResponse
 from app.utils.response import ResponseUtil
 from app.dependencies.graph import get_graph_service
@@ -32,7 +32,7 @@ class StatisticsRequest(BaseModel):
 async def get_system_statistics(
     request: StatisticsRequest = StatisticsRequest(),
     service: GraphService = Depends(get_graph_service),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取图数据库系统统计信息"""
     stats = await service.get_system_statistics()
@@ -53,3 +53,21 @@ async def get_system_statistics(
         result["nodes"] = filtered_nodes
     
     return ResponseUtil.success(data=result)
+
+
+@router.delete("/clear-all", response_model=SuccessResponse, summary="清空所有数据")
+async def clear_all_data(
+    service: GraphService = Depends(get_graph_service),
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
+):
+    """清空图数据库中的所有数据（谨慎使用）"""
+    try:
+        from neomodel import db
+        
+        # 删除所有节点和关系
+        query = "MATCH (n) DETACH DELETE n"
+        db.cypher_query(query)
+        
+        return ResponseUtil.success(message="所有数据已成功清空")
+    except Exception as e:
+        return ResponseUtil.error(message=f"清空数据失败: {str(e)}")

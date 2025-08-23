@@ -126,8 +126,11 @@ class GraphModelConverter:
         result = {}
         
         for key, value in data.items():
-            # 跳过Pydantic特有的字段
+            # 跳过Pydantic特有的字段，但不跳过uid（因为Neomodel需要它）
             if key in ['id', 'labels']:
+                continue
+            # 如果uid为None，让Neomodel自动生成
+            if key == 'uid' and value is None:
                 continue
             
             # 处理日期时间类型
@@ -160,10 +163,10 @@ class GraphModelConverter:
         result = {}
         
         for key, value in data.items():
-            # 跳过Neomodel特有的字段
-            if key in ['uid']:
-                if key == 'uid':
-                    result['id'] = value  # uid映射到id
+            # uid映射处理
+            if key == 'uid':
+                result['uid'] = value  # 保留uid字段
+                result['id'] = value   # 同时映射到id字段
                 continue
             
             # 处理日期时间字符串

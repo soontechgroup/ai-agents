@@ -119,8 +119,8 @@ class Node(GraphEntity):
     _id: Optional[int] = None
     
     # 业务唯一标识符（必须唯一）
-    uid: str = Field(
-        ...,
+    uid: Optional[str] = Field(
+        None,
         description="唯一标识符",
         min_length=1,
         max_length=100

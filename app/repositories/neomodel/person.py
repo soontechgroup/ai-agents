@@ -3,10 +3,13 @@
 """
 
 from typing import List, Optional
+import logging
 from neomodel import db
 
 from app.models.neomodel.nodes import Person
 from app.repositories.neomodel.base import NeomodelRepository
+
+logger = logging.getLogger(__name__)
 
 
 class PersonRepository(NeomodelRepository):
@@ -14,6 +17,14 @@ class PersonRepository(NeomodelRepository):
     
     def __init__(self):
         super().__init__(Person)
+    
+    def find_by_name(self, name: str) -> List[Person]:
+        """通过姓名查找"""
+        try:
+            return Person.nodes.filter(name=name).all()
+        except Exception as e:
+            logger.error(f"查找人员失败: {str(e)}")
+            return []
     
     def find_by_email(self, email: str) -> Optional[Person]:
         """通过邮箱查找"""
