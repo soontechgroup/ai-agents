@@ -1,5 +1,16 @@
 from fastapi import APIRouter
-from .endpoints import auth, digital_humans, user, conversations, chroma, graph
+from .endpoints import (
+    auth, 
+    digital_humans, 
+    user, 
+    conversations, 
+    chroma,
+    # 新的图数据库端点
+    persons,
+    organizations,
+    relationships,
+    analytics
+)
 from .admin import admin_router
 
 api_router = APIRouter()
@@ -39,11 +50,33 @@ api_router.include_router(
     tags=["Chroma 向量数据库"]
 )
 
-# 包含 Neo4j 图数据库路由
+# ==================== 图数据库路由 ====================
+# 人员管理
 api_router.include_router(
-    graph.router,
+    persons.router,
     prefix="/graph",
-    tags=["Neo4j 图数据库"]
+    tags=["人员管理"]
+)
+
+# 组织管理
+api_router.include_router(
+    organizations.router,
+    prefix="/graph",
+    tags=["组织管理"]
+)
+
+# 关系管理
+api_router.include_router(
+    relationships.router,
+    prefix="/graph",
+    tags=["关系管理"]
+)
+
+# 图分析
+api_router.include_router(
+    analytics.router,
+    prefix="/graph",
+    tags=["图分析"]
 )
 
 # 包含管理后台路由

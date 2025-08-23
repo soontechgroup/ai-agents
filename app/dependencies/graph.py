@@ -1,55 +1,66 @@
 """
 Neo4j 图数据库依赖注入
-提供 Repository 模式所需的依赖
+提供基于Neomodel的服务依赖
 """
 
-from app.core.neo4j import neo4j_db
-from app.repositories.graph import GraphRepository
+from app.services.graph_service import GraphService
+from app.repositories.neomodel import (
+    PersonRepository,
+    OrganizationRepository,
+    LocationRepository,
+    EventRepository,
+    ProjectRepository,
+    ProductRepository,
+    TagRepository,
+    CategoryRepository
+)
 
 
-def get_neo4j_session():
+def get_graph_service() -> GraphService:
     """
-    获取 Neo4j Session 依赖
-    用于 FastAPI 的 Depends 注入（底层操作）
+    获取图数据库服务实例
     
-    Example:
-        from fastapi import Depends
-        from app.dependencies.graph import get_neo4j_session
-        
-        @router.get("/nodes")
-        async def get_nodes(session = Depends(get_neo4j_session)):
-            node_repo = GraphNodeRepository(session)
-            return node_repo.find_all()
+    Returns:
+        GraphService实例
     """
-    with neo4j_db.session() as session:
-        yield session
+    return GraphService()
 
 
-def get_graph_repository():
-    """
-    获取统一的 GraphRepository 依赖（推荐使用）
-    提供更简洁的图数据库操作接口
-    
-    Example:
-        from fastapi import Depends
-        from app.dependencies.graph import get_graph_repository
-        
-        @router.get("/nodes")
-        async def get_nodes(graph = Depends(get_graph_repository)):
-            # 直接使用统一接口
-            return graph.nodes.find_all()
-        
-        @router.post("/users")
-        async def create_user(
-            user_data: dict,
-            graph = Depends(get_graph_repository)
-        ):
-            # 使用组合操作
-            return graph.create_node_with_relationships(
-                "User", 
-                user_data,
-                connections=[...]
-            )
-    """
-    with neo4j_db.session() as session:
-        yield GraphRepository(session)
+def get_person_repository() -> PersonRepository:
+    """获取人员仓储"""
+    return PersonRepository()
+
+
+def get_organization_repository() -> OrganizationRepository:
+    """获取组织仓储"""
+    return OrganizationRepository()
+
+
+def get_location_repository() -> LocationRepository:
+    """获取地点仓储"""
+    return LocationRepository()
+
+
+def get_event_repository() -> EventRepository:
+    """获取事件仓储"""
+    return EventRepository()
+
+
+def get_project_repository() -> ProjectRepository:
+    """获取项目仓储"""
+    return ProjectRepository()
+
+
+def get_product_repository() -> ProductRepository:
+    """获取产品仓储"""
+    return ProductRepository()
+
+
+def get_tag_repository() -> TagRepository:
+    """获取标签仓储"""
+    return TagRepository()
+
+
+def get_category_repository() -> CategoryRepository:
+    """获取分类仓储"""
+    return CategoryRepository()

@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 import json
 import re
 from datetime import datetime
-from app.repositories.graph import GraphRepository
+from app.services.graph_service import GraphService
 from app.services.langgraph_service import LangGraphService
 from app.core.logger import logger
 
@@ -17,8 +17,8 @@ class EntityExtractor:
     Extracts entities from text and manages them in the graph database
     """
     
-    def __init__(self, graph_repo: GraphRepository, llm_service: LangGraphService):
-        self.graph = graph_repo
+    def __init__(self, graph_service: GraphService, llm_service: LangGraphService):
+        self.graph = graph_service
         self.llm = llm_service
         logger.info("✅ EntityExtractor initialized")
     

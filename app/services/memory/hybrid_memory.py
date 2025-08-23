@@ -19,7 +19,7 @@ from app.core.memory.types import (
 )
 from app.services.chroma_service import ChromaService
 from app.services.embedding_service import EmbeddingService
-from app.repositories.graph import GraphRepository
+from app.services.graph_service import GraphService
 from app.schemas.chroma import (
     ChromaDocumentBatch, 
     ChromaDocumentInput, 
@@ -37,11 +37,11 @@ class HybridMemory(IMemory):
     def __init__(
         self,
         chroma_service: ChromaService,
-        graph_repo: GraphRepository,
+        graph_service: GraphService,
         embedding_service: EmbeddingService
     ):
         self.chroma = chroma_service
-        self.graph = graph_repo
+        self.graph = graph_service
         self.embeddings = embedding_service
         logger.info("✅ HybridMemory initialized with Chroma and Neo4j")
     

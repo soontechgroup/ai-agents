@@ -4,9 +4,12 @@
 """
 
 from datetime import datetime
-from typing import Dict, Any, Optional, List, TypeVar, Type
+from typing import Dict, Any, Optional, List, TypeVar, Type, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from app.models.converters.graph_converter import GraphModelConverter
 
 
 class GraphEntity(BaseModel, ABC):
@@ -80,6 +83,30 @@ class GraphEntity(BaseModel, ABC):
                     for v in value
                 ]
         return data
+    
+    def to_neomodel(self):
+        """
+        转换为Neomodel实例
+        
+        Returns:
+            对应的Neomodel模型实例
+        """
+        from app.models.converters.graph_converter import GraphModelConverter
+        return GraphModelConverter.pydantic_to_neomodel(self)
+    
+    @classmethod
+    def from_neomodel(cls, neomodel_obj):
+        """
+        从Neomodel实例创建Pydantic模型
+        
+        Args:
+            neomodel_obj: Neomodel模型实例
+        
+        Returns:
+            对应的Pydantic模型实例
+        """
+        from app.models.converters.graph_converter import GraphModelConverter
+        return GraphModelConverter.neomodel_to_pydantic(neomodel_obj)
 
 
 class Node(GraphEntity):
