@@ -2,9 +2,9 @@ name: Docker Deploy to GCP
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/docker-deploy ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, feature/docker-deploy ]
     types: [ closed ]
   workflow_dispatch:
 
@@ -27,7 +27,6 @@ jobs:
       attestations: write
     # 执行完这个ci流程后输出一些东西
     outputs:
-      build-success: "true"
       image-tag: ${{ steps.tag.outputs.name }}
     
     steps:
@@ -127,9 +126,6 @@ jobs:
     name: "🚀 CD - 部署到服务器"
     needs: ci
     runs-on: ubuntu-latest
-    
-    # 只有在 CI 成功后才运行 CD
-    if: ${{ needs.ci.result == 'success' }}
     
     env:
       REGISTRY: docker.io
