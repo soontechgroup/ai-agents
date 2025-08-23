@@ -20,7 +20,7 @@ class BaseRelationship(StructuredRel):
     created_at = DateTimeProperty(default_factory=datetime.now)
     updated_at = DateTimeProperty(default_factory=datetime.now)
     confidence = FloatProperty(default=1.0)
-    source = StringProperty()
+    data_source = StringProperty()  # 重命名为 data_source 避免冲突
 
 
 # 社交关系

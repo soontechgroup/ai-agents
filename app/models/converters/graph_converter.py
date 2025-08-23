@@ -9,10 +9,11 @@ import logging
 
 from app.models.graph.nodes.person import PersonNode
 from app.models.graph.nodes.organization import OrganizationNode
-from app.models.graph.nodes.location import LocationNode
-from app.models.graph.nodes.event import EventNode
-from app.models.graph.nodes.project import ProjectNode
-from app.models.graph.nodes.product import ProductNode
+# TODO: 以下模型尚未实现
+# from app.models.graph.nodes.location import LocationNode
+# from app.models.graph.nodes.event import EventNode
+# from app.models.graph.nodes.project import ProjectNode
+# from app.models.graph.nodes.product import ProductNode
 
 from app.models.neomodel.nodes import (
     Person,
@@ -38,10 +39,11 @@ class GraphModelConverter:
     PYDANTIC_TO_NEOMODEL = {
         PersonNode: Person,
         OrganizationNode: Organization,
-        LocationNode: Location,
-        EventNode: Event,
-        ProjectNode: Project,
-        ProductNode: Product,
+        # TODO: 添加其他模型映射
+        # LocationNode: Location,
+        # EventNode: Event,
+        # ProjectNode: Project,
+        # ProductNode: Product,
     }
     
     NEOMODEL_TO_PYDANTIC = {v: k for k, v in PYDANTIC_TO_NEOMODEL.items()}

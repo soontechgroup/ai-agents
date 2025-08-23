@@ -2,7 +2,7 @@
 地点仓储
 """
 
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 from neomodel import db
 

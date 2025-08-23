@@ -15,10 +15,12 @@ from app.repositories.neomodel import (
     ProjectRepository,
     ProductRepository
 )
-from app.models.graph.nodes import PersonNode, OrganizationNode, LocationNode
-from app.models.graph.nodes.event import EventNode
-from app.models.graph.nodes.project import ProjectNode
-from app.models.graph.nodes.product import ProductNode
+from app.models.graph.nodes import PersonNode, OrganizationNode
+# TODO: 以下模型尚未实现
+# from app.models.graph.nodes import LocationNode
+# from app.models.graph.nodes.event import EventNode
+# from app.models.graph.nodes.project import ProjectNode
+# from app.models.graph.nodes.product import ProductNode
 from app.models.converters.graph_converter import GraphModelConverter
 from app.core.neomodel_config import transaction
 

@@ -15,9 +15,16 @@ def init_neomodel():
     初始化Neomodel连接
     """
     try:
+        # 从 NEO4J_URI 中解析主机和端口
+        # NEO4J_URI 格式: bolt://localhost:7687
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.NEO4J_URI)
+        host = parsed.hostname or 'localhost'
+        port = parsed.port or 7687
+        
         # 构建连接URL
         # Neomodel需要的格式: bolt://username:password@host:port
-        connection_url = f"bolt://{settings.NEO4J_USERNAME}:{settings.NEO4J_PASSWORD}@{settings.NEO4J_HOST}:{settings.NEO4J_PORT}"
+        connection_url = f"bolt://{settings.NEO4J_USERNAME}:{settings.NEO4J_PASSWORD}@{host}:{port}"
         
         # 设置数据库URL
         neomodel_config.DATABASE_URL = connection_url
@@ -29,7 +36,7 @@ def init_neomodel():
         # 测试连接
         db.cypher_query("RETURN 1")
         
-        logger.info(f"✅ Neomodel 连接成功: {settings.NEO4J_HOST}:{settings.NEO4J_PORT}")
+        logger.info(f"✅ Neomodel 连接成功: {host}:{port}")
         
     except Exception as e:
         logger.error(f"❌ Neomodel 连接失败: {str(e)}")

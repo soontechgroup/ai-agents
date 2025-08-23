@@ -1,0 +1,2121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo4j 人物关系网络 - 智能分析平台</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #00d9ff;
+    --secondary-color: #008cc9;
+    --accent-color: #ff6b6b;
+    --success-color: #51cf66;
+    --warning-color: #ffd43b;
+    --danger-color: #ff6b6b;
+    --dark-bg: #1a1d24;
+    --card-bg: #2a2d35;
+    --border-color: #3a3d45;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #1a1d24 0%, #2d3142 100%);
+    min-height: 100vh;
+    color: var(--text-primary);
+}
+
+.container {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+.header {
+    background: var(--card-bg);
+    padding: 15px 30px;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo i {
+    font-size: 28px;
+    color: var(--primary-color);
+}
+
+.logo h1 {
+    font-size: 20px;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header-stats {
+    display: flex;
+    gap: 30px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-item i {
+    color: var(--primary-color);
+    font-size: 18px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-left: 5px;
+}
+
+/* Main Layout */
+.main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 320px;
+    background: var(--card-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-toggle {
+    position: absolute;
+    right: -15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.tab.active {
+    color: var(--primary-color);
+    background: rgba(0, 217, 255, 0.15);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.tab i {
+    font-size: 16px;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Graph Container */
+.graph-container {
+    flex: 1;
+    position: relative;
+    background: var(--dark-bg);
+}
+
+#network-graph {
+    width: 100%;
+    height: 100%;
+}
+
+/* Graph Controls */
+.graph-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 100;
+}
+
+.control-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.control-btn:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Graph Info Panel */
+.graph-info {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: var(--card-bg);
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    display: none;
+}
+
+.graph-info.show {
+    display: block;
+}
+
+/* Forms */
+.form-section {
+    margin-bottom: 25px;
+}
+
+.form-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-section h3 i {
+    color: var(--primary-color);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+/* Tags Input */
+.tags-input {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 5px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    min-height: 36px;
+}
+
+.tag {
+    padding: 4px 8px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 4px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tag .remove {
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.tags-input input {
+    flex: 1;
+    min-width: 100px;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.btn-secondary:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* Person List */
+.person-list {
+    margin-top: 15px;
+}
+
+.search-box {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.search-box input {
+    padding-right: 35px;
+}
+
+.search-box i {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+}
+
+.person-card {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.person-card:hover {
+    border-color: var(--primary-color);
+    transform: translateX(5px);
+}
+
+.person-card.selected {
+    background: rgba(0, 217, 255, 0.1);
+    border-color: var(--primary-color);
+}
+
+.person-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.person-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.person-role {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--secondary-color);
+    color: white;
+    border-radius: 3px;
+}
+
+.person-details {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.person-details span {
+    display: inline-block;
+    margin-right: 10px;
+}
+
+/* Relationship List */
+.relationship-item {
+    background: var(--dark-bg);
+    border-left: 3px solid var(--secondary-color);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.relationship-flow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.node-name {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.rel-type {
+    padding: 2px 8px;
+    background: var(--secondary-color);
+    color: white;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.arrow {
+    color: var(--text-secondary);
+}
+
+/* Analysis Panel */
+.analysis-card {
+    background: var(--dark-bg);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.metric:last-child {
+    border-bottom: none;
+}
+
+.metric-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.quick-action {
+    padding: 12px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.quick-action:hover {
+    border-color: var(--primary-color);
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.quick-action i {
+    font-size: 24px;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.quick-action p {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    font-size: 24px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* Loading Spinner */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0, 217, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    padding: 15px 20px;
+    background: var(--card-bg);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    display: none;
+    z-index: 2000;
+    animation: slideIn 0.3s ease;
+}
+
+.toast.show {
+    display: block;
+}
+
+.toast.success {
+    border-left-color: var(--success-color);
+}
+
+.toast.error {
+    border-left-color: var(--danger-color);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background: var(--card-bg);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    box-shadow: var(--shadow);
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+}
+
+.tooltip.show {
+    display: block;
+}
+
+/* Context Menu */
+.context-menu {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 0;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+}
+
+.context-menu.show {
+    display: block;
+}
+
+.context-menu-item {
+    padding: 8px 15px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.context-menu-item:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.context-menu-item i {
+    margin-right: 8px;
+    color: var(--primary-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        position: absolute;
+        z-index: 100;
+        height: 100%;
+        transform: translateX(-100%);
+    }
+    
+    .sidebar.open {
+        transform: translateX(0);
+    }
+    
+    .header-stats {
+        display: none;
+    }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--dark-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+
+/* Animations */
+.fade-in {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 217, 255, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 217, 255, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 217, 255, 0);
+    }
+}
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-project-diagram"></i>
+                <h1>Neo4j 人物关系网络</h1>
+            </div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <i class="fas fa-users"></i>
+                    <span class="stat-value" id="stat-persons">0</span>
+                    <span class="stat-label">人物</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-link"></i>
+                    <span class="stat-value" id="stat-relations">0</span>
+                    <span class="stat-label">关系</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-building"></i>
+                    <span class="stat-value" id="stat-orgs">0</span>
+                    <span class="stat-label">组织</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" data-tab="person">
+                        <i class="fas fa-user"></i>
+                        <span>人物</span>
+                    </button>
+                    <button class="tab" data-tab="relation">
+                        <i class="fas fa-link"></i>
+                        <span>关系</span>
+                    </button>
+                    <button class="tab" data-tab="analysis">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>分析</span>
+                    </button>
+                </div>
+
+                <!-- Person Tab -->
+                <div class="tab-content active" id="person-tab">
+                    <div class="form-section">
+                        <h3><i class="fas fa-user-plus"></i> 创建人物</h3>
+                        <div class="form-group">
+                            <label>姓名 *</label>
+                            <input type="text" id="person-name" placeholder="输入姓名">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>年龄</label>
+                                <input type="number" id="person-age" placeholder="年龄">
+                            </div>
+                            <div class="form-group">
+                                <label>性别</label>
+                                <select id="person-gender">
+                                    <option value="">请选择</option>
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>职业</label>
+                            <input type="text" id="person-occupation" placeholder="如：软件工程师">
+                        </div>
+                        <div class="form-group">
+                            <label>组织</label>
+                            <input type="text" id="person-organization" placeholder="所属公司或机构">
+                        </div>
+                        <div class="form-group">
+                            <label>技能标签</label>
+                            <div class="tags-input" id="skills-tags">
+                                <input type="text" placeholder="输入技能后按回车">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>兴趣爱好</label>
+                            <div class="tags-input" id="interests-tags">
+                                <input type="text" placeholder="输入兴趣后按回车">
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="createPerson()">
+                                <i class="fas fa-save"></i> 创建
+                            </button>
+                            <button class="btn btn-secondary" onclick="clearPersonForm()">
+                                <i class="fas fa-redo"></i> 重置
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-users"></i> 人物列表</h3>
+                        <div class="search-box">
+                            <input type="text" id="person-search" placeholder="搜索人物...">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="person-list" id="person-list">
+                            <!-- 人物卡片将动态加载 -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-magic"></i> 快速操作</h3>
+                        <button class="btn btn-success btn-block" onclick="generateTestData()">
+                            <i class="fas fa-database"></i> 生成测试数据
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Relation Tab -->
+                <div class="tab-content" id="relation-tab">
+                    <div class="form-section">
+                        <h3><i class="fas fa-link"></i> 创建关系</h3>
+                        <div class="form-group">
+                            <label>起始人物</label>
+                            <select id="rel-from">
+                                <option value="">选择人物</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>关系类型</label>
+                            <select id="rel-type">
+                                <option value="KNOWS">认识</option>
+                                <option value="FRIEND_OF">朋友</option>
+                                <option value="COLLEAGUE_OF">同事</option>
+                                <option value="REPORTS_TO">汇报给</option>
+                                <option value="MANAGES">管理</option>
+                                <option value="PARTNER_OF">伴侣</option>
+                                <option value="FAMILY_OF">家人</option>
+                                <option value="MENTOR_OF">导师</option>
+                                <option value="COLLABORATES_WITH">合作</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>目标人物</label>
+                            <select id="rel-to">
+                                <option value="">选择人物</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>关系强度</label>
+                            <input type="range" id="rel-strength" min="1" max="5" value="3">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
+                                <span>弱</span>
+                                <span>强</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="createRelation()">
+                            <i class="fas fa-plus"></i> 创建关系
+                        </button>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-history"></i> 最近关系</h3>
+                        <div id="recent-relations">
+                            <!-- 最近创建的关系 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Tab -->
+                <div class="tab-content" id="analysis-tab">
+                    <div class="form-section">
+                        <h3><i class="fas fa-user-check"></i> 人物分析</h3>
+                        <div class="form-group">
+                            <label>选择人物</label>
+                            <select id="analysis-person">
+                                <option value="">选择要分析的人物</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="analyzePerson()">
+                            <i class="fas fa-chart-line"></i> 开始分析
+                        </button>
+                        <div id="analysis-result" style="margin-top: 15px;">
+                            <!-- 分析结果 -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-route"></i> 路径查找</h3>
+                        <div class="form-group">
+                            <label>起点</label>
+                            <select id="path-from">
+                                <option value="">选择起点人物</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>终点</label>
+                            <select id="path-to">
+                                <option value="">选择终点人物</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="findPath()">
+                            <i class="fas fa-search"></i> 查找路径
+                        </button>
+                        <div id="path-result" style="margin-top: 15px;">
+                            <!-- 路径结果 -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-lightbulb"></i> 智能推荐</h3>
+                        <div class="quick-actions">
+                            <div class="quick-action" onclick="findInfluencers()">
+                                <i class="fas fa-crown"></i>
+                                <p>影响力人物</p>
+                            </div>
+                            <div class="quick-action" onclick="findCommunities()">
+                                <i class="fas fa-users"></i>
+                                <p>社区发现</p>
+                            </div>
+                            <div class="quick-action" onclick="findBridges()">
+                                <i class="fas fa-bridge"></i>
+                                <p>关键连接者</p>
+                            </div>
+                            <div class="quick-action" onclick="recommendConnections()">
+                                <i class="fas fa-user-plus"></i>
+                                <p>推荐连接</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Graph Container -->
+            <div class="graph-container">
+                <div id="network-graph"></div>
+                
+                <!-- Graph Controls -->
+                <div class="graph-controls">
+                    <button class="control-btn" onclick="resetGraph()" title="重置视图">
+                        <i class="fas fa-compress"></i>
+                    </button>
+                    <button class="control-btn" onclick="togglePhysics()" title="切换物理引擎">
+                        <i class="fas fa-atom"></i>
+                    </button>
+                    <button class="control-btn" onclick="changeLayout()" title="切换布局">
+                        <i class="fas fa-sitemap"></i>
+                    </button>
+                    <button class="control-btn" onclick="exportGraph()" title="导出图谱">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="control-btn" onclick="toggleFullscreen()" title="全屏">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+
+                <!-- Graph Info Panel -->
+                <div class="graph-info" id="graph-info">
+                    <h4>节点信息</h4>
+                    <div id="node-info"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" onclick="editNode()">
+            <i class="fas fa-edit"></i> 编辑节点
+        </div>
+        <div class="context-menu-item" onclick="deleteNode()">
+            <i class="fas fa-trash"></i> 删除节点
+        </div>
+        <div class="context-menu-item" onclick="expandNode()">
+            <i class="fas fa-expand-alt"></i> 扩展关系
+        </div>
+        <div class="context-menu-item" onclick="hideNode()">
+            <i class="fas fa-eye-slash"></i> 隐藏节点
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+// ==================== 全局变量 ====================
+const API_BASE_URL = 'http://localhost:8000/api/v1';
+let network = null;
+let nodes = null;
+let edges = null;
+let allPersons = [];
+let selectedNodeId = null;
+let physicsEnabled = true;
+let currentLayout = 'physics';
+
+// ==================== 初始化 ====================
+document.addEventListener('DOMContentLoaded', () => {
+    initializeTabs();
+    initializeGraph();
+    initializeTagsInput();
+    loadStatistics();
+    loadPersonList();
+    
+    // 绑定搜索事件
+    document.getElementById('person-search').addEventListener('input', filterPersonList);
+});
+
+// ==================== Tab切换 ====================
+function initializeTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            
+            // 切换tab状态
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // 切换内容显示
+            contents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === `${targetTab}-tab`) {
+                    content.classList.add('active');
+                }
+            });
+        });
+    });
+}
+
+// ==================== 图谱初始化 ====================
+function initializeGraph() {
+    const container = document.getElementById('network-graph');
+    
+    // 创建数据集
+    nodes = new vis.DataSet([]);
+    edges = new vis.DataSet([]);
+    
+    // 配置选项
+    const options = {
+        nodes: {
+            shape: 'dot',
+            size: 25,
+            font: {
+                size: 14,
+                color: '#ffffff',
+                strokeWidth: 3,
+                strokeColor: '#2a2d35'
+            },
+            borderWidth: 2,
+            shadow: true,
+            scaling: {
+                min: 20,
+                max: 40
+            }
+        },
+        edges: {
+            width: 2,
+            color: {
+                color: '#848484',
+                highlight: '#00d9ff',
+                hover: '#00d9ff'
+            },
+            smooth: {
+                type: 'curvedCW',
+                roundness: 0.2
+            },
+            arrows: {
+                to: {
+                    enabled: true,
+                    scaleFactor: 0.5
+                }
+            },
+            font: {
+                size: 11,
+                color: '#a0a0a0',
+                strokeWidth: 3,
+                strokeColor: '#2a2d35'
+            }
+        },
+        physics: {
+            enabled: true,
+            barnesHut: {
+                gravitationalConstant: -8000,
+                centralGravity: 0.3,
+                springLength: 120,
+                springConstant: 0.04,
+                damping: 0.09,
+                avoidOverlap: 0.1
+            }
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200,
+            hideEdgesOnDrag: true
+        }
+    };
+    
+    // 创建网络
+    network = new vis.Network(container, { nodes, edges }, options);
+    
+    // 绑定事件
+    network.on('click', handleNodeClick);
+    network.on('oncontext', handleNodeRightClick);
+    network.on('doubleClick', handleNodeDoubleClick);
+    network.on('hoverNode', handleNodeHover);
+    network.on('blurNode', handleNodeBlur);
+    
+    // 初始加载一些数据
+    loadGraphData();
+}
+
+// ==================== 标签输入初始化 ====================
+function initializeTagsInput() {
+    const skillsInput = document.querySelector('#skills-tags input');
+    const interestsInput = document.querySelector('#interests-tags input');
+    
+    [skillsInput, interestsInput].forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = input.value.trim();
+                if (value) {
+                    addTag(input.parentElement, value);
+                    input.value = '';
+                }
+            }
+        });
+    });
+}
+
+function addTag(container, text) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.innerHTML = `
+        ${text}
+        <span class="remove" onclick="this.parentElement.remove()">×</span>
+    `;
+    container.insertBefore(tag, container.querySelector('input'));
+}
+
+function getTags(containerId) {
+    const tags = [];
+    document.querySelectorAll(`#${containerId} .tag`).forEach(tag => {
+        tags.push(tag.textContent.replace('×', '').trim());
+    });
+    return tags;
+}
+
+// ==================== API请求 ====================
+async function apiRequest(endpoint, method = 'GET', data = null) {
+    const options = {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    };
+    
+    if (data && method !== 'GET') {
+        options.body = JSON.stringify(data);
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || result.detail || 'API请求失败');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('API Error:', error);
+        showToast(error.message, 'error');
+        throw error;
+    }
+}
+
+// ==================== 统计数据加载 ====================
+async function loadStatistics() {
+    try {
+        const response = await apiRequest('/analytics/get-statistics', 'POST', {
+            include_nodes: true,
+            include_relationships: true
+        });
+        
+        const stats = response.data;
+        document.getElementById('stat-persons').textContent = stats.nodes?.Person || 0;
+        document.getElementById('stat-relations').textContent = stats.total_relationships || 0;
+        document.getElementById('stat-orgs').textContent = stats.nodes?.Organization || 0;
+    } catch (error) {
+        console.error('Failed to load statistics:', error);
+    }
+}
+
+// ==================== 人物管理 ====================
+async function createPerson() {
+    const name = document.getElementById('person-name').value.trim();
+    if (!name) {
+        showToast('请输入姓名', 'error');
+        return;
+    }
+    
+    const personData = {
+        name: name,
+        age: parseInt(document.getElementById('person-age').value) || null,
+        gender: document.getElementById('person-gender').value || null,
+        occupation: document.getElementById('person-occupation').value || null,
+        organization: document.getElementById('person-organization').value || null,
+        skills: getTags('skills-tags'),
+        interests: getTags('interests-tags')
+    };
+    
+    try {
+        const response = await apiRequest('/persons/create', 'POST', personData);
+        showToast('人物创建成功', 'success');
+        
+        // 清空表单
+        clearPersonForm();
+        
+        // 刷新列表和图谱
+        loadPersonList();
+        loadStatistics();
+        
+        // 添加到图谱
+        const newNode = {
+            id: response.data.uid,
+            label: response.data.name,
+            title: formatNodeTooltip(response.data),
+            color: getNodeColor(response.data),
+            size: 25
+        };
+        nodes.add(newNode);
+        
+    } catch (error) {
+        console.error('Create person failed:', error);
+    }
+}
+
+function clearPersonForm() {
+    document.getElementById('person-name').value = '';
+    document.getElementById('person-age').value = '';
+    document.getElementById('person-gender').value = '';
+    document.getElementById('person-occupation').value = '';
+    document.getElementById('person-organization').value = '';
+    
+    // 清空标签
+    ['skills-tags', 'interests-tags'].forEach(id => {
+        const container = document.getElementById(id);
+        container.querySelectorAll('.tag').forEach(tag => tag.remove());
+    });
+}
+
+async function loadPersonList() {
+    try {
+        const response = await apiRequest('/persons/list', 'POST', {
+            page: 1,
+            page_size: 100
+        });
+        
+        allPersons = response.data.items || [];
+        updatePersonList(allPersons);
+        updatePersonSelects(allPersons);
+        
+    } catch (error) {
+        console.error('Load persons failed:', error);
+    }
+}
+
+function updatePersonList(persons) {
+    const listContainer = document.getElementById('person-list');
+    
+    if (persons.length === 0) {
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">暂无数据</p>';
+        return;
+    }
+    
+    listContainer.innerHTML = persons.map(person => `
+        <div class="person-card" onclick="selectPerson('${person.uid}')">
+            <div class="person-header">
+                <span class="person-name">${person.name}</span>
+                ${person.occupation ? `<span class="person-role">${person.occupation}</span>` : ''}
+            </div>
+            <div class="person-details">
+                ${person.age ? `<span><i class="fas fa-birthday-cake"></i> ${person.age}岁</span>` : ''}
+                ${person.organization ? `<span><i class="fas fa-building"></i> ${person.organization}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function updatePersonSelects(persons) {
+    const selects = ['rel-from', 'rel-to', 'analysis-person', 'path-from', 'path-to'];
+    
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (select) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">请选择</option>' + 
+                persons.map(p => `<option value="${p.uid}">${p.name}</option>`).join('');
+            select.value = currentValue;
+        }
+    });
+}
+
+function filterPersonList() {
+    const searchTerm = document.getElementById('person-search').value.toLowerCase();
+    const filtered = allPersons.filter(p => 
+        p.name.toLowerCase().includes(searchTerm) ||
+        (p.occupation && p.occupation.toLowerCase().includes(searchTerm)) ||
+        (p.organization && p.organization.toLowerCase().includes(searchTerm))
+    );
+    updatePersonList(filtered);
+}
+
+function selectPerson(uid) {
+    // 高亮选中的卡片
+    document.querySelectorAll('.person-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+    
+    // 在图谱中聚焦该节点
+    if (network && nodes.get(uid)) {
+        network.focus(uid, {
+            scale: 1.5,
+            animation: {
+                duration: 500,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+        
+        // 高亮该节点
+        highlightNode(uid);
+    }
+}
+
+// ==================== 关系管理 ====================
+async function createRelation() {
+    const fromUid = document.getElementById('rel-from').value;
+    const toUid = document.getElementById('rel-to').value;
+    const relType = document.getElementById('rel-type').value;
+    const strength = document.getElementById('rel-strength').value;
+    
+    if (!fromUid || !toUid) {
+        showToast('请选择起始和目标人物', 'error');
+        return;
+    }
+    
+    if (fromUid === toUid) {
+        showToast('不能创建自己到自己的关系', 'error');
+        return;
+    }
+    
+    // 根据关系类型调用不同的API
+    try {
+        let response;
+        
+        if (relType === 'FRIEND_OF') {
+            response = await apiRequest('/relationships/add-friendship', 'POST', {
+                person1_uid: fromUid,
+                person2_uid: toUid
+            });
+        } else if (relType === 'WORKS_AT' || relType === 'REPORTS_TO' || relType === 'MANAGES') {
+            // 这些需要组织关系，暂时使用通用接口
+            response = await apiRequest('/relationships/add-employment', 'POST', {
+                person_uid: fromUid,
+                organization_uid: toUid,  // 这里需要改进
+                position: relType,
+                department: null
+            });
+        } else {
+            // 使用通用关系创建（需要后端支持）
+            showToast('该关系类型暂不支持，请使用朋友关系', 'warning');
+            return;
+        }
+        
+        showToast('关系创建成功', 'success');
+        
+        // 添加到图谱
+        const newEdge = {
+            id: `${fromUid}-${toUid}`,
+            from: fromUid,
+            to: toUid,
+            label: getRelationLabel(relType),
+            arrows: 'to',
+            color: getEdgeColor(relType)
+        };
+        edges.add(newEdge);
+        
+        // 刷新统计
+        loadStatistics();
+        
+        // 添加到最近关系列表
+        addRecentRelation(fromUid, toUid, relType);
+        
+    } catch (error) {
+        console.error('Create relation failed:', error);
+    }
+}
+
+function addRecentRelation(fromUid, toUid, relType) {
+    const container = document.getElementById('recent-relations');
+    const fromPerson = allPersons.find(p => p.uid === fromUid);
+    const toPerson = allPersons.find(p => p.uid === toUid);
+    
+    if (fromPerson && toPerson) {
+        const item = document.createElement('div');
+        item.className = 'relationship-item fade-in';
+        item.innerHTML = `
+            <div class="relationship-flow">
+                <span class="node-name">${fromPerson.name}</span>
+                <span class="arrow">→</span>
+                <span class="rel-type">${getRelationLabel(relType)}</span>
+                <span class="arrow">→</span>
+                <span class="node-name">${toPerson.name}</span>
+            </div>
+        `;
+        
+        container.insertBefore(item, container.firstChild);
+        
+        // 只保留最近5条
+        while (container.children.length > 5) {
+            container.removeChild(container.lastChild);
+        }
+    }
+}
+
+// ==================== 分析功能 ====================
+async function analyzePerson() {
+    const uid = document.getElementById('analysis-person').value;
+    if (!uid) {
+        showToast('请选择要分析的人物', 'error');
+        return;
+    }
+    
+    try {
+        // 获取人物的网络数据
+        const response = await apiRequest('/persons/network', 'POST', {
+            uid: uid,
+            depth: 2
+        });
+        
+        const networkData = response.data;
+        const person = allPersons.find(p => p.uid === uid);
+        
+        // 计算分析指标
+        const metrics = calculateMetrics(networkData);
+        
+        // 显示分析结果
+        const resultContainer = document.getElementById('analysis-result');
+        resultContainer.innerHTML = `
+            <div class="analysis-card">
+                <h4 style="color: var(--primary-color); margin-bottom: 15px;">
+                    ${person.name} 的网络分析
+                </h4>
+                <div class="metric">
+                    <span class="metric-label">直接连接数</span>
+                    <span class="metric-value">${metrics.directConnections}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">二度连接数</span>
+                    <span class="metric-value">${metrics.secondDegree}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">网络密度</span>
+                    <span class="metric-value">${metrics.density.toFixed(2)}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">影响力指数</span>
+                    <span class="metric-value">${metrics.influence}</span>
+                </div>
+            </div>
+        `;
+        
+        // 在图谱中显示该人物的网络
+        showPersonNetwork(uid, networkData);
+        
+    } catch (error) {
+        console.error('Analyze person failed:', error);
+    }
+}
+
+function calculateMetrics(networkData) {
+    // 简单的指标计算
+    const directConnections = networkData.relationships?.length || 0;
+    const uniqueNodes = new Set();
+    
+    networkData.relationships?.forEach(rel => {
+        uniqueNodes.add(rel.from);
+        uniqueNodes.add(rel.to);
+    });
+    
+    const secondDegree = uniqueNodes.size - 1;
+    const density = directConnections / (secondDegree * (secondDegree - 1) / 2) || 0;
+    const influence = Math.round(directConnections * 10 + secondDegree * 5);
+    
+    return {
+        directConnections,
+        secondDegree,
+        density,
+        influence
+    };
+}
+
+async function findPath() {
+    const fromUid = document.getElementById('path-from').value;
+    const toUid = document.getElementById('path-to').value;
+    
+    if (!fromUid || !toUid) {
+        showToast('请选择起点和终点', 'error');
+        return;
+    }
+    
+    if (fromUid === toUid) {
+        showToast('起点和终点不能相同', 'error');
+        return;
+    }
+    
+    try {
+        const response = await apiRequest('/relationships/find-shortest-path', 'POST', {
+            from_uid: fromUid,
+            to_uid: toUid
+        });
+        
+        const path = response.data;
+        
+        // 显示路径结果
+        const resultContainer = document.getElementById('path-result');
+        if (path && path.length > 0) {
+            resultContainer.innerHTML = `
+                <div class="analysis-card">
+                    <h4 style="color: var(--primary-color); margin-bottom: 10px;">
+                        最短路径（${path.length - 1} 步）
+                    </h4>
+                    <div style="padding: 10px;">
+                        ${path.map((node, index) => {
+                            const person = allPersons.find(p => p.uid === node.uid);
+                            return `
+                                <span class="node-name">${person?.name || node.name}</span>
+                                ${index < path.length - 1 ? ' → ' : ''}
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+            
+            // 在图谱中高亮路径
+            highlightPath(path);
+        } else {
+            resultContainer.innerHTML = '<p style="color: var(--text-secondary);">未找到连接路径</p>';
+        }
+        
+    } catch (error) {
+        console.error('Find path failed:', error);
+    }
+}
+
+// ==================== 图谱操作 ====================
+async function loadGraphData() {
+    try {
+        // 加载所有人物和关系
+        const personsResponse = await apiRequest('/persons/list', 'POST', {
+            page: 1,
+            page_size: 100
+        });
+        
+        const persons = personsResponse.data.items || [];
+        
+        // 添加节点
+        const nodeList = persons.map(person => ({
+            id: person.uid,
+            label: person.name,
+            title: formatNodeTooltip(person),
+            color: getNodeColor(person),
+            size: 25
+        }));
+        
+        nodes.add(nodeList);
+        
+        // TODO: 加载关系数据
+        // 这需要后端提供获取所有关系的接口
+        
+    } catch (error) {
+        console.error('Load graph data failed:', error);
+    }
+}
+
+function showPersonNetwork(centerUid, networkData) {
+    // 清空当前图谱
+    nodes.clear();
+    edges.clear();
+    
+    // 添加中心节点
+    const centerPerson = allPersons.find(p => p.uid === centerUid);
+    if (centerPerson) {
+        nodes.add({
+            id: centerUid,
+            label: centerPerson.name,
+            title: formatNodeTooltip(centerPerson),
+            color: '#ff6b6b',
+            size: 35
+        });
+    }
+    
+    // 添加相关节点和边
+    if (networkData.nodes) {
+        networkData.nodes.forEach(node => {
+            if (node.uid !== centerUid) {
+                nodes.add({
+                    id: node.uid,
+                    label: node.name,
+                    title: formatNodeTooltip(node),
+                    color: getNodeColor(node),
+                    size: 25
+                });
+            }
+        });
+    }
+    
+    if (networkData.relationships) {
+        networkData.relationships.forEach(rel => {
+            edges.add({
+                from: rel.from,
+                to: rel.to,
+                label: rel.type,
+                arrows: 'to'
+            });
+        });
+    }
+    
+    // 适应视图
+    setTimeout(() => {
+        network.fit();
+    }, 100);
+}
+
+function highlightNode(nodeId) {
+    const node = nodes.get(nodeId);
+    if (node) {
+        const originalColor = node.color;
+        nodes.update({
+            id: nodeId,
+            color: '#ffd43b',
+            size: 35
+        });
+        
+        setTimeout(() => {
+            nodes.update({
+                id: nodeId,
+                color: originalColor,
+                size: 25
+            });
+        }, 2000);
+    }
+}
+
+function highlightPath(path) {
+    // 重置所有节点和边
+    const allNodes = nodes.get();
+    const allEdges = edges.get();
+    
+    allNodes.forEach(node => {
+        node.color = getNodeColor(node);
+        node.size = 25;
+    });
+    nodes.update(allNodes);
+    
+    allEdges.forEach(edge => {
+        edge.color = getEdgeColor(edge.type);
+        edge.width = 2;
+    });
+    edges.update(allEdges);
+    
+    // 高亮路径节点
+    path.forEach(node => {
+        nodes.update({
+            id: node.uid,
+            color: '#ffd43b',
+            size: 30
+        });
+    });
+    
+    // 高亮路径边
+    for (let i = 0; i < path.length - 1; i++) {
+        const fromId = path[i].uid;
+        const toId = path[i + 1].uid;
+        
+        allEdges.forEach(edge => {
+            if ((edge.from === fromId && edge.to === toId) ||
+                (edge.from === toId && edge.to === fromId)) {
+                edges.update({
+                    id: edge.id,
+                    color: '#ffd43b',
+                    width: 4
+                });
+            }
+        });
+    }
+}
+
+// ==================== 图谱事件处理 ====================
+function handleNodeClick(params) {
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        const node = nodes.get(selectedNodeId);
+        showNodeInfo(node);
+    }
+}
+
+function handleNodeRightClick(params) {
+    params.event.preventDefault();
+    
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        
+        const menu = document.getElementById('context-menu');
+        menu.style.left = params.event.pageX + 'px';
+        menu.style.top = params.event.pageY + 'px';
+        menu.classList.add('show');
+        
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', () => {
+            menu.classList.remove('show');
+        }, { once: true });
+    }
+}
+
+function handleNodeDoubleClick(params) {
+    if (params.nodes.length > 0) {
+        expandNode();
+    }
+}
+
+function handleNodeHover(params) {
+    document.body.style.cursor = 'pointer';
+}
+
+function handleNodeBlur(params) {
+    document.body.style.cursor = 'default';
+}
+
+function showNodeInfo(node) {
+    const infoPanel = document.getElementById('graph-info');
+    const person = allPersons.find(p => p.uid === node.id);
+    
+    if (person) {
+        document.getElementById('node-info').innerHTML = `
+            <p><strong>${person.name}</strong></p>
+            ${person.occupation ? `<p>职业: ${person.occupation}</p>` : ''}
+            ${person.organization ? `<p>组织: ${person.organization}</p>` : ''}
+            ${person.age ? `<p>年龄: ${person.age}</p>` : ''}
+        `;
+        infoPanel.classList.add('show');
+        
+        setTimeout(() => {
+            infoPanel.classList.remove('show');
+        }, 5000);
+    }
+}
+
+// ==================== 图谱控制功能 ====================
+function resetGraph() {
+    network.fit();
+}
+
+function togglePhysics() {
+    physicsEnabled = !physicsEnabled;
+    network.setOptions({ physics: { enabled: physicsEnabled } });
+    showToast(physicsEnabled ? '物理引擎已开启' : '物理引擎已关闭');
+}
+
+function changeLayout() {
+    const layouts = ['physics', 'hierarchical', 'circular'];
+    const currentIndex = layouts.indexOf(currentLayout);
+    currentLayout = layouts[(currentIndex + 1) % layouts.length];
+    
+    let options = {};
+    
+    switch (currentLayout) {
+        case 'hierarchical':
+            options = {
+                layout: {
+                    hierarchical: {
+                        direction: 'UD',
+                        sortMethod: 'directed'
+                    }
+                }
+            };
+            break;
+        case 'circular':
+            // 需要手动计算圆形布局
+            const nodeIds = nodes.getIds();
+            const angle = (2 * Math.PI) / nodeIds.length;
+            const radius = 300;
+            
+            nodeIds.forEach((id, index) => {
+                const x = radius * Math.cos(index * angle);
+                const y = radius * Math.sin(index * angle);
+                network.moveNode(id, x, y);
+            });
+            break;
+        default:
+            options = {
+                layout: {
+                    hierarchical: false
+                }
+            };
+    }
+    
+    network.setOptions(options);
+    showToast(`切换到${currentLayout}布局`);
+}
+
+function exportGraph() {
+    const exportData = {
+        nodes: nodes.get(),
+        edges: edges.get(),
+        timestamp: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `network_${Date.now()}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    showToast('图谱数据已导出');
+}
+
+function toggleFullscreen() {
+    const container = document.querySelector('.graph-container');
+    
+    if (!document.fullscreenElement) {
+        container.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+}
+
+// ==================== 智能推荐功能 ====================
+async function findInfluencers() {
+    showToast('正在分析影响力人物...');
+    // TODO: 实现影响力分析
+}
+
+async function findCommunities() {
+    showToast('正在进行社区发现...');
+    // TODO: 实现社区发现算法
+}
+
+async function findBridges() {
+    showToast('正在查找关键连接者...');
+    // TODO: 实现桥接点分析
+}
+
+async function recommendConnections() {
+    showToast('正在推荐潜在连接...');
+    // TODO: 实现连接推荐
+}
+
+// ==================== 测试数据生成 ====================
+async function generateTestData() {
+    const testPersons = [
+        { name: "张伟", age: 32, gender: "male", occupation: "产品经理", organization: "互联网科技", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
+        { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", organization: "创意设计工作室", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
+        { name: "王强", age: 35, gender: "male", occupation: "技术总监", organization: "互联网科技", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
+        { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", organization: "金融科技", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
+        { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", organization: "互联网科技", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
+        { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", organization: "电商平台", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
+        { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", organization: "人工智能公司", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
+        { name: "周婷", age: 26, gender: "female", occupation: "HR经理", organization: "互联网科技", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] }
+    ];
+    
+    try {
+        showToast('正在生成测试数据...');
+        
+        // 批量创建人物
+        for (const person of testPersons) {
+            await apiRequest('/persons/create', 'POST', person);
+        }
+        
+        showToast(`成功创建 ${testPersons.length} 个测试人物`, 'success');
+        
+        // 刷新数据
+        loadPersonList();
+        loadStatistics();
+        loadGraphData();
+        
+    } catch (error) {
+        console.error('Generate test data failed:', error);
+    }
+}
+
+// ==================== 辅助函数 ====================
+function getNodeColor(person) {
+    // 根据职业或组织分配颜色
+    const colors = {
+        '工程师': '#00d9ff',
+        '设计师': '#ff6b6b',
+        '经理': '#51cf66',
+        '总监': '#ffd43b',
+        '分析师': '#a78bfa',
+        default: '#64748b'
+    };
+    
+    if (person.occupation) {
+        for (const [key, color] of Object.entries(colors)) {
+            if (person.occupation.includes(key)) {
+                return color;
+            }
+        }
+    }
+    
+    return colors.default;
+}
+
+function getEdgeColor(type) {
+    const colors = {
+        'FRIEND_OF': '#51cf66',
+        'COLLEAGUE_OF': '#00d9ff',
+        'REPORTS_TO': '#ff6b6b',
+        'MANAGES': '#ffd43b',
+        'FAMILY_OF': '#a78bfa',
+        default: '#848484'
+    };
+    
+    return colors[type] || colors.default;
+}
+
+function getRelationLabel(type) {
+    const labels = {
+        'KNOWS': '认识',
+        'FRIEND_OF': '朋友',
+        'COLLEAGUE_OF': '同事',
+        'REPORTS_TO': '汇报给',
+        'MANAGES': '管理',
+        'PARTNER_OF': '伴侣',
+        'FAMILY_OF': '家人',
+        'MENTOR_OF': '导师',
+        'COLLABORATES_WITH': '合作'
+    };
+    
+    return labels[type] || type;
+}
+
+function formatNodeTooltip(person) {
+    const lines = [person.name];
+    
+    if (person.occupation) lines.push(`职业: ${person.occupation}`);
+    if (person.organization) lines.push(`组织: ${person.organization}`);
+    if (person.age) lines.push(`年龄: ${person.age}`);
+    if (person.skills && person.skills.length > 0) {
+        lines.push(`技能: ${person.skills.slice(0, 3).join(', ')}`);
+    }
+    
+    return lines.join('\n');
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast ${type} show`;
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// ==================== 右键菜单操作 ====================
+function editNode() {
+    if (selectedNodeId) {
+        const person = allPersons.find(p => p.uid === selectedNodeId);
+        if (person) {
+            // TODO: 打开编辑模态框
+            showToast('编辑功能开发中...');
+        }
+    }
+}
+
+function deleteNode() {
+    if (selectedNodeId && confirm('确定要删除该节点吗？')) {
+        nodes.remove(selectedNodeId);
+        showToast('节点已删除');
+    }
+}
+
+function expandNode() {
+    if (selectedNodeId) {
+        // 加载该节点的关系网络
+        analyzePerson();
+    }
+}
+
+function hideNode() {
+    if (selectedNodeId) {
+        nodes.remove(selectedNodeId);
+        showToast('节点已隐藏');
+    }
+}
+
+// ==================== 初始化时添加一些示例节点 ====================
+function addSampleNodes() {
+    const sampleNodes = [
+        { id: 'sample1', label: '示例人物1', color: '#00d9ff' },
+        { id: 'sample2', label: '示例人物2', color: '#ff6b6b' },
+        { id: 'sample3', label: '示例人物3', color: '#51cf66' }
+    ];
+    
+    const sampleEdges = [
+        { from: 'sample1', to: 'sample2', label: '朋友' },
+        { from: 'sample2', to: 'sample3', label: '同事' }
+    ];
+    
+    nodes.add(sampleNodes);
+    edges.add(sampleEdges);
+}
+
+// 页面加载完成后添加示例数据
+setTimeout(addSampleNodes, 500);
+    </script>
+</body>
+</html>
