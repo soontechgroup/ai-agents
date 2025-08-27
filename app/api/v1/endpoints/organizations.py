@@ -102,6 +102,30 @@ async def delete_organization(
     return ResponseUtil.error(message="功能待实现")
 
 
+@router.post("/list", response_model=SuccessResponse, summary="获取组织列表")
+async def list_organizations(
+    request: SearchOrganizationsRequest,
+    service: GraphService = Depends(get_graph_service),
+    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
+):
+    """获取组织列表"""
+    from app.repositories.neomodel import OrganizationRepository
+    repo = OrganizationRepository()
+    
+    result = repo.paginate(page=request.page, per_page=request.page_size)
+    orgs = result["items"]
+    
+    # 转换为Pydantic模型
+    org_models = [OrganizationNode.from_neomodel(org) for org in orgs]
+    
+    return ResponseUtil.success(data={
+        "items": org_models,
+        "total": result.get("total", len(org_models)),
+        "page": request.page,
+        "page_size": request.page_size
+    })
+
+
 @router.post("/search", response_model=SuccessResponse, summary="搜索组织")
 async def search_organizations(
     request: SearchOrganizationsRequest,

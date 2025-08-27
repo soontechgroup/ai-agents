@@ -169,12 +169,13 @@ class GraphService:
             org = self.org_repo.find_by_uid(org_uid)
             
             if person and org:
-                person.works_at.connect(org, {
-                    'position': position,
-                    'department': department,
-                    'start_date': datetime.now(),
-                    'is_current': True
-                })
+                # 创建工作关系，属性会使用默认值
+                rel = person.works_at.connect(org)
+                # 更新关系属性
+                if rel:
+                    rel.position = position
+                    rel.department = department
+                    rel.save()
                 logger.info(f"添加雇佣关系: {person_uid} -> {org_uid}")
                 return True
             return False
@@ -184,25 +185,59 @@ class GraphService:
     
     async def add_friendship(self, person1_uid: str, person2_uid: str) -> bool:
         """添加朋友关系"""
+        logger.info(f"服务层: 进入add_friendship方法")
         try:
+            logger.info(f"服务层: 开始添加朋友关系 {person1_uid} <-> {person2_uid}")
+            
+            logger.info(f"服务层: 准备查找person1: {person1_uid}")
             person1 = self.person_repo.find_by_uid(person1_uid)
+            logger.info(f"服务层: person1查找完成: {person1}")
+            
+            logger.info(f"服务层: 准备查找person2: {person2_uid}")
             person2 = self.person_repo.find_by_uid(person2_uid)
+            logger.info(f"服务层: person2查找完成: {person2}")
+            
+            logger.info(f"服务层: 查找结果 - Person1: {person1 is not None}, Person2: {person2 is not None}")
             
             if person1 and person2:
-                # 双向关系
-                person1.friends.connect(person2, {
-                    'since': datetime.now(),
-                    'mutual': True
-                })
-                person2.friends.connect(person1, {
-                    'since': datetime.now(),
-                    'mutual': True
-                })
-                logger.info(f"添加朋友关系: {person1_uid} <-> {person2_uid}")
-                return True
+                logger.info(f"服务层: 找到两个人物 - {person1.name} 和 {person2.name}")
+                
+                try:
+                    # 检查friends属性是否存在
+                    if not hasattr(person1, 'friends'):
+                        logger.error(f"服务层: Person1没有friends属性")
+                        return False
+                    
+                    # Relationship是双向的，只需要连接一次
+                    # 连接时会自动创建双向关系
+                    rel = person1.friends.connect(person2)
+                    logger.info(f"服务层: 已创建朋友关系: {person1.name} <-> {person2.name}")
+                    
+                    # 如果需要更新关系属性，可以在这里设置
+                    if rel:
+                        # rel.mutual = True  # 默认已经是True
+                        # rel.closeness = 5  # 默认已经是5
+                        rel.save()
+                        logger.info(f"服务层: 关系属性已保存")
+                    
+                    logger.info(f"服务层: 成功添加朋友关系: {person1_uid} <-> {person2_uid}")
+                    return True
+                except AttributeError as ae:
+                    logger.error(f"服务层: 属性错误 - {str(ae)}")
+                    return False
+                except Exception as inner_e:
+                    logger.error(f"服务层: 连接关系时出错 - {str(inner_e)}")
+                    logger.error(f"服务层: 错误类型 - {type(inner_e).__name__}")
+                    import traceback
+                    logger.error(f"服务层: 堆栈跟踪 - {traceback.format_exc()}")
+                    return False
+            
+            logger.error(f"服务层: 无法找到人物 - Person1: {person1}, Person2: {person2}")
             return False
         except Exception as e:
-            logger.error(f"添加朋友关系失败: {str(e)}")
+            logger.exception(f"服务层: 添加朋友关系异常: {str(e)}")
+            import traceback
+            logger.error(f"服务层: 完整堆栈 - {traceback.format_exc()}")
             return False
     
     # ==================== 批量操作 ====================

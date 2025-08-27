@@ -54,7 +54,7 @@ class PersonRepository(NeomodelRepository):
     def find_network(self, uid: str, depth: int = 2) -> List[Person]:
         """查找社交网络"""
         query = f"""
-            MATCH (p:Person {{uid: $uid}})-[:KNOWS*1..{depth}]-(other:Person)
+            MATCH (p:Person {{uid: $uid}})-[:FRIEND_OF|KNOWS*1..{depth}]-(other:Person)
             WHERE other.uid <> $uid
             RETURN DISTINCT other
         """

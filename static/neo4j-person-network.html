@@ -397,6 +397,26 @@ body {
     transform: translateY(-2px);
 }
 
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #00b8d4;
+    transform: translateY(-2px);
+}
+
+.btn-info {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-info:hover {
+    background: #1976d2;
+    transform: translateY(-2px);
+}
+
 .btn-block {
     width: 100%;
     justify-content: center;
@@ -916,6 +936,12 @@ body {
                         <button class="btn btn-success btn-block" onclick="generateTestData()">
                             <i class="fas fa-database"></i> 生成测试数据
                         </button>
+                        <button class="btn btn-primary btn-block" onclick="generateOrganizationData()" style="margin-top: 10px;">
+                            <i class="fas fa-building"></i> 生成组织数据
+                        </button>
+                        <button class="btn btn-info btn-block" onclick="generateRelationships()" style="margin-top: 10px;">
+                            <i class="fas fa-link"></i> 生成关系网络
+                        </button>
                         <button class="btn btn-danger btn-block" onclick="clearAllData()" style="margin-top: 10px;">
                             <i class="fas fa-trash-alt"></i> 清空所有数据
                         </button>
@@ -1104,12 +1130,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeTabs();
     initializeGraph();
     initializeTagsInput();
-    loadStatistics();
-    loadPersonList();
     updateGenerateButtonText();  // 初始化生成按钮文字
     
     // 绑定搜索事件
     document.getElementById('person-search').addEventListener('input', filterPersonList);
+    
+    // 初始加载数据 - 统一调用
+    loadAllData();
 });
 
 // ==================== Tab切换 ====================
@@ -1284,7 +1311,21 @@ async function apiRequest(endpoint, method = 'GET', data = null) {
     }
 }
 
-// ==================== 统计数据加载 ====================
+// ==================== 统计数据更新 ====================
+// 更新统计显示（不调用API，只更新UI）
+function updateStatisticsDisplay(stats) {
+    if (!stats) return;
+    
+    const personCount = stats.nodes?.Person || 0;
+    const relationCount = stats.total_relationships || 0;
+    const orgCount = stats.nodes?.Organization || 0;
+    
+    document.getElementById('stat-persons').textContent = personCount;
+    document.getElementById('stat-relations').textContent = relationCount;
+    document.getElementById('stat-orgs').textContent = orgCount;
+}
+
+// 保留原函数以兼容单独调用的情况
 async function loadStatistics() {
     try {
         const response = await apiRequest('/analytics/get-statistics', 'POST', {
@@ -1292,15 +1333,7 @@ async function loadStatistics() {
             include_relationships: true
         });
         
-        const stats = response.data;
-        // 从nodes和relationships统计中获取数据
-        const personCount = stats.nodes?.Person || 0;
-        const relationCount = stats.total_relationships || 0;
-        const orgCount = stats.nodes?.Organization || 0;
-        
-        document.getElementById('stat-persons').textContent = personCount;
-        document.getElementById('stat-relations').textContent = relationCount;
-        document.getElementById('stat-orgs').textContent = orgCount;
+        updateStatisticsDisplay(response.data);
     } catch (error) {
         console.error('Failed to load statistics:', error);
     }
@@ -1331,9 +1364,9 @@ async function createPerson() {
         // 清空表单
         clearPersonForm();
         
-        // 刷新列表和图谱
-        loadPersonList();
-        loadStatistics();
+        // 只刷新必要的部分
+        await loadPersonList();
+        // 统计数据会在loadPersonList中更新，不需要重复调用
         
         // 添加到图谱
         const newNode = {
@@ -1364,6 +1397,7 @@ function clearPersonForm() {
     });
 }
 
+// 保留原函数以兼容单独调用的情况（如创建人员后的刷新）
 async function loadPersonList() {
     try {
         const response = await apiRequest('/persons/list', 'POST', {
@@ -1374,6 +1408,9 @@ async function loadPersonList() {
         allPersons = response.data.items || [];
         updatePersonList(allPersons);
         updatePersonSelects(allPersons);
+        
+        // 如果是单独调用，也更新统计数据
+        await loadStatistics();
         
     } catch (error) {
         console.error('Load persons failed:', error);
@@ -1476,10 +1513,10 @@ async function createRelation() {
             return;
         }
         
-        const response = await apiRequest('/relationships/create', 'POST', {
-            from_person: fromPerson.name,
-            to_person: toPerson.name,
-            relationship_type: relType
+        // 使用 UID 而不是名字
+        const response = await apiRequest('/relationships/add-friendship', 'POST', {
+            person1_uid: fromPerson.uid || fromPerson.id || fromPerson.name,
+            person2_uid: toPerson.uid || toPerson.id || toPerson.name
         });
         
         showToast('关系创建成功', 'success');
@@ -1490,13 +1527,12 @@ async function createRelation() {
             from: fromUid,
             to: toUid,
             label: getRelationLabel(relType),
-            arrows: 'to',
+            arrows: { to: { enabled: true, scaleFactor: 0.5 } },
             color: getEdgeColor(relType)
         };
         edges.add(newEdge);
         
-        // 刷新统计
-        loadStatistics();
+        // 统计数据会在后续刷新中更新
         
         // 添加到最近关系列表
         addRecentRelation(fromUid, toUid, relType);
@@ -1549,33 +1585,65 @@ async function analyzePerson() {
             return;
         }
         
-        const response = await apiRequest(`/analytics/person/${person.name}`, 'POST');
+        const response = await apiRequest('/analytics/analyze-person', 'POST', {
+            person_name: person.name,
+            depth: 2
+        });
         
         const analysisData = response.data;
         
         // 显示分析结果
         const resultContainer = document.getElementById('analysis-result');
+        
+        // 构建关系类型显示
+        let relationshipsHtml = '';
+        if (analysisData.statistics?.relationships_breakdown) {
+            relationshipsHtml = Object.entries(analysisData.statistics.relationships_breakdown)
+                .map(([type, count]) => `<div style="display: inline-block; margin-right: 15px;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">${type}:</span> 
+                    <span style="font-weight: bold;">${count}</span>
+                </div>`)
+                .join('');
+        }
+        
+        // 构建组织信息显示
+        let orgHtml = '';
+        if (analysisData.organizations && analysisData.organizations.length > 0) {
+            const org = analysisData.organizations[0];
+            orgHtml = `
+                <div class="metric">
+                    <span class="metric-label">工作单位</span>
+                    <span class="metric-value" style="font-size: 14px;">${org.name || '-'}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">职位</span>
+                    <span class="metric-value" style="font-size: 14px;">${org.position || '-'}</span>
+                </div>`;
+        }
+        
         resultContainer.innerHTML = `
             <div class="analysis-card">
                 <h4 style="color: var(--primary-color); margin-bottom: 15px;">
                     ${person.name} 的网络分析
                 </h4>
                 <div class="metric">
-                    <span class="metric-label">直接连接数</span>
-                    <span class="metric-value">${analysisData.direct_connections || 0}</span>
+                    <span class="metric-label">总连接数</span>
+                    <span class="metric-value">${analysisData.statistics?.total_connections || 0}</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">二度连接数</span>
-                    <span class="metric-value">${analysisData.second_degree || 0}</span>
+                    <span class="metric-label">同事数量</span>
+                    <span class="metric-value">${analysisData.statistics?.colleague_count || 0}</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">影响力指数</span>
-                    <span class="metric-value">${analysisData.influence_score || 0}</span>
+                    <span class="metric-label">网络规模</span>
+                    <span class="metric-value">${analysisData.statistics?.network_size || 0}</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">社区规模</span>
-                    <span class="metric-value">${analysisData.community_size || 0}</span>
-                </div>
+                ${orgHtml}
+                ${relationshipsHtml ? `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <h5 style="color: var(--text-secondary); margin-bottom: 10px;">关系类型</h5>
+                    ${relationshipsHtml}
+                </div>` : ''}
             </div>
         `;
         
@@ -1584,6 +1652,9 @@ async function analyzePerson() {
         
     } catch (error) {
         console.error('Analyze person failed:', error);
+        showToast('分析失败: ' + (error.message || '未知错误'), 'error');
+        document.getElementById('analysis-result').innerHTML = 
+            '<p style="color: var(--error-color);">分析失败，请稍后重试</p>';
     }
 }
 
@@ -1632,73 +1703,115 @@ async function findPath() {
             return;
         }
         
-        const response = await apiRequest(`/analytics/shortest-path?from_person=${fromPerson.name}&to_person=${toPerson.name}`, 'GET');
+        const response = await apiRequest('/relationships/find-shortest-path', 'POST', {
+            from_uid: fromUid,
+            to_uid: toUid
+        });
         
-        const path = response.data;
+        const pathData = response.data;
         
         // 显示路径结果
         const resultContainer = document.getElementById('path-result');
-        if (path && path.length > 0) {
+        if (pathData && pathData.nodes && pathData.nodes.length > 0) {
             resultContainer.innerHTML = `
                 <div class="analysis-card">
                     <h4 style="color: var(--primary-color); margin-bottom: 10px;">
-                        最短路径（${path.length - 1} 步）
+                        最短路径（${pathData.length || pathData.nodes.length - 1} 步）
                     </h4>
                     <div style="padding: 10px;">
-                        ${path.map((node, index) => {
-                            const person = allPersons.find(p => p.uid === node.uid);
+                        ${pathData.nodes.map((node, index) => {
                             return `
-                                <span class="node-name">${person?.name || node.name}</span>
-                                ${index < path.length - 1 ? ' → ' : ''}
+                                <span class="node-name">${node.name}</span>
+                                ${index < pathData.nodes.length - 1 ? ' → ' : ''}
                             `;
                         }).join('')}
                     </div>
+                    ${pathData.relationships && pathData.relationships.length > 0 ? `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <small style="color: var(--text-secondary);">关系类型: ${pathData.relationships.join(', ')}</small>
+                    </div>` : ''}
                 </div>
             `;
             
             // 在图谱中高亮路径
-            highlightPath(path);
+            highlightPath(pathData.nodes);
         } else {
             resultContainer.innerHTML = '<p style="color: var(--text-secondary);">未找到连接路径</p>';
         }
         
     } catch (error) {
         console.error('Find path failed:', error);
+        showToast('查找路径失败: ' + (error.message || '未知错误'), 'error');
+        document.getElementById('path-result').innerHTML = 
+            '<p style="color: var(--error-color);">查找失败，请稍后重试</p>';
     }
 }
 
 // ==================== 图谱操作 ====================
 async function loadPersonGraph(name, uid) {
     try {
-        const response = await apiRequest(`/graph/person/${name}?depth=2&limit=50`, 'GET');
-        const graphData = response.data;
+        const response = await apiRequest('/persons/network', 'POST', {
+            uid: uid,
+            depth: 2
+        });
+        const networkData = response.data;
         
         // 清空现有数据
         nodes.clear();
         edges.clear();
         
-        // 添加节点
-        if (graphData.nodes) {
-            const nodeList = graphData.nodes.map(node => ({
-                id: node.id,
-                label: node.name,
-                title: formatNodeTooltip(node),
-                color: node.id === uid ? '#ff6b6b' : getNodeColor(node),
-                size: node.id === uid ? 35 : 25
-            }));
-            nodes.add(nodeList);
+        // 添加中心节点
+        if (networkData.person) {
+            const person = networkData.person;
+            nodes.add({
+                id: person.uid,
+                label: person.name,
+                title: formatNodeTooltip(person),
+                color: '#ff6b6b',
+                size: 35
+            });
         }
         
-        // 添加边
-        if (graphData.relationships) {
-            const edgeList = graphData.relationships.map(rel => ({
-                id: `${rel.from}-${rel.to}`,
-                from: rel.from,
-                to: rel.to,
-                label: getRelationLabel(rel.type),
-                arrows: 'to'
-            }));
-            edges.add(edgeList);
+        // 添加同事节点
+        const addedNodes = new Set([networkData.person.uid]);
+        if (networkData.colleagues) {
+            networkData.colleagues.forEach(colleague => {
+                if (!addedNodes.has(colleague.uid)) {
+                    nodes.add({
+                        id: colleague.uid,
+                        label: colleague.name,
+                        title: formatNodeTooltip(colleague),
+                        color: '#4ecdc4',
+                        size: 25
+                    });
+                    addedNodes.add(colleague.uid);
+                    
+                    // 添加同事关系边
+                    edges.add({
+                        id: `${networkData.person.uid}-${colleague.uid}`,
+                        from: networkData.person.uid,
+                        to: colleague.uid,
+                        label: '同事',
+                        arrows: { to: { enabled: false } }
+                    });
+                }
+            });
+        }
+        
+        // 添加网络中的其他节点
+        if (networkData.network) {
+            networkData.network.forEach(node => {
+                if (!addedNodes.has(node.uid)) {
+                    nodes.add({
+                        id: node.uid,
+                        label: node.name,
+                        title: formatNodeTooltip(node),
+                        color: getNodeColor(node),
+                        size: 20
+                    });
+                    addedNodes.add(node.uid);
+                }
+            });
         }
         
         // 聚焦到中心节点
@@ -1714,63 +1827,116 @@ async function loadPersonGraph(name, uid) {
         
     } catch (error) {
         console.error('Load person graph failed:', error);
+        showToast('加载个人网络失败: ' + (error.message || '未知错误'), 'error');
     }
 }
 
-async function loadGraphData() {
-    try {
-        // 获取所有人员数据来构建图谱（限制在100以内）
-        const personsResponse = await apiRequest('/persons/list', 'POST', {
-            page: 1,
-            page_size: 100  // API限制最大100
+// 更新图谱显示（不调用API，只更新UI）
+function updateGraphDisplay(persons, organizations, relationships) {
+    // 清空现有数据
+    nodes.clear();
+    edges.clear();
+    
+    // 构建节点映射表
+    const nodeMap = new Map();
+    
+    // 添加人员节点
+    if (persons && persons.length > 0) {
+        persons.forEach(person => {
+            const nodeId = person.uid || person.id;
+            nodeMap.set(nodeId, person);
+            
+            nodes.add({
+                id: nodeId,
+                label: person.name,
+                title: formatNodeTooltip(person),
+                color: getNodeColor(person),
+                size: 25,
+                group: 'person',
+                shape: 'dot'
+            });
+        });
+    }
+    
+    // 添加组织节点
+    if (organizations && organizations.length > 0) {
+        organizations.forEach(org => {
+            const nodeId = org.uid || org.id;
+            nodeMap.set(nodeId, org);
+            
+            nodes.add({
+                id: nodeId,
+                label: org.name,
+                title: `${org.name}\n${org.industry || ''}`,
+                color: '#6c5ce7',
+                size: 30,
+                group: 'organization',
+                shape: 'square'
+            });
+        });
+    }
+    
+    // 添加关系边
+    if (relationships && relationships.length > 0) {
+        const addedEdges = new Set();
+        
+        relationships.forEach(rel => {
+            const edgeId = `${rel.from}-${rel.to}-${rel.type}`;
+            
+            // 避免重复边
+            if (!addedEdges.has(edgeId)) {
+                // 确保两端节点都存在
+                if (nodeMap.has(rel.from) && nodeMap.has(rel.to)) {
+                    edges.add({
+                        id: edgeId,
+                        from: rel.from,
+                        to: rel.to,
+                        label: getRelationLabel(rel.type),
+                        arrows: getRelationArrows(rel.type),
+                        color: getRelationColor(rel.type)
+                    });
+                    addedEdges.add(edgeId);
+                }
+            }
         });
         
-        // 构建图谱数据结构
-        const graphData = {
-            nodes: [],
-            edges: []
-        };
+        console.log(`加载了 ${nodes.length} 个节点和 ${edges.length} 条边`);
+    }
+    
+    // 如果没有数据，显示提示
+    if (nodes.length === 0) {
+        showToast('暂无数据，请先创建一些测试数据', 'info');
+    }
+}
+
+// 保留原函数以兼容单独调用的情况
+async function loadGraphData() {
+    try {
+        const [personsResponse, orgsResponse, relationshipsResponse] = await Promise.all([
+            apiRequest('/persons/list', 'POST', {
+                page: 1,
+                page_size: 100
+            }),
+            apiRequest('/organizations/list', 'POST', {
+                page: 1,
+                page_size: 50
+            }).catch(err => {
+                console.warn('Failed to load organizations:', err);
+                return { data: { items: [] } };
+            }),
+            apiRequest('/relationships/list', 'POST', {
+                limit: 200
+            }).catch(err => {
+                console.warn('Failed to load relationships:', err);
+                return { data: { relationships: [] } };
+            })
+        ]);
         
-        // 将人员转换为节点
-        if (personsResponse.data && personsResponse.data.items) {
-            personsResponse.data.items.forEach(person => {
-                graphData.nodes.push({
-                    id: person.uid || person.id,
-                    name: person.name,
-                    type: 'Person',
-                    properties: person
-                });
-            });
-        }
-        
-        // 清空现有数据
-        nodes.clear();
-        edges.clear();
-        
-        // 添加节点
-        if (graphData.nodes) {
-            const nodeList = graphData.nodes.map(node => ({
-                id: node.id,
-                label: node.name,
-                title: formatNodeTooltip(node),
-                color: getNodeColor(node),
-                size: 25
-            }));
-            nodes.add(nodeList);
-        }
-        
-        // 添加边
-        if (graphData.relationships) {
-            const edgeList = graphData.relationships.map(rel => ({
-                id: `${rel.from}-${rel.to}`,
-                from: rel.from,
-                to: rel.to,
-                label: getRelationLabel(rel.type),
-                arrows: 'to'
-            }));
-            edges.add(edgeList);
-        }
-        
+        updateGraphDisplay(
+            personsResponse.data.items || [],
+            orgsResponse.data.items || [],
+            relationshipsResponse.data.relationships || []
+        );
     } catch (error) {
         console.error('Load graph data failed:', error);
     }
@@ -1814,7 +1980,7 @@ function showPersonNetwork(centerUid, networkData) {
                 from: rel.from,
                 to: rel.to,
                 label: rel.type,
-                arrows: 'to'
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } }
             });
         });
     }
@@ -1829,18 +1995,18 @@ function highlightNode(nodeId) {
     const node = nodes.get(nodeId);
     if (node) {
         const originalColor = node.color;
-        nodes.update({
+        nodes.update([{
             id: nodeId,
             color: '#ffd43b',
             size: 35
-        });
+        }]);
         
         setTimeout(() => {
-            nodes.update({
+            nodes.update([{
                 id: nodeId,
                 color: originalColor,
                 size: 25
-            });
+            }]);
         }, 2000);
     }
 }
@@ -1864,11 +2030,11 @@ function highlightPath(path) {
     
     // 高亮路径节点
     path.forEach(node => {
-        nodes.update({
+        nodes.update([{
             id: node.uid,
             color: '#ffd43b',
             size: 30
-        });
+        }]);
     });
     
     // 高亮路径边
@@ -2072,10 +2238,8 @@ async function clearAllData() {
             edges.clear();
             allPersons = [];
             
-            // 刷新所有显示
-            await loadPersonList();
-            await loadStatistics();
-            await loadGraphData();
+            // 刷新所有显示 - 使用统一函数
+            await loadAllData();
             
             // 清空搜索框
             document.getElementById('person-search').value = '';
@@ -2091,20 +2255,31 @@ async function clearAllData() {
 }
 
 // ==================== 测试数据生成 ====================
-// 测试人物数据池
+// 测试人物数据池（包含更详细的组织信息）
 const testPersons = [
-    { name: "张伟", age: 32, gender: "male", occupation: "产品经理", organization: "互联网科技", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
-    { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", organization: "创意设计工作室", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
-    { name: "王强", age: 35, gender: "male", occupation: "技术总监", organization: "互联网科技", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
-    { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", organization: "金融科技", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
-    { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", organization: "互联网科技", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
-    { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", organization: "电商平台", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
-    { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", organization: "人工智能公司", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
-    { name: "周婷", age: 26, gender: "female", occupation: "HR经理", organization: "互联网科技", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] },
-    { name: "马云", age: 45, gender: "male", occupation: "CEO", organization: "大型集团", skills: ["战略规划", "企业管理"], interests: ["太极", "公益"] },
-    { name: "林静", age: 31, gender: "female", occupation: "投资经理", organization: "风投基金", skills: ["投资分析", "风险控制"], interests: ["金融", "艺术"] },
-    { name: "黄磊", age: 29, gender: "male", occupation: "后端工程师", organization: "游戏公司", skills: ["Go", "Kubernetes"], interests: ["开源", "摄影"] },
-    { name: "杨柳", age: 27, gender: "female", occupation: "内容运营", organization: "新媒体公司", skills: ["文案", "数据分析"], interests: ["写作", "旅行"] }
+    { name: "张伟", age: 32, gender: "male", occupation: "产品经理", company: "阿里巴巴", department: "产品部", position: "高级产品经理", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
+    { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", company: "字节跳动", department: "设计中心", position: "UI设计师", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
+    { name: "王强", age: 35, gender: "male", occupation: "技术总监", company: "阿里巴巴", department: "技术部", position: "技术总监", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
+    { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", company: "腾讯", department: "数据中心", position: "高级数据分析师", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
+    { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", company: "阿里巴巴", department: "前端组", position: "前端工程师", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
+    { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", company: "京东", department: "市场部", position: "市场总监", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
+    { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", company: "百度", department: "AI实验室", position: "算法工程师", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
+    { name: "周婷", age: 26, gender: "female", occupation: "HR经理", company: "字节跳动", department: "人力资源部", position: "HR经理", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] },
+    { name: "马云", age: 45, gender: "male", occupation: "CEO", company: "阿里巴巴", department: "管理层", position: "董事长", skills: ["战略规划", "企业管理"], interests: ["太极", "公益"] },
+    { name: "林静", age: 31, gender: "female", occupation: "投资经理", company: "红杉资本", department: "投资部", position: "投资经理", skills: ["投资分析", "风险控制"], interests: ["金融", "艺术"] },
+    { name: "黄磊", age: 29, gender: "male", occupation: "后端工程师", company: "腾讯", department: "后端开发部", position: "高级工程师", skills: ["Go", "Kubernetes"], interests: ["开源", "摄影"] },
+    { name: "杨柳", age: 27, gender: "female", occupation: "内容运营", company: "小红书", department: "运营部", position: "内容运营经理", skills: ["文案", "数据分析"], interests: ["写作", "旅行"] }
+];
+
+// 测试组织数据
+const testOrganizations = [
+    { name: "阿里巴巴", type: "科技公司", industry: "电商/云计算", size: "10万+", founded: "1999", description: "全球领先的电商和云计算公司" },
+    { name: "腾讯", type: "科技公司", industry: "社交/游戏", size: "10万+", founded: "1998", description: "中国最大的社交和游戏公司" },
+    { name: "字节跳动", type: "科技公司", industry: "内容/社交", size: "10万+", founded: "2012", description: "全球领先的内容平台公司" },
+    { name: "百度", type: "科技公司", industry: "搜索/AI", size: "5万+", founded: "2000", description: "中国最大的搜索引擎和AI公司" },
+    { name: "京东", type: "电商公司", industry: "电商/物流", size: "20万+", founded: "1998", description: "中国领先的电商和物流公司" },
+    { name: "红杉资本", type: "投资机构", industry: "风险投资", size: "500+", founded: "1972", description: "全球顶级风险投资机构" },
+    { name: "小红书", type: "社交平台", industry: "社交电商", size: "5000+", founded: "2013", description: "生活方式分享社区" }
 ];
 
 // 记录当前要创建的人物索引
@@ -2191,9 +2366,8 @@ async function generateTestData() {
             showToast(`✅ 成功创建: ${person.name} (${person.occupation})`, 'success');
             currentPersonIndex++;
             
-            // 刷新列表和统计
+            // 只刷新人员列表，避免重复加载
             await loadPersonList();
-            await loadStatistics();
             
             // 更新按钮文字（可选）
             updateGenerateButtonText();
@@ -2220,6 +2394,180 @@ function updateGenerateButtonText() {
             const nextPerson = testPersons[currentPersonIndex];
             btn.innerHTML = `<i class="fas fa-user-plus"></i> 添加: ${nextPerson.name} (${currentPersonIndex + 1}/${testPersons.length})`;
         }
+    }
+}
+
+// ==================== 生成组织数据 ====================
+let currentOrgIndex = 0;
+async function generateOrganizationData() {
+    if (currentOrgIndex >= testOrganizations.length) {
+        currentOrgIndex = 0;
+        showToast('已创建所有组织，将从头开始', 'info');
+    }
+    
+    const org = testOrganizations[currentOrgIndex];
+    
+    try {
+        showToast(`正在创建组织: ${org.name}`, 'info');
+        
+        // 创建组织节点（使用创建人物的接口，但添加组织标签）
+        const orgNode = {
+            name: org.name,
+            age: 0,  // 组织没有年龄
+            gender: "other",
+            occupation: org.type,
+            company: org.name,
+            bio: org.description,
+            skills: [org.industry],
+            tags: ["组织", org.type, `成立于${org.founded}`]
+        };
+        
+        const response = await apiRequest('/persons/create', 'POST', orgNode);
+        
+        if (response.success) {
+            // 添加组织节点到图谱
+            if (response.data && (response.data.uid || response.data.id)) {
+                const nodeId = response.data.uid || response.data.id;
+                
+                const newNode = {
+                    id: nodeId,
+                    label: org.name,
+                    title: `${org.name}\n${org.type}\n${org.industry}`,
+                    color: {
+                        background: '#9c27b0',  // 紫色表示组织
+                        border: '#7b1fa2'
+                    },
+                    font: { color: '#ffffff' },
+                    shape: 'box',  // 方形表示组织
+                    size: 30
+                };
+                
+                if (!nodes.get(nodeId)) {
+                    nodes.add(newNode);
+                }
+            }
+            
+            showToast(`✅ 成功创建组织: ${org.name}`, 'success');
+            currentOrgIndex++;
+            
+            // 更新按钮文字
+            const btn = document.querySelector('button[onclick="generateOrganizationData()"]');
+            if (btn) {
+                if (currentOrgIndex >= testOrganizations.length) {
+                    btn.innerHTML = '<i class="fas fa-building"></i> 生成组织数据（重新开始）';
+                } else {
+                    const nextOrg = testOrganizations[currentOrgIndex];
+                    btn.innerHTML = `<i class="fas fa-building"></i> 添加: ${nextOrg.name}`;
+                }
+            }
+            
+            // 统计数据会在loadAllData中更新
+        }
+    } catch (error) {
+        console.error(`创建组织 ${org.name} 失败:`, error);
+        showToast('创建组织失败', 'error');
+    }
+}
+
+// ==================== 生成关系网络 ====================
+async function generateRelationships() {
+    try {
+        showToast('正在生成关系网络...', 'info');
+        
+        // 定义各种关系类型
+        const relationships = [
+            // 同事关系（同公司的人）
+            { from: "张伟", to: "王强", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "张伟", to: "陈明", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "王强", to: "陈明", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "张伟", to: "马云", type: "下属", label: "汇报给" },  // 阿里巴巴上下级
+            { from: "王强", to: "马云", type: "下属", label: "汇报给" },  // 阿里巴巴上下级
+            
+            { from: "李娜", to: "周婷", type: "同事", label: "同事" },  // 字节跳动
+            
+            { from: "刘芳", to: "黄磊", type: "同事", label: "同事" },  // 腾讯
+            
+            // 朋友关系
+            { from: "李娜", to: "赵丽", type: "朋友", label: "朋友" },
+            { from: "陈明", to: "黄磊", type: "朋友", label: "技术好友" },
+            { from: "孙浩", to: "刘芳", type: "朋友", label: "数据科学伙伴" },
+            
+            // 业务关系
+            { from: "林静", to: "马云", type: "投资", label: "投资关系" },
+            { from: "林静", to: "杨柳", type: "投资", label: "曾投资" },
+            
+            // 雇佣关系（人与组织）
+            { from: "张伟", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "王强", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "陈明", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "马云", to: "阿里巴巴", type: "雇佣", label: "创始人" },
+            { from: "李娜", to: "字节跳动", type: "雇佣", label: "就职于" },
+            { from: "周婷", to: "字节跳动", type: "雇佣", label: "就职于" },
+            { from: "刘芳", to: "腾讯", type: "雇佣", label: "就职于" },
+            { from: "黄磊", to: "腾讯", type: "雇佣", label: "就职于" },
+            { from: "赵丽", to: "京东", type: "雇佣", label: "就职于" },
+            { from: "孙浩", to: "百度", type: "雇佣", label: "就职于" },
+            { from: "林静", to: "红杉资本", type: "雇佣", label: "就职于" },
+            { from: "杨柳", to: "小红书", type: "雇佣", label: "就职于" }
+        ];
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        // 获取所有节点用于查找
+        const allNodes = nodes.getIds();
+        const nodeMap = {};
+        nodes.forEach(node => {
+            nodeMap[node.label] = node.id;
+        });
+        
+        // 创建关系
+        for (const rel of relationships) {
+            const fromId = nodeMap[rel.from];
+            const toId = nodeMap[rel.to];
+            
+            if (fromId && toId) {
+                const edgeId = `${fromId}-${toId}-${rel.type}`;
+                
+                // 根据关系类型设置不同的颜色
+                let edgeColor = '#666';
+                if (rel.type === '同事') edgeColor = '#00d9ff';
+                else if (rel.type === '朋友') edgeColor = '#51cf66';
+                else if (rel.type === '雇佣') edgeColor = '#ff9800';
+                else if (rel.type === '下属') edgeColor = '#ff6b6b';
+                else if (rel.type === '投资') edgeColor = '#9c27b0';
+                
+                if (!edges.get(edgeId)) {
+                    edges.add({
+                        id: edgeId,
+                        from: fromId,
+                        to: toId,
+                        label: rel.label,
+                        color: { color: edgeColor, highlight: edgeColor },
+                        width: rel.type === '雇佣' ? 3 : 2,
+                        smooth: { type: 'curvedCW', roundness: 0.2 },
+                        arrows: rel.type === '下属' || rel.type === '雇佣' ? 'to' : undefined
+                    });
+                    successCount++;
+                    
+                    // 短暂延迟让用户看到添加过程
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } else {
+                failCount++;
+                console.log(`无法创建关系: ${rel.from} -> ${rel.to} (节点未找到)`);
+            }
+        }
+        
+        if (successCount > 0) {
+            showToast(`✅ 成功创建 ${successCount} 个关系${failCount > 0 ? `，${failCount} 个失败` : ''}`, 'success');
+        } else {
+            showToast('请先创建人物和组织节点', 'warning');
+        }
+        
+    } catch (error) {
+        console.error('生成关系网络失败:', error);
+        showToast('生成关系网络失败', 'error');
     }
 }
 
@@ -2269,10 +2617,33 @@ function getRelationLabel(type) {
         'PARTNER_OF': '伴侣',
         'FAMILY_OF': '家人',
         'MENTOR_OF': '导师',
-        'COLLABORATES_WITH': '合作'
+        'COLLABORATES_WITH': '合作',
+        'WORKS_AT': '就职于',
+        'INVESTS_IN': '投资'
     };
     
     return labels[type] || type;
+}
+
+function getRelationArrows(type) {
+    // 定义哪些关系类型需要箭头
+    const directional = ['REPORTS_TO', 'MANAGES', 'WORKS_AT', 'INVESTS_IN', 'MENTOR_OF'];
+    // vis-network 需要对象格式，而不是 false
+    return directional.includes(type) ? { to: { enabled: true, scaleFactor: 0.5 } } : { to: { enabled: false } };
+}
+
+function getRelationColor(type) {
+    const colors = {
+        'FRIEND_OF': '#4ecdc4',
+        'COLLEAGUE_OF': '#95e1d3',
+        'WORKS_AT': '#6c5ce7',
+        'REPORTS_TO': '#fd79a8',
+        'MANAGES': '#fdcb6e',
+        'FAMILY_OF': '#ff6b6b',
+        'INVESTS_IN': '#00b894'
+    };
+    
+    return { color: colors[type] || '#95a5a6' };
 }
 
 function formatNodeTooltip(person) {
@@ -2348,10 +2719,61 @@ function hideNode() {
 //     edges.add(sampleEdges);
 // }
 
-// 页面加载完成后加载真实数据而不是示例数据
-setTimeout(() => {
-    loadGraphData();  // 加载真实的图谱数据
-}, 500);
+// 统一的数据加载函数 - 优化版本
+async function loadAllData() {
+    try {
+        // 第一步：并行获取所有原始数据（每个API只调用一次）
+        const [personsResponse, orgsResponse, relationshipsResponse, statsResponse] = await Promise.all([
+            // 人员数据
+            apiRequest('/persons/list', 'POST', {
+                page: 1,
+                page_size: 100
+            }),
+            // 组织数据
+            apiRequest('/organizations/list', 'POST', {
+                page: 1,
+                page_size: 50
+            }).catch(err => {
+                console.warn('Failed to load organizations:', err);
+                return { data: { items: [] } };
+            }),
+            // 关系数据
+            apiRequest('/relationships/list', 'POST', {
+                limit: 200
+            }).catch(err => {
+                console.warn('Failed to load relationships:', err);
+                return { data: { relationships: [] } };
+            }),
+            // 统计数据
+            apiRequest('/analytics/get-statistics', 'POST', {
+                include_nodes: true,
+                include_relationships: true
+            })
+        ]);
+
+        // 第二步：更新全局数据
+        allPersons = personsResponse.data.items || [];
+        
+        // 第三步：分发数据到各个显示组件
+        // 更新左侧列表
+        updatePersonList(allPersons);
+        updatePersonSelects(allPersons);
+        
+        // 更新统计显示
+        updateStatisticsDisplay(statsResponse.data);
+        
+        // 更新图谱显示
+        updateGraphDisplay(
+            personsResponse.data.items || [],
+            orgsResponse.data.items || [],
+            relationshipsResponse.data.relationships || []
+        );
+        
+        console.log('所有数据加载完成 - 每个API只调用一次');
+    } catch (error) {
+        console.error('加载数据失败:', error);
+    }
+}
     </script>
 </body>
 </html>

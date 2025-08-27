@@ -46,6 +46,7 @@ logs/
 data/chroma_db
 data/mongodb
 data/mysql
+data/neo4j
 
 # Logs and databases
 *.log

@@ -15,23 +15,10 @@ from app.models.neomodel.nodes import (
     Category
 )
 from app.models.neomodel.relationships import (
-    FRIEND_OF,
-    FAMILY_OF,
-    KNOWS,
-    WORKS_AT,
-    COLLEAGUE_OF,
-    REPORTS_TO,
-    MANAGES,
-    MEMBER_OF,
-    LOCATED_IN,
-    ATTENDED,
-    PARTICIPATED_IN,
-    ORGANIZED,
-    COLLABORATES_ON,
-    OWNS,
-    USES,
-    TAGGED_WITH,
-    CATEGORIZED_AS
+    FriendshipRel,
+    WorksAtRel,
+    FamilyRel,
+    KnowsRel
 )
 
 __all__ = [
@@ -48,22 +35,9 @@ __all__ = [
     'Tag',
     'Category',
     
-    # Relationships
-    'FRIEND_OF',
-    'FAMILY_OF',
-    'KNOWS',
-    'WORKS_AT',
-    'COLLEAGUE_OF',
-    'REPORTS_TO',
-    'MANAGES',
-    'MEMBER_OF',
-    'LOCATED_IN',
-    'ATTENDED',
-    'PARTICIPATED_IN',
-    'ORGANIZED',
-    'COLLABORATES_ON',
-    'OWNS',
-    'USES',
-    'TAGGED_WITH',
-    'CATEGORIZED_AS'
+    # Relationship Models
+    'FriendshipRel',
+    'WorksAtRel',
+    'FamilyRel',
+    'KnowsRel'
 ]

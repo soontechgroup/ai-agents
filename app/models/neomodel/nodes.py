@@ -18,6 +18,9 @@ from neomodel import (
 )
 
 from app.models.neomodel.base import BaseNode
+from app.models.neomodel.relationships import (
+    FriendshipRel, WorksAtRel, FamilyRel, KnowsRel
+)
 
 
 class Person(BaseNode):
@@ -44,11 +47,11 @@ class Person(BaseNode):
     interests = ArrayProperty(StringProperty())
     social_links = JSONProperty()
     
-    # 关系定义
-    friends = Relationship('Person', 'FRIEND_OF')
-    family = Relationship('Person', 'FAMILY_OF')
-    knows = RelationshipTo('Person', 'KNOWS')
-    works_at = RelationshipTo('Organization', 'WORKS_AT')
+    # 关系定义（使用关系模型）
+    friends = Relationship('Person', 'FRIEND_OF', model=FriendshipRel)
+    family = Relationship('Person', 'FAMILY_OF', model=FamilyRel)
+    knows = RelationshipTo('Person', 'KNOWS', model=KnowsRel)
+    works_at = RelationshipTo('Organization', 'WORKS_AT', model=WorksAtRel)
     located_in = RelationshipTo('Location', 'LOCATED_IN')
     attended = RelationshipTo('Event', 'ATTENDED')
     participates_in = RelationshipTo('Project', 'PARTICIPATES_IN')
