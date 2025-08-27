@@ -7,8 +7,8 @@ from typing import Optional, List
 from datetime import date
 from pydantic import Field, field_validator, model_validator
 
-from .base import BaseRelationship
-from ..types import (
+from app.models.graph.relationships.base import BaseRelationship
+from app.models.graph.types import (
     FriendshipLevel,
     FamilyRelationType,
     Frequency,
@@ -57,7 +57,7 @@ class FriendRelationship(BaseRelationship):
     # 共同兴趣
     shared_interests: List[str] = Field(
         default_factory=list,
-        max_items=20,
+        max_length=20,
         description="共同兴趣爱好"
     )
     

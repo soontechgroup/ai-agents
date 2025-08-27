@@ -7,10 +7,10 @@ from typing import Dict, Any, Type, Optional, Union
 from importlib import import_module
 import logging
 
-from .base import Node, Relationship
-from .nodes import PersonNode
-from .nodes.organization import OrganizationNode
-from .relationships import (
+from app.models.graph.base import Node, Relationship
+from app.models.graph.nodes import PersonNode
+from app.models.graph.nodes.organization import OrganizationNode
+from app.models.graph.relationships import (
     BaseRelationship,
     FriendRelationship,
     FamilyRelationship,

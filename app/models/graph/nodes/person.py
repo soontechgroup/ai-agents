@@ -7,8 +7,8 @@ from datetime import date
 from pydantic import Field, field_validator, EmailStr
 import re
 
-from ..base import Node
-from ..types import Gender, EMAIL_PATTERN, PHONE_PATTERN, MAX_NAME_LENGTH, MAX_TAGS_COUNT
+from app.models.graph.base import Node
+from app.models.graph.types import Gender, EMAIL_PATTERN, PHONE_PATTERN, MAX_NAME_LENGTH, MAX_TAGS_COUNT
 
 
 class PersonNode(Node):
@@ -113,19 +113,19 @@ class PersonNode(Node):
     
     interests: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="兴趣爱好"
     )
     
     skills: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="技能特长"
     )
     
     tags: List[str] = Field(
         default_factory=list,
-        max_items=MAX_TAGS_COUNT,
+        max_length=MAX_TAGS_COUNT,
         description="标签"
     )
     
@@ -163,7 +163,7 @@ class PersonNode(Node):
     
     languages: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="语言能力"
     )
     

@@ -7,8 +7,8 @@ from typing import Optional
 from datetime import datetime
 from pydantic import Field, field_validator, model_validator
 
-from ..base import Relationship
-from ..types import RelationshipStatus, ConfidenceLevel, confidence_to_level
+from app.models.graph.base import Relationship
+from app.models.graph.types import RelationshipStatus, ConfidenceLevel, confidence_to_level
 
 
 class BaseRelationship(Relationship):
