@@ -1,0 +1,261 @@
+name: Docker Deploy to GCP
+
+on:
+  push:
+    branches: [ main, feature/docker-deploy ]
+  pull_request:
+    branches: [ main, feature/docker-deploy ]
+    types: [ closed ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: deuspio/ai-agents  # 使用 Docker Hub
+
+jobs:
+  ci:
+    name: "🏗️ CI - 构建和推送镜像"
+    # 只在推送到指定分支或 PR 合并时运行
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
+    # 指定ubuntu虚拟机
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    # 执行完这个ci流程后输出一些东西
+    outputs:
+      image-tag: ${{ steps.tag.outputs.name }}
+    
+    steps:
+    # 1. 检出代码
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    # 2. 设置 Docker Buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    # 3. 登录到 Docker Hub
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    # 设置固定的镜像标签为 latest
+    - name: Set image tag
+      id: tag
+      run: |
+        echo "name=latest" >> $GITHUB_OUTPUT
+
+
+
+
+    # 4. 提取元数据
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          # 只使用 latest 标签
+          type=raw,value=latest
+    
+    # 5. 构建并推送 Docker 镜像
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+        # 6. CI 构建总结和测试输出
+    - name: CI Build Summary
+      run: |
+        echo "🎉 ============================================="
+        echo "✅ CI 构建流程完成！"
+        echo "🎉 ============================================="
+        echo ""
+        echo "📋 构建信息："
+        echo "  - 🏷️  镜像标签: ${{ steps.meta.outputs.tags }}"
+        echo "  - 🔐 镜像摘要: ${{ steps.build.outputs.digest }}"
+        echo "  - 📦 镜像仓库: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+        echo "  - 🕐 构建时间: $(date)"
+        echo "  - 🌿 分支: ${{ github.ref_name }}"
+        echo "  - 📝 提交: ${{ github.sha }}"
+        echo ""
+        echo "🧪 测试用的镜像拉取命令："
+        echo "  docker pull ${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "🚀 本地测试运行命令："
+        echo "  docker run -d -p 8000:8000 \\"
+        echo "    -e ENVIRONMENT=production \\"
+        echo "    -e DATABASE_URL=mysql+pymysql://root:123456@host.docker.internal:3306/ai_agents \\"
+        echo "    --name ai-agents-test \\"
+        echo "    ${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "🌐 测试 API 端点："
+        echo "  curl http://localhost:8000/docs"
+        echo "  curl http://localhost:8000/"
+        echo ""
+        echo "📊 镜像详细信息："
+        
+    - name: Display Image Details
+      run: |
+        echo "🔍 镜像标签详情："
+        echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
+          if [ -n "$tag" ]; then
+            echo "  📌 $tag"
+          fi
+        done
+        echo ""
+        echo "🏷️ 镜像标签（JSON格式）："
+        echo '${{ steps.meta.outputs.json }}' | jq '.'
+        echo ""
+        echo "📋 构建标签："
+        echo "${{ steps.meta.outputs.labels }}" | tr ',' '\n'
+
+  cd:
+    name: "🚀 CD - 部署到服务器"
+    needs: ci
+    runs-on: ubuntu-latest
+    
+    env:
+      REGISTRY: docker.io
+      IMAGE_NAME: deuspio/ai-agents
+    
+    steps:
+    # 1. 配置 SSH
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.GCP_SSH_KEY_DOCKER }}
+        known_hosts: unnecessary
+        if_key_exists: replace
+    
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H 34.129.46.22 >> ~/.ssh/known_hosts
+    
+    # 2. 部署到服务器
+    - name: Deploy to GCP Server
+      env:
+        HOST: 34.129.46.22
+        FULL_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.ci.outputs.image-tag }}
+      run: |
+        echo "🚀 开始 CD 部署流程..."
+        echo "📋 部署信息："
+        echo "  - 目标服务器: $HOST"
+        echo "  - 完整镜像名: $FULL_IMAGE_NAME"
+        
+        # SSH 到服务器并执行部署
+        ssh root@$HOST << ENDSSH
+        
+        echo "🐳 开始在服务器上部署 Docker 容器..."
+        
+        # 设置镜像标签
+        FULL_IMAGE_NAME="$FULL_IMAGE_NAME"
+        echo "📋 使用镜像: \$FULL_IMAGE_NAME"
+        
+        # 登录 Docker Hub
+        echo "🔑 登录到 Docker Hub..."
+        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+        
+        # 拉取最新镜像
+        echo "📥 拉取最新镜像..."
+        docker pull \$FULL_IMAGE_NAME
+        
+        # 停止并删除现有容器（如果存在）
+        echo "🛑 停止现有容器..."
+        if docker ps -a | grep -q "ai-agents-app"; then
+            docker stop ai-agents-app || true
+            docker rm ai-agents-app || true
+        fi
+        
+        # 创建必要的目录
+        echo "📁 创建数据目录..."
+        mkdir -p /root/ai-agents-data/{chroma_db,logs}
+        
+        # 检查现有数据库容器
+        echo "🔍 检查现有数据库容器..."
+        docker ps | grep -E "(mysql|ai-agent-mysql)"
+        
+        # 简单启动容器（所有配置都在 .env.dev 中）
+        echo "🚀 启动新容器..."
+        docker run -d \
+          --name ai-agents-app \
+          --restart unless-stopped \
+          -p 8000:8000 \
+          -v /root/ai-agents-data/chroma_db:/app/data/chroma_db \
+          -v /root/ai-agents-data/logs:/app/logs \
+          \$FULL_IMAGE_NAME
+        
+        # 等待容器启动
+        echo "⏳ 等待容器启动..."
+        sleep 30
+
+        
+        
+        # 检查数据库连接
+        echo "🔧 检查数据库连接..."
+       
+        
+        # 检查容器状态
+        echo "🔍 检查容器状态..."
+        docker ps -a | grep ai-agents-app
+        
+        # 检查容器日志
+        echo "📋 检查应用日志..."
+        docker logs --tail=20 ai-agents-app
+        
+        # 健康检查
+        echo "🩺 执行健康检查..."
+        sleep 10
+        
+        if curl -s -f http://localhost:8000/docs > /dev/null; then
+            echo "✅ 应用健康检查通过！"
+        else
+            echo "❌ 应用健康检查失败，查看详细日志："
+            docker logs ai-agents-app
+            exit 1
+        fi
+        
+        # 清理旧镜像
+        echo "🧹 清理旧的 Docker 镜像..."
+        docker image prune -f
+        
+        echo "✅ CD 部署完成！"
+        
+        ENDSSH
+        
+    # 3. 部署总结
+    - name: CD Deployment Summary
+      if: always()
+      run: |
+        echo "🎉 ============================================="
+        echo "✅ CD 部署流程完成！"
+        echo "🎉 ============================================="
+        echo ""
+        echo "📋 部署信息："
+        echo "  - 🏷️  部署镜像: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.ci.outputs.image-tag }}"
+        echo "  - 🖥️  目标服务器: 34.129.46.22"
+        echo "  - 📦 容器名称: ai-agents-app"
+        echo "  - 🌐 端口映射: 8000:8000"
+        echo "  - 🕐 部署时间: $(date)"
+        echo ""
+        echo "🌐 服务访问地址："
+        echo "  - API 文档: http://34.129.46.22:8000/docs"
+        echo "  - 应用首页: http://34.129.46.22:8000/"
+        echo ""
+        echo "🔧 服务器管理命令："
+        echo "  - 查看容器状态: docker ps | grep ai-agents-app"
+        echo "  - 查看容器日志: docker logs ai-agents-app"
+        echo "  - 重启容器: docker restart ai-agents-app"
+        echo "  - 停止容器: docker stop ai-agents-app" 

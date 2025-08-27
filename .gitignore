@@ -52,3 +52,6 @@ data/neo4j
 *.log
 *.sqlite
 *.db
+
+.bmad-core
+.claude
