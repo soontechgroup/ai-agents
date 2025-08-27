@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo4j 人物关系网络 - 智能分析平台</title>
+    <title>Neo4j 人物关系网络</title>
     <style>
 * {
     margin: 0;
@@ -861,10 +861,6 @@ body {
                         <i class="fas fa-link"></i>
                         <span>关系</span>
                     </button>
-                    <button class="tab" data-tab="analysis">
-                        <i class="fas fa-chart-bar"></i>
-                        <span>分析</span>
-                    </button>
                 </div>
 
                 <!-- Person Tab -->
@@ -995,69 +991,6 @@ body {
                         <h3><i class="fas fa-history"></i> 最近关系</h3>
                         <div id="recent-relations">
                             <!-- 最近创建的关系 -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Analysis Tab -->
-                <div class="tab-content" id="analysis-tab">
-                    <div class="form-section">
-                        <h3><i class="fas fa-user-check"></i> 人物分析</h3>
-                        <div class="form-group">
-                            <label>选择人物</label>
-                            <select id="analysis-person">
-                                <option value="">选择要分析的人物</option>
-                            </select>
-                        </div>
-                        <button class="btn btn-primary btn-block" onclick="analyzePerson()">
-                            <i class="fas fa-chart-line"></i> 开始分析
-                        </button>
-                        <div id="analysis-result" style="margin-top: 15px;">
-                            <!-- 分析结果 -->
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3><i class="fas fa-route"></i> 路径查找</h3>
-                        <div class="form-group">
-                            <label>起点</label>
-                            <select id="path-from">
-                                <option value="">选择起点人物</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>终点</label>
-                            <select id="path-to">
-                                <option value="">选择终点人物</option>
-                            </select>
-                        </div>
-                        <button class="btn btn-primary btn-block" onclick="findPath()">
-                            <i class="fas fa-search"></i> 查找路径
-                        </button>
-                        <div id="path-result" style="margin-top: 15px;">
-                            <!-- 路径结果 -->
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3><i class="fas fa-lightbulb"></i> 智能推荐</h3>
-                        <div class="quick-actions">
-                            <div class="quick-action" onclick="findInfluencers()">
-                                <i class="fas fa-crown"></i>
-                                <p>影响力人物</p>
-                            </div>
-                            <div class="quick-action" onclick="findCommunities()">
-                                <i class="fas fa-users"></i>
-                                <p>社区发现</p>
-                            </div>
-                            <div class="quick-action" onclick="findBridges()">
-                                <i class="fas fa-bridge"></i>
-                                <p>关键连接者</p>
-                            </div>
-                            <div class="quick-action" onclick="recommendConnections()">
-                                <i class="fas fa-user-plus"></i>
-                                <p>推荐连接</p>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1240,9 +1173,6 @@ function initializeGraph() {
     network.on('doubleClick', handleNodeDoubleClick);
     network.on('hoverNode', handleNodeHover);
     network.on('blurNode', handleNodeBlur);
-    
-    // 初始加载一些数据
-    loadGraphData();
 }
 
 // ==================== 标签输入初始化 ====================
@@ -1440,7 +1370,7 @@ function updatePersonList(persons) {
 }
 
 function updatePersonSelects(persons) {
-    const selects = ['rel-from', 'rel-to', 'analysis-person', 'path-from', 'path-to'];
+    const selects = ['rel-from', 'rel-to'];
     
     selects.forEach(selectId => {
         const select = document.getElementById(selectId);
@@ -1588,655 +1518,9 @@ function addRecentRelation(fromUid, toUid, relType) {
     }
 }
 
-// ==================== 分析功能 ====================
-async function analyzePerson() {
-    const uid = document.getElementById('analysis-person').value;
-    if (!uid) {
-        showToast('请选择要分析的人物', 'error');
-        return;
-    }
-    
-    try {
-        // 获取人物的分析数据
-        const person = allPersons.find(p => p.uid === uid);
-        if (!person) {
-            showToast('找不到该人物', 'error');
-            return;
-        }
-        
-        const response = await apiRequest('/analytics/analyze-person', 'POST', {
-            person_name: person.name,
-            depth: 2
-        });
-        
-        const analysisData = response.data;
-        
-        // 显示分析结果
-        const resultContainer = document.getElementById('analysis-result');
-        
-        // 构建关系类型显示
-        let relationshipsHtml = '';
-        if (analysisData.statistics?.relationships_breakdown) {
-            relationshipsHtml = Object.entries(analysisData.statistics.relationships_breakdown)
-                .map(([type, count]) => `<div style="display: inline-block; margin-right: 15px;">
-                    <span style="font-size: 12px; color: var(--text-secondary);">${type}:</span> 
-                    <span style="font-weight: bold;">${count}</span>
-                </div>`)
-                .join('');
-        }
-        
-        // 构建组织信息显示
-        let orgHtml = '';
-        if (analysisData.organizations && analysisData.organizations.length > 0) {
-            const org = analysisData.organizations[0];
-            orgHtml = `
-                <div class="metric">
-                    <span class="metric-label">工作单位</span>
-                    <span class="metric-value" style="font-size: 14px;">${org.name || '-'}</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">职位</span>
-                    <span class="metric-value" style="font-size: 14px;">${org.position || '-'}</span>
-                </div>`;
-        }
-        
-        resultContainer.innerHTML = `
-            <div class="analysis-card">
-                <h4 style="color: var(--primary-color); margin-bottom: 15px;">
-                    ${person.name} 的网络分析
-                </h4>
-                <div class="metric">
-                    <span class="metric-label">总连接数</span>
-                    <span class="metric-value">${analysisData.statistics?.total_connections || 0}</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">同事数量</span>
-                    <span class="metric-value">${analysisData.statistics?.colleague_count || 0}</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">网络规模</span>
-                    <span class="metric-value">${analysisData.statistics?.network_size || 0}</span>
-                </div>
-                ${orgHtml}
-                ${relationshipsHtml ? `
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <h5 style="color: var(--text-secondary); margin-bottom: 10px;">关系类型</h5>
-                    ${relationshipsHtml}
-                </div>` : ''}
-            </div>
-        `;
-        
-        // 可以加载该人物的个人网络图
-        loadPersonGraph(person.name, uid);
-        
-    } catch (error) {
-        console.error('Analyze person failed:', error);
-        showToast('分析失败: ' + (error.message || '未知错误'), 'error');
-        document.getElementById('analysis-result').innerHTML = 
-            '<p style="color: var(--error-color);">分析失败，请稍后重试</p>';
-    }
-}
 
-function calculateMetrics(networkData) {
-    // 简单的指标计算
-    const directConnections = networkData.relationships?.length || 0;
-    const uniqueNodes = new Set();
-    
-    networkData.relationships?.forEach(rel => {
-        uniqueNodes.add(rel.from);
-        uniqueNodes.add(rel.to);
-    });
-    
-    const secondDegree = uniqueNodes.size - 1;
-    const density = directConnections / (secondDegree * (secondDegree - 1) / 2) || 0;
-    const influence = Math.round(directConnections * 10 + secondDegree * 5);
-    
-    return {
-        directConnections,
-        secondDegree,
-        density,
-        influence
-    };
-}
 
-async function findPath() {
-    const fromUid = document.getElementById('path-from').value;
-    const toUid = document.getElementById('path-to').value;
-    
-    if (!fromUid || !toUid) {
-        showToast('请选择起点和终点', 'error');
-        return;
-    }
-    
-    if (fromUid === toUid) {
-        showToast('起点和终点不能相同', 'error');
-        return;
-    }
-    
-    try {
-        const fromPerson = allPersons.find(p => p.uid === fromUid);
-        const toPerson = allPersons.find(p => p.uid === toUid);
-        
-        if (!fromPerson || !toPerson) {
-            showToast('找不到选中的人物', 'error');
-            return;
-        }
-        
-        const response = await apiRequest('/relationships/find-shortest-path', 'POST', {
-            from_uid: fromUid,
-            to_uid: toUid
-        });
-        
-        const pathData = response.data;
-        
-        // 显示路径结果
-        const resultContainer = document.getElementById('path-result');
-        if (pathData && pathData.nodes && pathData.nodes.length > 0) {
-            resultContainer.innerHTML = `
-                <div class="analysis-card">
-                    <h4 style="color: var(--primary-color); margin-bottom: 10px;">
-                        最短路径（${pathData.length || pathData.nodes.length - 1} 步）
-                    </h4>
-                    <div style="padding: 10px;">
-                        ${pathData.nodes.map((node, index) => {
-                            return `
-                                <span class="node-name">${node.name}</span>
-                                ${index < pathData.nodes.length - 1 ? ' → ' : ''}
-                            `;
-                        }).join('')}
-                    </div>
-                    ${pathData.relationships && pathData.relationships.length > 0 ? `
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <small style="color: var(--text-secondary);">关系类型: ${pathData.relationships.join(', ')}</small>
-                    </div>` : ''}
-                </div>
-            `;
-            
-            // 在图谱中高亮路径
-            highlightPath(pathData.nodes);
-        } else {
-            resultContainer.innerHTML = '<p style="color: var(--text-secondary);">未找到连接路径</p>';
-        }
-        
-    } catch (error) {
-        console.error('Find path failed:', error);
-        showToast('查找路径失败: ' + (error.message || '未知错误'), 'error');
-        document.getElementById('path-result').innerHTML = 
-            '<p style="color: var(--error-color);">查找失败，请稍后重试</p>';
-    }
-}
 
-// ==================== 图谱操作 ====================
-async function loadPersonGraph(name, uid) {
-    try {
-        const response = await apiRequest('/persons/network', 'POST', {
-            uid: uid,
-            depth: 2
-        });
-        const networkData = response.data;
-        
-        // 清空现有数据
-        nodes.clear();
-        edges.clear();
-        
-        // 添加中心节点
-        if (networkData.person) {
-            const person = networkData.person;
-            nodes.add({
-                id: person.uid,
-                label: person.name,
-                title: formatNodeTooltip(person),
-                color: '#ff6b6b',
-                size: 35
-            });
-        }
-        
-        // 添加同事节点
-        const addedNodes = new Set([networkData.person.uid]);
-        if (networkData.colleagues) {
-            networkData.colleagues.forEach(colleague => {
-                if (!addedNodes.has(colleague.uid)) {
-                    nodes.add({
-                        id: colleague.uid,
-                        label: colleague.name,
-                        title: formatNodeTooltip(colleague),
-                        color: '#4ecdc4',
-                        size: 25
-                    });
-                    addedNodes.add(colleague.uid);
-                    
-                    // 添加同事关系边
-                    edges.add({
-                        id: `${networkData.person.uid}-${colleague.uid}`,
-                        from: networkData.person.uid,
-                        to: colleague.uid,
-                        label: '同事',
-                        arrows: { to: { enabled: false } }
-                    });
-                }
-            });
-        }
-        
-        // 添加网络中的其他节点
-        if (networkData.network) {
-            networkData.network.forEach(node => {
-                if (!addedNodes.has(node.uid)) {
-                    nodes.add({
-                        id: node.uid,
-                        label: node.name,
-                        title: formatNodeTooltip(node),
-                        color: getNodeColor(node),
-                        size: 20
-                    });
-                    addedNodes.add(node.uid);
-                }
-            });
-        }
-        
-        // 聚焦到中心节点
-        setTimeout(() => {
-            network.focus(uid, {
-                scale: 1.5,
-                animation: {
-                    duration: 500,
-                    easingFunction: 'easeInOutQuad'
-                }
-            });
-        }, 100);
-        
-    } catch (error) {
-        console.error('Load person graph failed:', error);
-        showToast('加载个人网络失败: ' + (error.message || '未知错误'), 'error');
-    }
-}
-
-// 更新图谱显示（不调用API，只更新UI）
-function updateGraphDisplay(persons, organizations, relationships) {
-    // 清空现有数据
-    nodes.clear();
-    edges.clear();
-    
-    // 构建节点映射表
-    const nodeMap = new Map();
-    
-    // 添加人员节点
-    if (persons && persons.length > 0) {
-        persons.forEach(person => {
-            const nodeId = person.uid || person.id;
-            nodeMap.set(nodeId, person);
-            
-            nodes.add({
-                id: nodeId,
-                label: person.name,
-                title: formatNodeTooltip(person),
-                color: getNodeColor(person),
-                size: 25,
-                group: 'person',
-                shape: 'dot'
-            });
-        });
-    }
-    
-    // 添加组织节点
-    if (organizations && organizations.length > 0) {
-        organizations.forEach(org => {
-            const nodeId = org.uid || org.id;
-            nodeMap.set(nodeId, org);
-            
-            nodes.add({
-                id: nodeId,
-                label: org.name,
-                title: `${org.name}\n${org.industry || ''}`,
-                color: '#6c5ce7',
-                size: 30,
-                group: 'organization',
-                shape: 'square'
-            });
-        });
-    }
-    
-    // 添加关系边
-    if (relationships && relationships.length > 0) {
-        const addedEdges = new Set();
-        
-        relationships.forEach(rel => {
-            const edgeId = `${rel.from}-${rel.to}-${rel.type}`;
-            
-            // 避免重复边
-            if (!addedEdges.has(edgeId)) {
-                // 确保两端节点都存在
-                if (nodeMap.has(rel.from) && nodeMap.has(rel.to)) {
-                    edges.add({
-                        id: edgeId,
-                        from: rel.from,
-                        to: rel.to,
-                        label: getRelationLabel(rel.type),
-                        arrows: getRelationArrows(rel.type),
-                        color: getRelationColor(rel.type)
-                    });
-                    addedEdges.add(edgeId);
-                }
-            }
-        });
-        
-        console.log(`加载了 ${nodes.length} 个节点和 ${edges.length} 条边`);
-    }
-    
-    // 如果没有数据，显示提示
-    if (nodes.length === 0) {
-        showToast('暂无数据，请先创建一些测试数据', 'info');
-    }
-}
-
-// 保留原函数以兼容单独调用的情况
-async function loadGraphData() {
-    try {
-        const [personsResponse, orgsResponse, relationshipsResponse] = await Promise.all([
-            apiRequest('/persons/list', 'POST', {
-                page: 1,
-                page_size: 100
-            }),
-            apiRequest('/organizations/list', 'POST', {
-                page: 1,
-                page_size: 50
-            }).catch(err => {
-                console.warn('Failed to load organizations:', err);
-                return { data: { items: [] } };
-            }),
-            apiRequest('/relationships/list', 'POST', {
-                limit: 200
-            }).catch(err => {
-                console.warn('Failed to load relationships:', err);
-                return { data: { relationships: [] } };
-            })
-        ]);
-        
-        updateGraphDisplay(
-            personsResponse.data.items || [],
-            orgsResponse.data.items || [],
-            relationshipsResponse.data.relationships || []
-        );
-    } catch (error) {
-        console.error('Load graph data failed:', error);
-    }
-}
-
-function showPersonNetwork(centerUid, networkData) {
-    // 清空当前图谱
-    nodes.clear();
-    edges.clear();
-    
-    // 添加中心节点
-    const centerPerson = allPersons.find(p => p.uid === centerUid);
-    if (centerPerson) {
-        nodes.add({
-            id: centerUid,
-            label: centerPerson.name,
-            title: formatNodeTooltip(centerPerson),
-            color: '#ff6b6b',
-            size: 35
-        });
-    }
-    
-    // 添加相关节点和边
-    if (networkData.nodes) {
-        networkData.nodes.forEach(node => {
-            if (node.uid !== centerUid) {
-                nodes.add({
-                    id: node.uid,
-                    label: node.name,
-                    title: formatNodeTooltip(node),
-                    color: getNodeColor(node),
-                    size: 25
-                });
-            }
-        });
-    }
-    
-    if (networkData.relationships) {
-        networkData.relationships.forEach(rel => {
-            edges.add({
-                from: rel.from,
-                to: rel.to,
-                label: rel.type,
-                arrows: { to: { enabled: true, scaleFactor: 0.5 } }
-            });
-        });
-    }
-    
-    // 适应视图
-    setTimeout(() => {
-        network.fit();
-    }, 100);
-}
-
-function highlightNode(nodeId) {
-    const node = nodes.get(nodeId);
-    if (node) {
-        const originalColor = node.color;
-        nodes.update([{
-            id: nodeId,
-            color: '#ffd43b',
-            size: 35
-        }]);
-        
-        setTimeout(() => {
-            nodes.update([{
-                id: nodeId,
-                color: originalColor,
-                size: 25
-            }]);
-        }, 2000);
-    }
-}
-
-function highlightPath(path) {
-    // 重置所有节点和边
-    const allNodes = nodes.get();
-    const allEdges = edges.get();
-    
-    allNodes.forEach(node => {
-        node.color = getNodeColor(node);
-        node.size = 25;
-    });
-    nodes.update(allNodes);
-    
-    allEdges.forEach(edge => {
-        edge.color = getEdgeColor(edge.type);
-        edge.width = 2;
-    });
-    edges.update(allEdges);
-    
-    // 高亮路径节点
-    path.forEach(node => {
-        nodes.update([{
-            id: node.uid,
-            color: '#ffd43b',
-            size: 30
-        }]);
-    });
-    
-    // 高亮路径边
-    for (let i = 0; i < path.length - 1; i++) {
-        const fromId = path[i].uid;
-        const toId = path[i + 1].uid;
-        
-        allEdges.forEach(edge => {
-            if ((edge.from === fromId && edge.to === toId) ||
-                (edge.from === toId && edge.to === fromId)) {
-                edges.update({
-                    id: edge.id,
-                    color: '#ffd43b',
-                    width: 4
-                });
-            }
-        });
-    }
-}
-
-// ==================== 图谱事件处理 ====================
-function handleNodeClick(params) {
-    if (params.nodes.length > 0) {
-        selectedNodeId = params.nodes[0];
-        const node = nodes.get(selectedNodeId);
-        showNodeInfo(node);
-    }
-}
-
-function handleNodeRightClick(params) {
-    params.event.preventDefault();
-    
-    if (params.nodes.length > 0) {
-        selectedNodeId = params.nodes[0];
-        
-        const menu = document.getElementById('context-menu');
-        menu.style.left = params.event.pageX + 'px';
-        menu.style.top = params.event.pageY + 'px';
-        menu.classList.add('show');
-        
-        // 点击其他地方关闭菜单
-        document.addEventListener('click', () => {
-            menu.classList.remove('show');
-        }, { once: true });
-    }
-}
-
-function handleNodeDoubleClick(params) {
-    if (params.nodes.length > 0) {
-        expandNode();
-    }
-}
-
-function handleNodeHover(params) {
-    document.body.style.cursor = 'pointer';
-}
-
-function handleNodeBlur(params) {
-    document.body.style.cursor = 'default';
-}
-
-function showNodeInfo(node) {
-    const infoPanel = document.getElementById('graph-info');
-    const person = allPersons.find(p => p.uid === node.id);
-    
-    if (person) {
-        document.getElementById('node-info').innerHTML = `
-            <p><strong>${person.name}</strong></p>
-            ${person.occupation ? `<p>职业: ${person.occupation}</p>` : ''}
-            ${person.organization ? `<p>组织: ${person.organization}</p>` : ''}
-            ${person.age ? `<p>年龄: ${person.age}</p>` : ''}
-        `;
-        infoPanel.classList.add('show');
-        
-        setTimeout(() => {
-            infoPanel.classList.remove('show');
-        }, 5000);
-    }
-}
-
-// ==================== 图谱控制功能 ====================
-function resetGraph() {
-    network.fit();
-}
-
-function togglePhysics() {
-    physicsEnabled = !physicsEnabled;
-    network.setOptions({ physics: { enabled: physicsEnabled } });
-    showToast(physicsEnabled ? '物理引擎已开启' : '物理引擎已关闭');
-}
-
-function changeLayout() {
-    const layouts = ['physics', 'hierarchical', 'circular'];
-    const currentIndex = layouts.indexOf(currentLayout);
-    currentLayout = layouts[(currentIndex + 1) % layouts.length];
-    
-    let options = {};
-    
-    switch (currentLayout) {
-        case 'hierarchical':
-            options = {
-                layout: {
-                    hierarchical: {
-                        direction: 'UD',
-                        sortMethod: 'directed'
-                    }
-                }
-            };
-            break;
-        case 'circular':
-            // 需要手动计算圆形布局
-            const nodeIds = nodes.getIds();
-            const angle = (2 * Math.PI) / nodeIds.length;
-            const radius = 300;
-            
-            nodeIds.forEach((id, index) => {
-                const x = radius * Math.cos(index * angle);
-                const y = radius * Math.sin(index * angle);
-                network.moveNode(id, x, y);
-            });
-            break;
-        default:
-            options = {
-                layout: {
-                    hierarchical: false
-                }
-            };
-    }
-    
-    network.setOptions(options);
-    showToast(`切换到${currentLayout}布局`);
-}
-
-function exportGraph() {
-    const exportData = {
-        nodes: nodes.get(),
-        edges: edges.get(),
-        timestamp: new Date().toISOString()
-    };
-    
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `network_${Date.now()}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-    
-    showToast('图谱数据已导出');
-}
-
-function toggleFullscreen() {
-    const container = document.querySelector('.graph-container');
-    
-    if (!document.fullscreenElement) {
-        container.requestFullscreen();
-    } else {
-        document.exitFullscreen();
-    }
-}
-
-// ==================== 智能推荐功能 ====================
-async function findInfluencers() {
-    showToast('正在分析影响力人物...');
-    // TODO: 实现影响力分析
-}
-
-async function findCommunities() {
-    showToast('正在进行社区发现...');
-    // TODO: 实现社区发现算法
-}
-
-async function findBridges() {
-    showToast('正在查找关键连接者...');
-    // TODO: 实现桥接点分析
-}
-
-async function recommendConnections() {
-    showToast('正在推荐潜在连接...');
-    // TODO: 实现连接推荐
-}
 
 // ==================== 清空所有数据 ====================
 async function clearAllData() {
@@ -2763,7 +2047,7 @@ function deleteNode() {
 function expandNode() {
     if (selectedNodeId) {
         // 加载该节点的关系网络
-        analyzePerson();
+        showToast('扩展功能开发中...');
     }
 }
 
@@ -2845,6 +2129,240 @@ async function loadAllData() {
         console.log('所有数据加载完成 - 每个API只调用一次');
     } catch (error) {
         console.error('加载数据失败:', error);
+    }
+}
+
+// ==================== 图谱事件处理 ====================
+function handleNodeClick(params) {
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        const nodeData = nodes.get(selectedNodeId);
+        if (nodeData) {
+            showNodeInfo(nodeData);
+        }
+    }
+}
+
+function handleNodeRightClick(params) {
+    params.event.preventDefault();
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        const menu = document.getElementById('context-menu');
+        menu.style.left = params.event.pageX + 'px';
+        menu.style.top = params.event.pageY + 'px';
+        menu.classList.add('show');
+        
+        // 点击其他地方隐藏菜单
+        document.addEventListener('click', () => {
+            menu.classList.remove('show');
+        }, { once: true });
+    }
+}
+
+function handleNodeDoubleClick(params) {
+    if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        // 聚焦节点
+        network.focus(nodeId, {
+            scale: 2,
+            animation: {
+                duration: 1000,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function handleNodeHover(params) {
+    document.body.style.cursor = 'pointer';
+}
+
+function handleNodeBlur(params) {
+    document.body.style.cursor = 'default';
+}
+
+function showNodeInfo(nodeData) {
+    const infoPanel = document.getElementById('graph-info');
+    const infoContent = document.getElementById('node-info');
+    
+    infoContent.innerHTML = `
+        <div><strong>名称:</strong> ${nodeData.label}</div>
+        ${nodeData.title ? `<div><strong>详情:</strong><br>${nodeData.title.replace(/\n/g, '<br>')}</div>` : ''}
+    `;
+    
+    infoPanel.classList.add('show');
+    
+    // 3秒后自动隐藏
+    setTimeout(() => {
+        infoPanel.classList.remove('show');
+    }, 3000);
+}
+
+// ==================== 图谱数据加载 ====================
+async function loadGraphData() {
+    try {
+        const [personsResponse, orgsResponse, relationshipsResponse] = await Promise.all([
+            apiRequest('/persons/list', 'POST', {
+                page: 1,
+                page_size: 100
+            }),
+            apiRequest('/organizations/list', 'POST', {
+                page: 1,
+                page_size: 50
+            }).catch(err => {
+                console.warn('Failed to load organizations:', err);
+                return { data: { items: [] } };
+            }),
+            apiRequest('/relationships/list', 'POST', {
+                limit: 200
+            }).catch(err => {
+                console.warn('Failed to load relationships:', err);
+                return { data: { relationships: [] } };
+            })
+        ]);
+        
+        updateGraphDisplay(
+            personsResponse.data.items || [],
+            orgsResponse.data.items || [],
+            relationshipsResponse.data.relationships || []
+        );
+    } catch (error) {
+        console.error('Load graph data failed:', error);
+    }
+}
+
+function updateGraphDisplay(persons, organizations, relationships) {
+    // 清空现有数据
+    nodes.clear();
+    edges.clear();
+    
+    // 添加人物节点
+    if (persons && persons.length > 0) {
+        const personNodes = persons.map(person => ({
+            id: person.uid || person.id,
+            label: person.name,
+            title: formatNodeTooltip(person),
+            color: getNodeColor(person),
+            shape: 'dot',
+            size: 25
+        }));
+        nodes.add(personNodes);
+    }
+    
+    // 添加组织节点
+    if (organizations && organizations.length > 0) {
+        const orgNodes = organizations.map(org => ({
+            id: org.uid || org.id,
+            label: org.name,
+            title: `${org.name}\n${org.type || ''}\n${org.industry || ''}`,
+            color: {
+                background: '#9c27b0',
+                border: '#7b1fa2'
+            },
+            shape: 'box',
+            size: 30
+        }));
+        nodes.add(orgNodes);
+    }
+    
+    // 添加关系边
+    if (relationships && relationships.length > 0) {
+        const relationshipEdges = relationships.map(rel => ({
+            id: `${rel.from}-${rel.to}`,
+            from: rel.from,
+            to: rel.to,
+            label: rel.type,
+            arrows: getRelationArrows(rel.type),
+            color: getRelationColor(rel.type)
+        }));
+        
+        edges.add(relationshipEdges.filter(edge => {
+            // 确保边的两端节点都存在
+            return nodes.get(edge.from) && nodes.get(edge.to);
+        }));
+        
+        console.log(`加载了 ${nodes.length} 个节点和 ${edges.length} 条边`);
+    }
+    
+    // 如果没有数据，显示提示
+    if (nodes.length === 0) {
+        showToast('暂无数据，请先创建一些测试数据', 'info');
+    }
+}
+
+function highlightNode(nodeId) {
+    const node = nodes.get(nodeId);
+    if (node) {
+        const originalColor = node.color;
+        nodes.update([{
+            id: nodeId,
+            color: { background: '#ff6b6b', border: '#ff5252' }
+        }]);
+        
+        // 2秒后恢复原色
+        setTimeout(() => {
+            nodes.update([{
+                id: nodeId,
+                color: originalColor
+            }]);
+        }, 2000);
+    }
+}
+
+// ==================== 图谱控制功能 ====================
+function resetGraph() {
+    network.fit();
+    showToast('视图已重置', 'success');
+}
+
+function togglePhysics() {
+    physicsEnabled = !physicsEnabled;
+    network.setOptions({
+        physics: { enabled: physicsEnabled }
+    });
+    showToast(`物理引擎已${physicsEnabled ? '启用' : '禁用'}`, 'info');
+}
+
+function changeLayout() {
+    const layouts = ['physics', 'hierarchical', 'circular'];
+    currentLayout = layouts[(layouts.indexOf(currentLayout) + 1) % layouts.length];
+    
+    const layoutOptions = {
+        physics: { physics: { enabled: true } },
+        hierarchical: {
+            layout: {
+                hierarchical: {
+                    direction: 'UD',
+                    sortMethod: 'directed'
+                }
+            },
+            physics: { enabled: false }
+        },
+        circular: {
+            layout: { randomSeed: 2 },
+            physics: { enabled: false }
+        }
+    };
+    
+    network.setOptions(layoutOptions[currentLayout]);
+    showToast(`切换到${currentLayout}布局`, 'info');
+}
+
+function exportGraph() {
+    const canvas = document.querySelector('#network-graph canvas');
+    const link = document.createElement('a');
+    link.download = 'graph.png';
+    link.href = canvas.toDataURL();
+    link.click();
+    showToast('图谱已导出', 'success');
+}
+
+function toggleFullscreen() {
+    const container = document.querySelector('.graph-container');
+    if (!document.fullscreenElement) {
+        container.requestFullscreen();
+    } else {
+        document.exitFullscreen();
     }
 }
     </script>
