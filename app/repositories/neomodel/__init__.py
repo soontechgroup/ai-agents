@@ -12,6 +12,8 @@ from app.repositories.neomodel.project import ProjectRepository
 from app.repositories.neomodel.product import ProductRepository
 from app.repositories.neomodel.tag import TagRepository
 from app.repositories.neomodel.category import CategoryRepository
+from app.repositories.neomodel.knowledge import KnowledgeRepository
+from app.repositories.neomodel.entity import EntityRepository
 
 __all__ = [
     'NeomodelRepository',
@@ -22,5 +24,7 @@ __all__ = [
     'ProjectRepository',
     'ProductRepository',
     'TagRepository',
-    'CategoryRepository'
+    'CategoryRepository',
+    'KnowledgeRepository',
+    'EntityRepository'
 ]

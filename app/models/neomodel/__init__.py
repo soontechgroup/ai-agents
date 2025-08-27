@@ -20,6 +20,15 @@ from app.models.neomodel.relationships import (
     FamilyRel,
     KnowsRel
 )
+from app.models.neomodel.knowledge import (
+    KnowledgeNode,
+    KnowledgeRelationship,
+    ContradictionRelationship
+)
+from app.models.neomodel.entity import (
+    EntityNode,
+    CoOccurrenceRelationship
+)
 
 __all__ = [
     # Base
@@ -35,9 +44,16 @@ __all__ = [
     'Tag',
     'Category',
     
+    # Knowledge & Entity Nodes
+    'KnowledgeNode',
+    'EntityNode',
+    
     # Relationship Models
     'FriendshipRel',
     'WorksAtRel',
     'FamilyRel',
-    'KnowsRel'
+    'KnowsRel',
+    'KnowledgeRelationship',
+    'ContradictionRelationship',
+    'CoOccurrenceRelationship'
 ]
