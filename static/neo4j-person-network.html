@@ -1519,23 +1519,42 @@ async function createRelation() {
             person2_uid: toPerson.uid || toPerson.id || toPerson.name
         });
         
-        showToast('关系创建成功', 'success');
-        
-        // 添加到图谱
-        const newEdge = {
-            id: `${fromUid}-${toUid}`,
-            from: fromUid,
-            to: toUid,
-            label: getRelationLabel(relType),
-            arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-            color: getEdgeColor(relType)
-        };
-        edges.add(newEdge);
-        
-        // 统计数据会在后续刷新中更新
-        
-        // 添加到最近关系列表
-        addRecentRelation(fromUid, toUid, relType);
+        // 检查响应状态
+        if (response && response.code === 200) {
+            showToast('关系创建成功', 'success');
+            
+            // 添加到图谱
+            const newEdge = {
+                id: `${fromUid}-${toUid}`,
+                from: fromUid,
+                to: toUid,
+                label: getRelationLabel(relType),
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                color: getEdgeColor(relType)
+            };
+            edges.add(newEdge);
+            
+            // 添加到最近关系列表
+            addRecentRelation(fromUid, toUid, relType);
+            
+            // 立即重新加载关系数据以确保同步
+            setTimeout(async () => {
+                try {
+                    const relResponse = await apiRequest('/relationships/list', 'POST', {
+                        limit: 200
+                    });
+                    if (relResponse && relResponse.data) {
+                        // 更新关系显示但不重建整个图谱
+                        console.log('关系数据已重新加载:', relResponse.data.relationships);
+                    }
+                } catch (err) {
+                    console.warn('重新加载关系失败:', err);
+                }
+            }, 500);
+        } else {
+            showToast('关系创建失败: ' + (response?.message || '未知错误'), 'error');
+            console.error('关系创建失败:', response);
+        }
         
     } catch (error) {
         console.error('Create relation failed:', error);
@@ -2346,18 +2365,34 @@ async function generateTestData() {
                         const targetNodeId = existingNodes[randomIndex] === nodeId ? 
                             existingNodes[randomIndex + 1] : existingNodes[randomIndex];
                         
-                        // 添加边
+                        // 创建关系时调用后端API
                         const edgeId = `${nodeId}-${targetNodeId}`;
                         if (!edges.get(edgeId) && !edges.get(`${targetNodeId}-${nodeId}`)) {
-                            edges.add({
-                                id: edgeId,
-                                from: nodeId,
-                                to: targetNodeId,
-                                label: '认识',
-                                color: { color: '#666', highlight: '#00d9ff' },
-                                width: 1,
-                                smooth: { type: 'curvedCW', roundness: 0.2 }
-                            });
+                            try {
+                                // 调用后端API创建朋友关系
+                                const relResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                                    person1_uid: nodeId,
+                                    person2_uid: targetNodeId
+                                });
+                                
+                                // 只有在后端成功创建后才添加到前端显示
+                                if (relResponse && relResponse.code === 200) {
+                                    edges.add({
+                                        id: edgeId,
+                                        from: nodeId,
+                                        to: targetNodeId,
+                                        label: '认识',
+                                        color: { color: '#666', highlight: '#00d9ff' },
+                                        width: 1,
+                                        smooth: { type: 'curvedCW', roundness: 0.2 }
+                                    });
+                                    console.log(`成功创建关系: ${person.name} -> 现有人物`);
+                                } else {
+                                    console.warn(`关系创建失败: ${person.name} -> 现有人物`, relResponse);
+                                }
+                            } catch (err) {
+                                console.error(`创建关系时出错: ${person.name}`, err);
+                            }
                         }
                     }
                 }
@@ -2529,26 +2564,64 @@ async function generateRelationships() {
             if (fromId && toId) {
                 const edgeId = `${fromId}-${toId}-${rel.type}`;
                 
-                // 根据关系类型设置不同的颜色
-                let edgeColor = '#666';
-                if (rel.type === '同事') edgeColor = '#00d9ff';
-                else if (rel.type === '朋友') edgeColor = '#51cf66';
-                else if (rel.type === '雇佣') edgeColor = '#ff9800';
-                else if (rel.type === '下属') edgeColor = '#ff6b6b';
-                else if (rel.type === '投资') edgeColor = '#9c27b0';
-                
+                // 如果关系不存在，创建它
                 if (!edges.get(edgeId)) {
-                    edges.add({
-                        id: edgeId,
-                        from: fromId,
-                        to: toId,
-                        label: rel.label,
-                        color: { color: edgeColor, highlight: edgeColor },
-                        width: rel.type === '雇佣' ? 3 : 2,
-                        smooth: { type: 'curvedCW', roundness: 0.2 },
-                        arrows: rel.type === '下属' || rel.type === '雇佣' ? 'to' : undefined
-                    });
-                    successCount++;
+                    try {
+                        // 根据关系类型调用不同的API
+                        let apiResponse = null;
+                        
+                        if (rel.type === '朋友' || rel.type === '同事' || rel.type === '技术好友' || rel.type === '数据科学伙伴') {
+                            // 朋友关系 - 人与人之间
+                            apiResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                                person1_uid: fromId,
+                                person2_uid: toId
+                            });
+                        } else if (rel.type === '雇佣') {
+                            // 雇佣关系 - 人与组织之间
+                            const position = rel.label === '创始人' ? '创始人' : '员工';
+                            apiResponse = await apiRequest('/relationships/add-employment', 'POST', {
+                                person_uid: fromId,
+                                organization_uid: toId,
+                                position: position,
+                                department: null
+                            });
+                        } else {
+                            // 其他关系类型，暂时当作朋友关系处理
+                            apiResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                                person1_uid: fromId,
+                                person2_uid: toId
+                            });
+                        }
+                        
+                        // 如果API调用成功，添加到图谱
+                        if (apiResponse && apiResponse.code === 200) {
+                            // 根据关系类型设置不同的颜色
+                            let edgeColor = '#666';
+                            if (rel.type === '同事') edgeColor = '#00d9ff';
+                            else if (rel.type === '朋友') edgeColor = '#51cf66';
+                            else if (rel.type === '雇佣') edgeColor = '#ff9800';
+                            else if (rel.type === '下属') edgeColor = '#ff6b6b';
+                            else if (rel.type === '投资') edgeColor = '#9c27b0';
+                            
+                            edges.add({
+                                id: edgeId,
+                                from: fromId,
+                                to: toId,
+                                label: rel.label,
+                                color: { color: edgeColor, highlight: edgeColor },
+                                width: rel.type === '雇佣' ? 3 : 2,
+                                smooth: { type: 'curvedCW', roundness: 0.2 },
+                                arrows: rel.type === '下属' || rel.type === '雇佣' ? 'to' : undefined
+                            });
+                            successCount++;
+                        } else {
+                            console.error(`创建关系失败: ${rel.from} -> ${rel.to}`, apiResponse);
+                            failCount++;
+                        }
+                    } catch (error) {
+                        console.error(`创建关系异常: ${rel.from} -> ${rel.to}`, error);
+                        failCount++;
+                    }
                     
                     // 短暂延迟让用户看到添加过程
                     await new Promise(resolve => setTimeout(resolve, 100));
