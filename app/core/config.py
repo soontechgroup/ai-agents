@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://admin:password123@localhost:27018/?authSource=admin"
     MONGODB_DATABASE: str = "ai_agents"
     
+    # Neo4j 配置
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USERNAME: str = "neo4j"
+    NEO4J_PASSWORD: str = "password123"
+    NEO4J_DATABASE: str = "neo4j"
+    NEO4J_MAX_CONNECTION_LIFETIME: int = 3600
+    NEO4J_MAX_CONNECTION_POOL_SIZE: int = 50
+    NEO4J_CONNECTION_ACQUISITION_TIMEOUT: float = 60.0
+    
     # 应用配置
     PROJECT_NAME: str = "AI Agents API"
     VERSION: str = "1.0.0"
@@ -81,3 +90,4 @@ print(f"🚀 当前运行环境: {settings.ENVIRONMENT}")
 print(f"📊 调试模式: {'开启' if settings.DEBUG else '关闭'}")
 print(f"🔗 MySQL 数据库: {settings.DATABASE_URL}")
 print(f"🔗 MongoDB 数据库: {settings.MONGODB_URL}")
+print(f"🔗 Neo4j 数据库: {settings.NEO4J_URI}")

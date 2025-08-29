@@ -1,0 +1,2370 @@
+ <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo4j 人物关系网络</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #00d9ff;
+    --secondary-color: #008cc9;
+    --accent-color: #ff6b6b;
+    --success-color: #51cf66;
+    --warning-color: #ffd43b;
+    --danger-color: #ff6b6b;
+    --dark-bg: #1a1d24;
+    --card-bg: #2a2d35;
+    --border-color: #3a3d45;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #1a1d24 0%, #2d3142 100%);
+    min-height: 100vh;
+    color: var(--text-primary);
+}
+
+.container {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+.header {
+    background: var(--card-bg);
+    padding: 15px 30px;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo i {
+    font-size: 28px;
+    color: var(--primary-color);
+}
+
+.logo h1 {
+    font-size: 20px;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header-stats {
+    display: flex;
+    gap: 30px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-item i {
+    color: var(--primary-color);
+    font-size: 18px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-left: 5px;
+}
+
+/* Main Layout */
+.main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 320px;
+    background: var(--card-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-toggle {
+    position: absolute;
+    right: -15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.tab.active {
+    color: var(--primary-color);
+    background: rgba(0, 217, 255, 0.15);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.tab i {
+    font-size: 16px;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Graph Container */
+.graph-container {
+    flex: 1;
+    position: relative;
+    background: var(--dark-bg);
+}
+
+#network-graph {
+    width: 100%;
+    height: 100%;
+}
+
+/* Graph Controls */
+.graph-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 100;
+}
+
+.control-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.control-btn:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Graph Info Panel */
+.graph-info {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: var(--card-bg);
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    display: none;
+}
+
+.graph-info.show {
+    display: block;
+}
+
+/* Forms */
+.form-section {
+    margin-bottom: 25px;
+}
+
+.form-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-section h3 i {
+    color: var(--primary-color);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.1);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+/* Tags Input */
+.tags-input {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 5px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    min-height: 36px;
+}
+
+.tag {
+    padding: 4px 8px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 4px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tag .remove {
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.tags-input input {
+    flex: 1;
+    min-width: 100px;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.btn-secondary:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #ff5252;
+    transform: translateY(-2px);
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #00b8d4;
+    transform: translateY(-2px);
+}
+
+.btn-info {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-info:hover {
+    background: #1976d2;
+    transform: translateY(-2px);
+}
+
+.btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* Person List */
+.person-list {
+    margin-top: 15px;
+}
+
+.search-box {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.search-box input {
+    padding-right: 35px;
+}
+
+.search-box i {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+}
+
+.person-card {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.person-card:hover {
+    border-color: var(--primary-color);
+    transform: translateX(5px);
+}
+
+.person-card.selected {
+    background: rgba(0, 217, 255, 0.1);
+    border-color: var(--primary-color);
+}
+
+.person-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.person-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.person-role {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--secondary-color);
+    color: white;
+    border-radius: 3px;
+}
+
+.person-details {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.person-details span {
+    display: inline-block;
+    margin-right: 10px;
+}
+
+/* Relationship List */
+.relationship-item {
+    background: var(--dark-bg);
+    border-left: 3px solid var(--secondary-color);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.relationship-flow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.node-name {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.rel-type {
+    padding: 2px 8px;
+    background: var(--secondary-color);
+    color: white;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.arrow {
+    color: var(--text-secondary);
+}
+
+/* Analysis Panel */
+.analysis-card {
+    background: var(--dark-bg);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.metric:last-child {
+    border-bottom: none;
+}
+
+.metric-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.quick-action {
+    padding: 12px;
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.quick-action:hover {
+    border-color: var(--primary-color);
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.quick-action i {
+    font-size: 24px;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.quick-action p {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    font-size: 24px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* Loading Spinner */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0, 217, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    padding: 15px 20px;
+    background: var(--card-bg);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    display: none;
+    z-index: 2000;
+    animation: slideIn 0.3s ease;
+}
+
+.toast.show {
+    display: block;
+}
+
+.toast.success {
+    border-left-color: var(--success-color);
+}
+
+.toast.error {
+    border-left-color: var(--danger-color);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background: var(--card-bg);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    box-shadow: var(--shadow);
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+}
+
+.tooltip.show {
+    display: block;
+}
+
+/* Context Menu */
+.context-menu {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 0;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+}
+
+.context-menu.show {
+    display: block;
+}
+
+.context-menu-item {
+    padding: 8px 15px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.context-menu-item:hover {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.context-menu-item i {
+    margin-right: 8px;
+    color: var(--primary-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        position: absolute;
+        z-index: 100;
+        height: 100%;
+        transform: translateX(-100%);
+    }
+    
+    .sidebar.open {
+        transform: translateX(0);
+    }
+    
+    .header-stats {
+        display: none;
+    }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--dark-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+
+/* Animations */
+.fade-in {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 217, 255, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 217, 255, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 217, 255, 0);
+    }
+}
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-project-diagram"></i>
+                <h1>Neo4j 人物关系网络</h1>
+            </div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <i class="fas fa-users"></i>
+                    <span class="stat-value" id="stat-persons">0</span>
+                    <span class="stat-label">人物</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-link"></i>
+                    <span class="stat-value" id="stat-relations">0</span>
+                    <span class="stat-label">关系</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-building"></i>
+                    <span class="stat-value" id="stat-orgs">0</span>
+                    <span class="stat-label">组织</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" data-tab="person">
+                        <i class="fas fa-user"></i>
+                        <span>人物</span>
+                    </button>
+                    <button class="tab" data-tab="relation">
+                        <i class="fas fa-link"></i>
+                        <span>关系</span>
+                    </button>
+                </div>
+
+                <!-- Person Tab -->
+                <div class="tab-content active" id="person-tab">
+                    <div class="form-section">
+                        <h3><i class="fas fa-user-plus"></i> 创建人物</h3>
+                        <div class="form-group">
+                            <label>姓名 *</label>
+                            <input type="text" id="person-name" placeholder="输入姓名">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>年龄</label>
+                                <input type="number" id="person-age" placeholder="年龄">
+                            </div>
+                            <div class="form-group">
+                                <label>性别</label>
+                                <select id="person-gender">
+                                    <option value="">请选择</option>
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>职业</label>
+                            <input type="text" id="person-occupation" placeholder="如：软件工程师">
+                        </div>
+                        <div class="form-group">
+                            <label>组织</label>
+                            <input type="text" id="person-organization" placeholder="所属公司或机构">
+                        </div>
+                        <div class="form-group">
+                            <label>技能标签</label>
+                            <div class="tags-input" id="skills-tags">
+                                <input type="text" placeholder="输入技能后按回车">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>兴趣爱好</label>
+                            <div class="tags-input" id="interests-tags">
+                                <input type="text" placeholder="输入兴趣后按回车">
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="createPerson()">
+                                <i class="fas fa-save"></i> 创建
+                            </button>
+                            <button class="btn btn-secondary" onclick="clearPersonForm()">
+                                <i class="fas fa-redo"></i> 重置
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-users"></i> 人物列表</h3>
+                        <div class="search-box">
+                            <input type="text" id="person-search" placeholder="搜索人物...">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="person-list" id="person-list">
+                            <!-- 人物卡片将动态加载 -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-magic"></i> 快速操作</h3>
+                        <button class="btn btn-success btn-block" onclick="generateTestData()">
+                            <i class="fas fa-database"></i> 生成测试数据
+                        </button>
+                        <button class="btn btn-primary btn-block" onclick="generateOrganizationData()" style="margin-top: 10px;">
+                            <i class="fas fa-building"></i> 生成组织数据
+                        </button>
+                        <button class="btn btn-info btn-block" onclick="generateRelationships()" style="margin-top: 10px;">
+                            <i class="fas fa-link"></i> 生成关系网络
+                        </button>
+                        <button class="btn btn-danger btn-block" onclick="clearAllData()" style="margin-top: 10px;">
+                            <i class="fas fa-trash-alt"></i> 清空所有数据
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Relation Tab -->
+                <div class="tab-content" id="relation-tab">
+                    <div class="form-section">
+                        <h3><i class="fas fa-link"></i> 创建关系</h3>
+                        <div class="form-group">
+                            <label>起始人物</label>
+                            <select id="rel-from">
+                                <option value="">选择人物</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>关系类型</label>
+                            <select id="rel-type">
+                                <option value="KNOWS">认识</option>
+                                <option value="FRIEND_OF">朋友</option>
+                                <option value="COLLEAGUE_OF">同事</option>
+                                <option value="REPORTS_TO">汇报给</option>
+                                <option value="MANAGES">管理</option>
+                                <option value="PARTNER_OF">伴侣</option>
+                                <option value="FAMILY_OF">家人</option>
+                                <option value="MENTOR_OF">导师</option>
+                                <option value="COLLABORATES_WITH">合作</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>目标人物</label>
+                            <select id="rel-to">
+                                <option value="">选择人物</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>关系强度</label>
+                            <input type="range" id="rel-strength" min="1" max="5" value="3">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
+                                <span>弱</span>
+                                <span>强</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="createRelation()">
+                            <i class="fas fa-plus"></i> 创建关系
+                        </button>
+                    </div>
+
+                    <div class="form-section">
+                        <h3><i class="fas fa-history"></i> 最近关系</h3>
+                        <div id="recent-relations">
+                            <!-- 最近创建的关系 -->
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Graph Container -->
+            <div class="graph-container">
+                <div id="network-graph"></div>
+                
+                <!-- Graph Controls -->
+                <div class="graph-controls">
+                    <button class="control-btn" onclick="resetGraph()" title="重置视图">
+                        <i class="fas fa-compress"></i>
+                    </button>
+                    <button class="control-btn" onclick="togglePhysics()" title="切换物理引擎">
+                        <i class="fas fa-atom"></i>
+                    </button>
+                    <button class="control-btn" onclick="changeLayout()" title="切换布局">
+                        <i class="fas fa-sitemap"></i>
+                    </button>
+                    <button class="control-btn" onclick="exportGraph()" title="导出图谱">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="control-btn" onclick="toggleFullscreen()" title="全屏">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+
+                <!-- Graph Info Panel -->
+                <div class="graph-info" id="graph-info">
+                    <h4>节点信息</h4>
+                    <div id="node-info"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" onclick="editNode()">
+            <i class="fas fa-edit"></i> 编辑节点
+        </div>
+        <div class="context-menu-item" onclick="deleteNode()">
+            <i class="fas fa-trash"></i> 删除节点
+        </div>
+        <div class="context-menu-item" onclick="expandNode()">
+            <i class="fas fa-expand-alt"></i> 扩展关系
+        </div>
+        <div class="context-menu-item" onclick="hideNode()">
+            <i class="fas fa-eye-slash"></i> 隐藏节点
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+// ==================== 全局变量 ====================
+const API_BASE_URL = 'http://localhost:8000/api/v1/graph';
+let network = null;
+let nodes = null;
+let edges = null;
+let allPersons = [];
+let selectedNodeId = null;
+let physicsEnabled = true;
+let currentLayout = 'physics';
+
+// ==================== 初始化 ====================
+document.addEventListener('DOMContentLoaded', () => {
+    initializeTabs();
+    initializeGraph();
+    initializeTagsInput();
+    updateGenerateButtonText();  // 初始化生成按钮文字
+    
+    // 绑定搜索事件
+    document.getElementById('person-search').addEventListener('input', filterPersonList);
+    
+    // 初始加载数据 - 统一调用
+    loadAllData();
+});
+
+// ==================== Tab切换 ====================
+function initializeTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            
+            // 切换tab状态
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // 切换内容显示
+            contents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === `${targetTab}-tab`) {
+                    content.classList.add('active');
+                }
+            });
+        });
+    });
+}
+
+// ==================== 图谱初始化 ====================
+function initializeGraph() {
+    const container = document.getElementById('network-graph');
+    
+    // 创建数据集
+    nodes = new vis.DataSet([]);
+    edges = new vis.DataSet([]);
+    
+    // 配置选项
+    const options = {
+        nodes: {
+            shape: 'dot',
+            size: 25,
+            font: {
+                size: 14,
+                color: '#ffffff',
+                strokeWidth: 3,
+                strokeColor: '#2a2d35'
+            },
+            borderWidth: 2,
+            shadow: true,
+            scaling: {
+                min: 20,
+                max: 40
+            }
+        },
+        edges: {
+            width: 2,
+            color: {
+                color: '#848484',
+                highlight: '#00d9ff',
+                hover: '#00d9ff'
+            },
+            smooth: {
+                type: 'curvedCW',
+                roundness: 0.2
+            },
+            arrows: {
+                to: {
+                    enabled: true,
+                    scaleFactor: 0.5
+                }
+            },
+            font: {
+                size: 11,
+                color: '#a0a0a0',
+                strokeWidth: 3,
+                strokeColor: '#2a2d35'
+            }
+        },
+        physics: {
+            enabled: true,
+            barnesHut: {
+                gravitationalConstant: -8000,
+                centralGravity: 0.3,
+                springLength: 120,
+                springConstant: 0.04,
+                damping: 0.09,
+                avoidOverlap: 0.1
+            }
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200,
+            hideEdgesOnDrag: true
+        }
+    };
+    
+    // 创建网络
+    network = new vis.Network(container, { nodes, edges }, options);
+    
+    // 绑定事件
+    network.on('click', handleNodeClick);
+    network.on('oncontext', handleNodeRightClick);
+    network.on('doubleClick', handleNodeDoubleClick);
+    network.on('hoverNode', handleNodeHover);
+    network.on('blurNode', handleNodeBlur);
+}
+
+// ==================== 标签输入初始化 ====================
+function initializeTagsInput() {
+    const skillsInput = document.querySelector('#skills-tags input');
+    const interestsInput = document.querySelector('#interests-tags input');
+    
+    [skillsInput, interestsInput].forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = input.value.trim();
+                if (value) {
+                    addTag(input.parentElement, value);
+                    input.value = '';
+                }
+            }
+        });
+    });
+}
+
+function addTag(container, text) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.innerHTML = `
+        ${text}
+        <span class="remove" onclick="this.parentElement.remove()">×</span>
+    `;
+    container.insertBefore(tag, container.querySelector('input'));
+}
+
+function getTags(containerId) {
+    const tags = [];
+    document.querySelectorAll(`#${containerId} .tag`).forEach(tag => {
+        tags.push(tag.textContent.replace('×', '').trim());
+    });
+    return tags;
+}
+
+// ==================== API请求 ====================
+async function apiRequest(endpoint, method = 'GET', data = null) {
+    const options = {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    };
+    
+    if (data && method !== 'GET') {
+        options.body = JSON.stringify(data);
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.message || result.detail || 'API请求失败');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('API Error:', error);
+        showToast(error.message, 'error');
+        throw error;
+    }
+}
+
+// ==================== 统计数据更新 ====================
+// 更新统计显示（不调用API，只更新UI）
+function updateStatisticsDisplay(stats) {
+    if (!stats) return;
+    
+    const personCount = stats.nodes?.Person || 0;
+    const relationCount = stats.total_relationships || 0;
+    const orgCount = stats.nodes?.Organization || 0;
+    
+    document.getElementById('stat-persons').textContent = personCount;
+    document.getElementById('stat-relations').textContent = relationCount;
+    document.getElementById('stat-orgs').textContent = orgCount;
+}
+
+// 保留原函数以兼容单独调用的情况
+async function loadStatistics() {
+    try {
+        const response = await apiRequest('/analytics/get-statistics', 'POST', {
+            include_nodes: true,
+            include_relationships: true
+        });
+        
+        updateStatisticsDisplay(response.data);
+    } catch (error) {
+        console.error('Failed to load statistics:', error);
+    }
+}
+
+// ==================== 人物管理 ====================
+async function createPerson() {
+    const name = document.getElementById('person-name').value.trim();
+    if (!name) {
+        showToast('请输入姓名', 'error');
+        return;
+    }
+    
+    const personData = {
+        name: name,
+        age: parseInt(document.getElementById('person-age').value) || null,
+        gender: document.getElementById('person-gender').value || null,
+        occupation: document.getElementById('person-occupation').value || null,
+        organization: document.getElementById('person-organization').value || null,
+        skills: getTags('skills-tags'),
+        interests: getTags('interests-tags')
+    };
+    
+    try {
+        const response = await apiRequest('/memory/persons/create', 'POST', personData);
+        showToast('人物创建成功', 'success');
+        
+        // 清空表单
+        clearPersonForm();
+        
+        // 只刷新必要的部分
+        await loadPersonList();
+        // 统计数据会在loadPersonList中更新，不需要重复调用
+        
+        // 添加到图谱
+        const newNode = {
+            id: response.data.uid,
+            label: response.data.name,
+            title: formatNodeTooltip(response.data),
+            color: getNodeColor(response.data),
+            size: 25
+        };
+        nodes.add(newNode);
+        
+    } catch (error) {
+        console.error('Create person failed:', error);
+    }
+}
+
+function clearPersonForm() {
+    document.getElementById('person-name').value = '';
+    document.getElementById('person-age').value = '';
+    document.getElementById('person-gender').value = '';
+    document.getElementById('person-occupation').value = '';
+    document.getElementById('person-organization').value = '';
+    
+    // 清空标签
+    ['skills-tags', 'interests-tags'].forEach(id => {
+        const container = document.getElementById(id);
+        container.querySelectorAll('.tag').forEach(tag => tag.remove());
+    });
+}
+
+// 保留原函数以兼容单独调用的情况（如创建人员后的刷新）
+async function loadPersonList() {
+    try {
+        const response = await apiRequest('/memory/persons/list', 'POST', {
+            page: 1,
+            page_size: 100
+        });
+        
+        allPersons = response.data.items || [];
+        updatePersonList(allPersons);
+        updatePersonSelects(allPersons);
+        
+        // 如果是单独调用，也更新统计数据
+        await loadStatistics();
+        
+    } catch (error) {
+        console.error('Load persons failed:', error);
+    }
+}
+
+function updatePersonList(persons) {
+    const listContainer = document.getElementById('person-list');
+    
+    if (persons.length === 0) {
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">暂无数据</p>';
+        return;
+    }
+    
+    listContainer.innerHTML = persons.map(person => `
+        <div class="person-card" onclick="selectPerson('${person.uid}')">
+            <div class="person-header">
+                <span class="person-name">${person.name}</span>
+                ${person.occupation ? `<span class="person-role">${person.occupation}</span>` : ''}
+            </div>
+            <div class="person-details">
+                ${person.age ? `<span><i class="fas fa-birthday-cake"></i> ${person.age}岁</span>` : ''}
+                ${person.organization ? `<span><i class="fas fa-building"></i> ${person.organization}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function updatePersonSelects(persons) {
+    const selects = ['rel-from', 'rel-to'];
+    
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (select) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">请选择</option>' + 
+                persons.map(p => `<option value="${p.uid}">${p.name}</option>`).join('');
+            select.value = currentValue;
+        }
+    });
+}
+
+function filterPersonList() {
+    const searchTerm = document.getElementById('person-search').value.toLowerCase();
+    const filtered = allPersons.filter(p => 
+        p.name.toLowerCase().includes(searchTerm) ||
+        (p.occupation && p.occupation.toLowerCase().includes(searchTerm)) ||
+        (p.organization && p.organization.toLowerCase().includes(searchTerm))
+    );
+    updatePersonList(filtered);
+}
+
+function selectPerson(uid) {
+    // 高亮选中的卡片
+    document.querySelectorAll('.person-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+    
+    // 在图谱中聚焦该节点
+    if (network && nodes.get(uid)) {
+        network.focus(uid, {
+            scale: 1.5,
+            animation: {
+                duration: 500,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+        
+        // 高亮该节点
+        highlightNode(uid);
+    }
+}
+
+// ==================== 关系管理 ====================
+async function createRelation() {
+    const fromUid = document.getElementById('rel-from').value;
+    const toUid = document.getElementById('rel-to').value;
+    const relType = document.getElementById('rel-type').value;
+    const strength = document.getElementById('rel-strength').value;
+    
+    if (!fromUid || !toUid) {
+        showToast('请选择起始和目标人物', 'error');
+        return;
+    }
+    
+    if (fromUid === toUid) {
+        showToast('不能创建自己到自己的关系', 'error');
+        return;
+    }
+    
+    // 根据关系类型调用不同的API
+    try {
+        // 获取人物名称
+        const fromPerson = allPersons.find(p => p.uid === fromUid);
+        const toPerson = allPersons.find(p => p.uid === toUid);
+        
+        if (!fromPerson || !toPerson) {
+            showToast('找不到选中的人物', 'error');
+            return;
+        }
+        
+        // 使用 UID 而不是名字
+        const response = await apiRequest('/memory/relationships/add-friendship', 'POST', {
+            person1_uid: fromPerson.uid || fromPerson.id || fromPerson.name,
+            person2_uid: toPerson.uid || toPerson.id || toPerson.name
+        });
+        
+        // 检查响应状态
+        if (response && response.code === 200) {
+            showToast('关系创建成功', 'success');
+            
+            // 添加到图谱
+            const newEdge = {
+                id: `${fromUid}-${toUid}`,
+                from: fromUid,
+                to: toUid,
+                label: getRelationLabel(relType),
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                color: getEdgeColor(relType)
+            };
+            edges.add(newEdge);
+            
+            // 添加到最近关系列表
+            addRecentRelation(fromUid, toUid, relType);
+            
+            // 立即重新加载关系数据以确保同步
+            setTimeout(async () => {
+                try {
+                    const relResponse = await apiRequest('/memory/relationships/list', 'POST', {
+                        limit: 200
+                    });
+                    if (relResponse && relResponse.data) {
+                        // 更新关系显示但不重建整个图谱
+                        console.log('关系数据已重新加载:', relResponse.data.relationships);
+                    }
+                } catch (err) {
+                    console.warn('重新加载关系失败:', err);
+                }
+            }, 500);
+        } else {
+            showToast('关系创建失败: ' + (response?.message || '未知错误'), 'error');
+            console.error('关系创建失败:', response);
+        }
+        
+    } catch (error) {
+        console.error('Create relation failed:', error);
+    }
+}
+
+function addRecentRelation(fromUid, toUid, relType) {
+    const container = document.getElementById('recent-relations');
+    const fromPerson = allPersons.find(p => p.uid === fromUid);
+    const toPerson = allPersons.find(p => p.uid === toUid);
+    
+    if (fromPerson && toPerson) {
+        const item = document.createElement('div');
+        item.className = 'relationship-item fade-in';
+        item.innerHTML = `
+            <div class="relationship-flow">
+                <span class="node-name">${fromPerson.name}</span>
+                <span class="arrow">→</span>
+                <span class="rel-type">${getRelationLabel(relType)}</span>
+                <span class="arrow">→</span>
+                <span class="node-name">${toPerson.name}</span>
+            </div>
+        `;
+        
+        container.insertBefore(item, container.firstChild);
+        
+        // 只保留最近5条
+        while (container.children.length > 5) {
+            container.removeChild(container.lastChild);
+        }
+    }
+}
+
+
+
+
+
+// ==================== 清空所有数据 ====================
+async function clearAllData() {
+    // 显示确认对话框
+    if (!confirm('⚠️ 警告：此操作将删除所有数据且不可恢复！\n\n确定要清空所有数据吗？')) {
+        return;
+    }
+    
+    try {
+        showToast('正在清空数据...', 'info');
+        
+        // 调用清空API
+        const response = await apiRequest('/analytics/clear-all', 'DELETE');
+        
+        if (response.success) {
+            // 清空前端的数据
+            nodes.clear();
+            edges.clear();
+            allPersons = [];
+            
+            // 刷新所有显示 - 使用统一函数
+            await loadAllData();
+            
+            // 清空搜索框
+            document.getElementById('person-search').value = '';
+            
+            showToast('所有数据已成功清空', 'success');
+        } else {
+            showToast('清空数据失败: ' + (response.message || '未知错误'), 'error');
+        }
+    } catch (error) {
+        console.error('Clear all data failed:', error);
+        showToast('清空数据失败', 'error');
+    }
+}
+
+// ==================== 测试数据生成 ====================
+// 测试人物数据池（包含更详细的组织信息）
+const testPersons = [
+    { name: "张伟", age: 32, gender: "male", occupation: "产品经理", company: "阿里巴巴", department: "产品部", position: "高级产品经理", skills: ["产品设计", "数据分析"], interests: ["阅读", "健身"] },
+    { name: "李娜", age: 28, gender: "female", occupation: "UI设计师", company: "字节跳动", department: "设计中心", position: "UI设计师", skills: ["Figma", "Sketch"], interests: ["绘画", "摄影"] },
+    { name: "王强", age: 35, gender: "male", occupation: "技术总监", company: "阿里巴巴", department: "技术部", position: "技术总监", skills: ["架构设计", "团队管理"], interests: ["编程", "开源"] },
+    { name: "刘芳", age: 30, gender: "female", occupation: "数据分析师", company: "腾讯", department: "数据中心", position: "高级数据分析师", skills: ["Python", "SQL"], interests: ["数据挖掘", "机器学习"] },
+    { name: "陈明", age: 27, gender: "male", occupation: "前端工程师", company: "阿里巴巴", department: "前端组", position: "前端工程师", skills: ["React", "Vue"], interests: ["游戏", "音乐"] },
+    { name: "赵丽", age: 33, gender: "female", occupation: "市场总监", company: "京东", department: "市场部", position: "市场总监", skills: ["营销策略", "品牌管理"], interests: ["旅行", "美食"] },
+    { name: "孙浩", age: 29, gender: "male", occupation: "算法工程师", company: "百度", department: "AI实验室", position: "算法工程师", skills: ["深度学习", "计算机视觉"], interests: ["研究", "技术分享"] },
+    { name: "周婷", age: 26, gender: "female", occupation: "HR经理", company: "字节跳动", department: "人力资源部", position: "HR经理", skills: ["招聘", "组织发展"], interests: ["心理学", "瑜伽"] },
+    { name: "马云", age: 45, gender: "male", occupation: "CEO", company: "阿里巴巴", department: "管理层", position: "董事长", skills: ["战略规划", "企业管理"], interests: ["太极", "公益"] },
+    { name: "林静", age: 31, gender: "female", occupation: "投资经理", company: "红杉资本", department: "投资部", position: "投资经理", skills: ["投资分析", "风险控制"], interests: ["金融", "艺术"] },
+    { name: "黄磊", age: 29, gender: "male", occupation: "后端工程师", company: "腾讯", department: "后端开发部", position: "高级工程师", skills: ["Go", "Kubernetes"], interests: ["开源", "摄影"] },
+    { name: "杨柳", age: 27, gender: "female", occupation: "内容运营", company: "小红书", department: "运营部", position: "内容运营经理", skills: ["文案", "数据分析"], interests: ["写作", "旅行"] }
+];
+
+// 测试组织数据
+const testOrganizations = [
+    { name: "阿里巴巴", type: "科技公司", industry: "电商/云计算", size: "10万+", founded: "1999", description: "全球领先的电商和云计算公司" },
+    { name: "腾讯", type: "科技公司", industry: "社交/游戏", size: "10万+", founded: "1998", description: "中国最大的社交和游戏公司" },
+    { name: "字节跳动", type: "科技公司", industry: "内容/社交", size: "10万+", founded: "2012", description: "全球领先的内容平台公司" },
+    { name: "百度", type: "科技公司", industry: "搜索/AI", size: "5万+", founded: "2000", description: "中国最大的搜索引擎和AI公司" },
+    { name: "京东", type: "电商公司", industry: "电商/物流", size: "20万+", founded: "1998", description: "中国领先的电商和物流公司" },
+    { name: "红杉资本", type: "投资机构", industry: "风险投资", size: "500+", founded: "1972", description: "全球顶级风险投资机构" },
+    { name: "小红书", type: "社交平台", industry: "社交电商", size: "5000+", founded: "2013", description: "生活方式分享社区" }
+];
+
+// 记录当前要创建的人物索引
+let currentPersonIndex = 0;
+let isCreating = false;  // 防止重复点击
+
+async function generateTestData() {
+    // 防止重复点击
+    if (isCreating) {
+        showToast('正在创建中，请稍候...', 'info');
+        return;
+    }
+    
+    // 如果所有测试数据都已创建，重置索引
+    if (currentPersonIndex >= testPersons.length) {
+        currentPersonIndex = 0;
+        showToast('已创建所有测试人物，将从头开始', 'info');
+    }
+    
+    const person = testPersons[currentPersonIndex];
+    
+    try {
+        isCreating = true;
+        
+        // 显示正在创建的人物信息
+        showToast(`正在创建人物 (${currentPersonIndex + 1}/${testPersons.length}): ${person.name}`, 'info');
+        
+        // 创建人物
+        const response = await apiRequest('/memory/persons/create', 'POST', person);
+        
+        if (response.success) {
+            // 如果创建成功，立即添加到图谱中显示
+            if (response.data && (response.data.uid || response.data.id)) {
+                const nodeId = response.data.uid || response.data.id;
+                
+                // 添加到图谱节点
+                const newNode = {
+                    id: nodeId,
+                    label: person.name,
+                    title: `${person.name}\n${person.occupation}\n${person.age}岁`,
+                    color: {
+                        background: person.gender === 'female' ? '#ff6b6b' : '#00d9ff',
+                        border: person.gender === 'female' ? '#ff5252' : '#00b8d4',
+                        highlight: {
+                            background: person.gender === 'female' ? '#ff8a80' : '#40c4ff',
+                            border: person.gender === 'female' ? '#ff5252' : '#00b8d4'
+                        }
+                    },
+                    font: { color: '#ffffff' },
+                    borderWidth: 2,
+                    shape: 'dot',
+                    size: 20
+                };
+                
+                // 检查节点是否已存在
+                if (!nodes.get(nodeId)) {
+                    nodes.add(newNode);
+                    
+                    // 添加一些随机关系（如果有其他节点）
+                    const existingNodes = nodes.getIds();
+                    if (existingNodes.length > 1) {
+                        // 随机选择一个已存在的节点建立关系
+                        const randomIndex = Math.floor(Math.random() * (existingNodes.length - 1));
+                        const targetNodeId = existingNodes[randomIndex] === nodeId ? 
+                            existingNodes[randomIndex + 1] : existingNodes[randomIndex];
+                        
+                        // 创建关系时调用后端API
+                        const edgeId = `${nodeId}-${targetNodeId}`;
+                        if (!edges.get(edgeId) && !edges.get(`${targetNodeId}-${nodeId}`)) {
+                            try {
+                                // 调用后端API创建朋友关系
+                                const relResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
+                                    person1_uid: nodeId,
+                                    person2_uid: targetNodeId
+                                });
+                                
+                                // 只有在后端成功创建后才添加到前端显示
+                                if (relResponse && relResponse.code === 200) {
+                                    edges.add({
+                                        id: edgeId,
+                                        from: nodeId,
+                                        to: targetNodeId,
+                                        label: '认识',
+                                        color: { color: '#666', highlight: '#00d9ff' },
+                                        width: 1,
+                                        smooth: { type: 'curvedCW', roundness: 0.2 }
+                                    });
+                                    console.log(`成功创建关系: ${person.name} -> 现有人物`);
+                                } else {
+                                    console.warn(`关系创建失败: ${person.name} -> 现有人物`, relResponse);
+                                }
+                            } catch (err) {
+                                console.error(`创建关系时出错: ${person.name}`, err);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            showToast(`✅ 成功创建: ${person.name} (${person.occupation})`, 'success');
+            currentPersonIndex++;
+            
+            // 只刷新人员列表，避免重复加载
+            await loadPersonList();
+            
+            // 更新按钮文字（可选）
+            updateGenerateButtonText();
+            
+        } else {
+            showToast(`❌ 创建失败: ${person.name}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error(`创建 ${person.name} 失败:`, error);
+        showToast('创建人物失败', 'error');
+    } finally {
+        isCreating = false;
+    }
+}
+
+// 更新生成按钮的文字
+function updateGenerateButtonText() {
+    const btn = document.querySelector('button[onclick="generateTestData()"]');
+    if (btn) {
+        if (currentPersonIndex >= testPersons.length) {
+            btn.innerHTML = '<i class="fas fa-database"></i> 生成测试数据（重新开始）';
+        } else {
+            const nextPerson = testPersons[currentPersonIndex];
+            btn.innerHTML = `<i class="fas fa-user-plus"></i> 添加: ${nextPerson.name} (${currentPersonIndex + 1}/${testPersons.length})`;
+        }
+    }
+}
+
+// ==================== 生成组织数据 ====================
+let currentOrgIndex = 0;
+async function generateOrganizationData() {
+    if (currentOrgIndex >= testOrganizations.length) {
+        currentOrgIndex = 0;
+        showToast('已创建所有组织，将从头开始', 'info');
+    }
+    
+    const org = testOrganizations[currentOrgIndex];
+    
+    try {
+        showToast(`正在创建组织: ${org.name}`, 'info');
+        
+        // 创建组织节点（使用创建人物的接口，但添加组织标签）
+        const orgNode = {
+            name: org.name,
+            age: 0,  // 组织没有年龄
+            gender: "other",
+            occupation: org.type,
+            company: org.name,
+            bio: org.description,
+            skills: [org.industry],
+            tags: ["组织", org.type, `成立于${org.founded}`]
+        };
+        
+        const response = await apiRequest('/memory/persons/create', 'POST', orgNode);
+        
+        if (response.success) {
+            // 添加组织节点到图谱
+            if (response.data && (response.data.uid || response.data.id)) {
+                const nodeId = response.data.uid || response.data.id;
+                
+                const newNode = {
+                    id: nodeId,
+                    label: org.name,
+                    title: `${org.name}\n${org.type}\n${org.industry}`,
+                    color: {
+                        background: '#9c27b0',  // 紫色表示组织
+                        border: '#7b1fa2'
+                    },
+                    font: { color: '#ffffff' },
+                    shape: 'box',  // 方形表示组织
+                    size: 30
+                };
+                
+                if (!nodes.get(nodeId)) {
+                    nodes.add(newNode);
+                }
+            }
+            
+            showToast(`✅ 成功创建组织: ${org.name}`, 'success');
+            currentOrgIndex++;
+            
+            // 更新按钮文字
+            const btn = document.querySelector('button[onclick="generateOrganizationData()"]');
+            if (btn) {
+                if (currentOrgIndex >= testOrganizations.length) {
+                    btn.innerHTML = '<i class="fas fa-building"></i> 生成组织数据（重新开始）';
+                } else {
+                    const nextOrg = testOrganizations[currentOrgIndex];
+                    btn.innerHTML = `<i class="fas fa-building"></i> 添加: ${nextOrg.name}`;
+                }
+            }
+            
+            // 统计数据会在loadAllData中更新
+        }
+    } catch (error) {
+        console.error(`创建组织 ${org.name} 失败:`, error);
+        showToast('创建组织失败', 'error');
+    }
+}
+
+// ==================== 生成关系网络 ====================
+async function generateRelationships() {
+    try {
+        showToast('正在生成关系网络...', 'info');
+        
+        // 定义各种关系类型
+        const relationships = [
+            // 同事关系（同公司的人）
+            { from: "张伟", to: "王强", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "张伟", to: "陈明", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "王强", to: "陈明", type: "同事", label: "同事" },  // 阿里巴巴
+            { from: "张伟", to: "马云", type: "下属", label: "汇报给" },  // 阿里巴巴上下级
+            { from: "王强", to: "马云", type: "下属", label: "汇报给" },  // 阿里巴巴上下级
+            
+            { from: "李娜", to: "周婷", type: "同事", label: "同事" },  // 字节跳动
+            
+            { from: "刘芳", to: "黄磊", type: "同事", label: "同事" },  // 腾讯
+            
+            // 朋友关系
+            { from: "李娜", to: "赵丽", type: "朋友", label: "朋友" },
+            { from: "陈明", to: "黄磊", type: "朋友", label: "技术好友" },
+            { from: "孙浩", to: "刘芳", type: "朋友", label: "数据科学伙伴" },
+            
+            // 业务关系
+            { from: "林静", to: "马云", type: "投资", label: "投资关系" },
+            { from: "林静", to: "杨柳", type: "投资", label: "曾投资" },
+            
+            // 雇佣关系（人与组织）
+            { from: "张伟", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "王强", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "陈明", to: "阿里巴巴", type: "雇佣", label: "就职于" },
+            { from: "马云", to: "阿里巴巴", type: "雇佣", label: "创始人" },
+            { from: "李娜", to: "字节跳动", type: "雇佣", label: "就职于" },
+            { from: "周婷", to: "字节跳动", type: "雇佣", label: "就职于" },
+            { from: "刘芳", to: "腾讯", type: "雇佣", label: "就职于" },
+            { from: "黄磊", to: "腾讯", type: "雇佣", label: "就职于" },
+            { from: "赵丽", to: "京东", type: "雇佣", label: "就职于" },
+            { from: "孙浩", to: "百度", type: "雇佣", label: "就职于" },
+            { from: "林静", to: "红杉资本", type: "雇佣", label: "就职于" },
+            { from: "杨柳", to: "小红书", type: "雇佣", label: "就职于" }
+        ];
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        // 获取所有节点用于查找
+        const allNodes = nodes.getIds();
+        const nodeMap = {};
+        nodes.forEach(node => {
+            nodeMap[node.label] = node.id;
+        });
+        
+        // 创建关系
+        for (const rel of relationships) {
+            const fromId = nodeMap[rel.from];
+            const toId = nodeMap[rel.to];
+            
+            if (fromId && toId) {
+                const edgeId = `${fromId}-${toId}-${rel.type}`;
+                
+                // 如果关系不存在，创建它
+                if (!edges.get(edgeId)) {
+                    try {
+                        // 根据关系类型调用不同的API
+                        let apiResponse = null;
+                        
+                        if (rel.type === '朋友' || rel.type === '同事' || rel.type === '技术好友' || rel.type === '数据科学伙伴') {
+                            // 朋友关系 - 人与人之间
+                            apiResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
+                                person1_uid: fromId,
+                                person2_uid: toId
+                            });
+                        } else if (rel.type === '雇佣') {
+                            // 雇佣关系 - 人与组织之间
+                            const position = rel.label === '创始人' ? '创始人' : '员工';
+                            apiResponse = await apiRequest('/memory/relationships/add-employment', 'POST', {
+                                person_uid: fromId,
+                                organization_uid: toId,
+                                position: position,
+                                department: null
+                            });
+                        } else {
+                            // 其他关系类型，暂时当作朋友关系处理
+                            apiResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
+                                person1_uid: fromId,
+                                person2_uid: toId
+                            });
+                        }
+                        
+                        // 如果API调用成功，添加到图谱
+                        if (apiResponse && apiResponse.code === 200) {
+                            // 根据关系类型设置不同的颜色
+                            let edgeColor = '#666';
+                            if (rel.type === '同事') edgeColor = '#00d9ff';
+                            else if (rel.type === '朋友') edgeColor = '#51cf66';
+                            else if (rel.type === '雇佣') edgeColor = '#ff9800';
+                            else if (rel.type === '下属') edgeColor = '#ff6b6b';
+                            else if (rel.type === '投资') edgeColor = '#9c27b0';
+                            
+                            edges.add({
+                                id: edgeId,
+                                from: fromId,
+                                to: toId,
+                                label: rel.label,
+                                color: { color: edgeColor, highlight: edgeColor },
+                                width: rel.type === '雇佣' ? 3 : 2,
+                                smooth: { type: 'curvedCW', roundness: 0.2 },
+                                arrows: rel.type === '下属' || rel.type === '雇佣' ? 'to' : undefined
+                            });
+                            successCount++;
+                        } else {
+                            console.error(`创建关系失败: ${rel.from} -> ${rel.to}`, apiResponse);
+                            failCount++;
+                        }
+                    } catch (error) {
+                        console.error(`创建关系异常: ${rel.from} -> ${rel.to}`, error);
+                        failCount++;
+                    }
+                    
+                    // 短暂延迟让用户看到添加过程
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } else {
+                failCount++;
+                console.log(`无法创建关系: ${rel.from} -> ${rel.to} (节点未找到)`);
+            }
+        }
+        
+        if (successCount > 0) {
+            showToast(`✅ 成功创建 ${successCount} 个关系${failCount > 0 ? `，${failCount} 个失败` : ''}`, 'success');
+        } else {
+            showToast('请先创建人物和组织节点', 'warning');
+        }
+        
+    } catch (error) {
+        console.error('生成关系网络失败:', error);
+        showToast('生成关系网络失败', 'error');
+    }
+}
+
+// ==================== 辅助函数 ====================
+function getNodeColor(person) {
+    // 根据职业或组织分配颜色
+    const colors = {
+        '工程师': '#00d9ff',
+        '设计师': '#ff6b6b',
+        '经理': '#51cf66',
+        '总监': '#ffd43b',
+        '分析师': '#a78bfa',
+        default: '#64748b'
+    };
+    
+    if (person.occupation) {
+        for (const [key, color] of Object.entries(colors)) {
+            if (person.occupation.includes(key)) {
+                return color;
+            }
+        }
+    }
+    
+    return colors.default;
+}
+
+function getEdgeColor(type) {
+    const colors = {
+        'FRIEND_OF': '#51cf66',
+        'COLLEAGUE_OF': '#00d9ff',
+        'REPORTS_TO': '#ff6b6b',
+        'MANAGES': '#ffd43b',
+        'FAMILY_OF': '#a78bfa',
+        default: '#848484'
+    };
+    
+    return colors[type] || colors.default;
+}
+
+function getRelationLabel(type) {
+    const labels = {
+        'KNOWS': '认识',
+        'FRIEND_OF': '朋友',
+        'COLLEAGUE_OF': '同事',
+        'REPORTS_TO': '汇报给',
+        'MANAGES': '管理',
+        'PARTNER_OF': '伴侣',
+        'FAMILY_OF': '家人',
+        'MENTOR_OF': '导师',
+        'COLLABORATES_WITH': '合作',
+        'WORKS_AT': '就职于',
+        'INVESTS_IN': '投资'
+    };
+    
+    return labels[type] || type;
+}
+
+function getRelationArrows(type) {
+    // 定义哪些关系类型需要箭头
+    const directional = ['REPORTS_TO', 'MANAGES', 'WORKS_AT', 'INVESTS_IN', 'MENTOR_OF'];
+    // vis-network 需要对象格式，而不是 false
+    return directional.includes(type) ? { to: { enabled: true, scaleFactor: 0.5 } } : { to: { enabled: false } };
+}
+
+function getRelationColor(type) {
+    const colors = {
+        'FRIEND_OF': '#4ecdc4',
+        'COLLEAGUE_OF': '#95e1d3',
+        'WORKS_AT': '#6c5ce7',
+        'REPORTS_TO': '#fd79a8',
+        'MANAGES': '#fdcb6e',
+        'FAMILY_OF': '#ff6b6b',
+        'INVESTS_IN': '#00b894'
+    };
+    
+    return { color: colors[type] || '#95a5a6' };
+}
+
+function formatNodeTooltip(person) {
+    const lines = [person.name];
+    
+    if (person.occupation) lines.push(`职业: ${person.occupation}`);
+    if (person.organization) lines.push(`组织: ${person.organization}`);
+    if (person.age) lines.push(`年龄: ${person.age}`);
+    if (person.skills && person.skills.length > 0) {
+        lines.push(`技能: ${person.skills.slice(0, 3).join(', ')}`);
+    }
+    
+    return lines.join('\n');
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast ${type} show`;
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// ==================== 右键菜单操作 ====================
+function editNode() {
+    if (selectedNodeId) {
+        const person = allPersons.find(p => p.uid === selectedNodeId);
+        if (person) {
+            // TODO: 打开编辑模态框
+            showToast('编辑功能开发中...');
+        }
+    }
+}
+
+function deleteNode() {
+    if (selectedNodeId && confirm('确定要删除该节点吗？')) {
+        nodes.remove(selectedNodeId);
+        showToast('节点已删除');
+    }
+}
+
+function expandNode() {
+    if (selectedNodeId) {
+        // 加载该节点的关系网络
+        showToast('扩展功能开发中...');
+    }
+}
+
+function hideNode() {
+    if (selectedNodeId) {
+        nodes.remove(selectedNodeId);
+        showToast('节点已隐藏');
+    }
+}
+
+// ==================== 初始化时添加一些示例节点 ====================
+// 注释掉示例数据，改为加载真实数据
+// function addSampleNodes() {
+//     const sampleNodes = [
+//         { id: 'sample1', label: '示例人物1', color: '#00d9ff' },
+//         { id: 'sample2', label: '示例人物2', color: '#ff6b6b' },
+//         { id: 'sample3', label: '示例人物3', color: '#51cf66' }
+//     ];
+//     
+//     const sampleEdges = [
+//         { from: 'sample1', to: 'sample2', label: '朋友' },
+//         { from: 'sample2', to: 'sample3', label: '同事' }
+//     ];
+//     
+//     nodes.add(sampleNodes);
+//     edges.add(sampleEdges);
+// }
+
+// 统一的数据加载函数 - 优化版本
+async function loadAllData() {
+    try {
+        // 第一步：并行获取所有原始数据（每个API只调用一次）
+        const [personsResponse, orgsResponse, relationshipsResponse, statsResponse] = await Promise.all([
+            // 人员数据
+            apiRequest('/memory/persons/list', 'POST', {
+                page: 1,
+                page_size: 100
+            }),
+            // 组织数据
+            apiRequest('/memory/organizations/list', 'POST', {
+                page: 1,
+                page_size: 50
+            }).catch(err => {
+                console.warn('Failed to load organizations:', err);
+                return { data: { items: [] } };
+            }),
+            // 关系数据
+            apiRequest('/memory/relationships/list', 'POST', {
+                limit: 200
+            }).catch(err => {
+                console.warn('Failed to load relationships:', err);
+                return { data: { relationships: [] } };
+            }),
+            // 统计数据
+            apiRequest('/analytics/get-statistics', 'POST', {
+                include_nodes: true,
+                include_relationships: true
+            })
+        ]);
+
+        // 第二步：更新全局数据
+        allPersons = personsResponse.data.items || [];
+        
+        // 第三步：分发数据到各个显示组件
+        // 更新左侧列表
+        updatePersonList(allPersons);
+        updatePersonSelects(allPersons);
+        
+        // 更新统计显示
+        updateStatisticsDisplay(statsResponse.data);
+        
+        // 更新图谱显示
+        updateGraphDisplay(
+            personsResponse.data.items || [],
+            orgsResponse.data.items || [],
+            relationshipsResponse.data.relationships || []
+        );
+        
+        console.log('所有数据加载完成 - 每个API只调用一次');
+    } catch (error) {
+        console.error('加载数据失败:', error);
+    }
+}
+
+// ==================== 图谱事件处理 ====================
+function handleNodeClick(params) {
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        const nodeData = nodes.get(selectedNodeId);
+        if (nodeData) {
+            showNodeInfo(nodeData);
+        }
+    }
+}
+
+function handleNodeRightClick(params) {
+    params.event.preventDefault();
+    if (params.nodes.length > 0) {
+        selectedNodeId = params.nodes[0];
+        const menu = document.getElementById('context-menu');
+        menu.style.left = params.event.pageX + 'px';
+        menu.style.top = params.event.pageY + 'px';
+        menu.classList.add('show');
+        
+        // 点击其他地方隐藏菜单
+        document.addEventListener('click', () => {
+            menu.classList.remove('show');
+        }, { once: true });
+    }
+}
+
+function handleNodeDoubleClick(params) {
+    if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        // 聚焦节点
+        network.focus(nodeId, {
+            scale: 2,
+            animation: {
+                duration: 1000,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function handleNodeHover(params) {
+    document.body.style.cursor = 'pointer';
+}
+
+function handleNodeBlur(params) {
+    document.body.style.cursor = 'default';
+}
+
+function showNodeInfo(nodeData) {
+    const infoPanel = document.getElementById('graph-info');
+    const infoContent = document.getElementById('node-info');
+    
+    infoContent.innerHTML = `
+        <div><strong>名称:</strong> ${nodeData.label}</div>
+        ${nodeData.title ? `<div><strong>详情:</strong><br>${nodeData.title.replace(/\n/g, '<br>')}</div>` : ''}
+    `;
+    
+    infoPanel.classList.add('show');
+    
+    // 3秒后自动隐藏
+    setTimeout(() => {
+        infoPanel.classList.remove('show');
+    }, 3000);
+}
+
+// ==================== 图谱数据加载 ====================
+async function loadGraphData() {
+    try {
+        const [personsResponse, orgsResponse, relationshipsResponse] = await Promise.all([
+            apiRequest('/memory/persons/list', 'POST', {
+                page: 1,
+                page_size: 100
+            }),
+            apiRequest('/memory/organizations/list', 'POST', {
+                page: 1,
+                page_size: 50
+            }).catch(err => {
+                console.warn('Failed to load organizations:', err);
+                return { data: { items: [] } };
+            }),
+            apiRequest('/memory/relationships/list', 'POST', {
+                limit: 200
+            }).catch(err => {
+                console.warn('Failed to load relationships:', err);
+                return { data: { relationships: [] } };
+            })
+        ]);
+        
+        updateGraphDisplay(
+            personsResponse.data.items || [],
+            orgsResponse.data.items || [],
+            relationshipsResponse.data.relationships || []
+        );
+    } catch (error) {
+        console.error('Load graph data failed:', error);
+    }
+}
+
+function updateGraphDisplay(persons, organizations, relationships) {
+    // 清空现有数据
+    nodes.clear();
+    edges.clear();
+    
+    // 添加人物节点
+    if (persons && persons.length > 0) {
+        const personNodes = persons.map(person => ({
+            id: person.uid || person.id,
+            label: person.name,
+            title: formatNodeTooltip(person),
+            color: getNodeColor(person),
+            shape: 'dot',
+            size: 25
+        }));
+        nodes.add(personNodes);
+    }
+    
+    // 添加组织节点
+    if (organizations && organizations.length > 0) {
+        const orgNodes = organizations.map(org => ({
+            id: org.uid || org.id,
+            label: org.name,
+            title: `${org.name}\n${org.type || ''}\n${org.industry || ''}`,
+            color: {
+                background: '#9c27b0',
+                border: '#7b1fa2'
+            },
+            shape: 'box',
+            size: 30
+        }));
+        nodes.add(orgNodes);
+    }
+    
+    // 添加关系边
+    if (relationships && relationships.length > 0) {
+        const relationshipEdges = relationships.map(rel => ({
+            id: `${rel.from}-${rel.to}`,
+            from: rel.from,
+            to: rel.to,
+            label: rel.type,
+            arrows: getRelationArrows(rel.type),
+            color: getRelationColor(rel.type)
+        }));
+        
+        edges.add(relationshipEdges.filter(edge => {
+            // 确保边的两端节点都存在
+            return nodes.get(edge.from) && nodes.get(edge.to);
+        }));
+        
+        console.log(`加载了 ${nodes.length} 个节点和 ${edges.length} 条边`);
+    }
+    
+    // 如果没有数据，显示提示
+    if (nodes.length === 0) {
+        showToast('暂无数据，请先创建一些测试数据', 'info');
+    }
+}
+
+function highlightNode(nodeId) {
+    const node = nodes.get(nodeId);
+    if (node) {
+        const originalColor = node.color;
+        nodes.update([{
+            id: nodeId,
+            color: { background: '#ff6b6b', border: '#ff5252' }
+        }]);
+        
+        // 2秒后恢复原色
+        setTimeout(() => {
+            nodes.update([{
+                id: nodeId,
+                color: originalColor
+            }]);
+        }, 2000);
+    }
+}
+
+// ==================== 图谱控制功能 ====================
+function resetGraph() {
+    network.fit();
+    showToast('视图已重置', 'success');
+}
+
+function togglePhysics() {
+    physicsEnabled = !physicsEnabled;
+    network.setOptions({
+        physics: { enabled: physicsEnabled }
+    });
+    showToast(`物理引擎已${physicsEnabled ? '启用' : '禁用'}`, 'info');
+}
+
+function changeLayout() {
+    const layouts = ['physics', 'hierarchical', 'circular'];
+    currentLayout = layouts[(layouts.indexOf(currentLayout) + 1) % layouts.length];
+    
+    const layoutOptions = {
+        physics: { physics: { enabled: true } },
+        hierarchical: {
+            layout: {
+                hierarchical: {
+                    direction: 'UD',
+                    sortMethod: 'directed'
+                }
+            },
+            physics: { enabled: false }
+        },
+        circular: {
+            layout: { randomSeed: 2 },
+            physics: { enabled: false }
+        }
+    };
+    
+    network.setOptions(layoutOptions[currentLayout]);
+    showToast(`切换到${currentLayout}布局`, 'info');
+}
+
+function exportGraph() {
+    const canvas = document.querySelector('#network-graph canvas');
+    const link = document.createElement('a');
+    link.download = 'graph.png';
+    link.href = canvas.toDataURL();
+    link.click();
+    showToast('图谱已导出', 'success');
+}
+
+function toggleFullscreen() {
+    const container = document.querySelector('.graph-container');
+    if (!document.fullscreenElement) {
+        container.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+}
+    </script>
+</body>
+</html>

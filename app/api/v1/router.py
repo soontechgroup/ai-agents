@@ -1,5 +1,14 @@
 from fastapi import APIRouter
-from .endpoints import auth, digital_humans, user, conversations, chroma
+from .endpoints import (
+    auth, 
+    digital_humans, 
+    user, 
+    conversations, 
+    chroma,
+    # 记忆体系统端点
+    memory,
+    analytics
+)
 from .admin import admin_router
 
 api_router = APIRouter()
@@ -38,6 +47,22 @@ api_router.include_router(
     prefix="/chroma",
     tags=["Chroma 向量数据库"]
 )
+
+# ==================== 记忆体系统路由 ====================
+# 记忆体系统（包含人员、组织、关系管理）
+api_router.include_router(
+    memory.router,
+    prefix="/graph",
+    tags=["记忆体系统"]
+)
+
+# 图分析
+api_router.include_router(
+    analytics.router,
+    prefix="/graph",
+    tags=["图分析"]
+)
+
 
 # 包含管理后台路由
 api_router.include_router(

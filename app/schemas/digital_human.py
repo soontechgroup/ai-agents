@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 from datetime import datetime
-from app.schemas.CommonResponse import PaginatedResponse, PaginationMeta
+from app.schemas.common_response import PaginatedResponse, PaginationMeta
 
 
 class PersonalityConfig(BaseModel):

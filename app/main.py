@@ -18,6 +18,9 @@ from app.core.logger import logger, set_request_id, get_request_id
 # 导入 MongoDB 相关
 from app.core.mongodb import init_mongodb, close_mongodb
 
+# 导入 Neomodel 相关
+from app.core.neomodel_config import setup_neomodel
+
 # 创建FastAPI应用
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -171,6 +174,15 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ MongoDB 初始化失败: {e}")
         logger.warning("⚠️ 应用将继续运行，但 MongoDB 相关功能将不可用")
+    
+    # 初始化 Neomodel (Neo4j ORM)
+    try:
+        logger.info("🔄 正在初始化 Neo4j (Neomodel)...")
+        setup_neomodel()
+        logger.success("✅ Neo4j Neomodel 初始化成功!")
+    except Exception as e:
+        logger.error(f"❌ Neo4j Neomodel 初始化失败: {e}")
+        logger.warning("⚠️ 应用将继续运行，但图数据库功能将不可用")
 
 
 @app.on_event("shutdown")

@@ -9,7 +9,7 @@ from app.schemas.admin_auth import (
     AdminTokenRefreshRequest,
     AdminTokenRefreshResponse
 )
-from app.schemas.common import SuccessResponse
+from app.schemas.common_response import SuccessResponse
 from app.guards.auth import get_current_superuser
 from app.core.models import User
 from app.utils.response import ResponseUtil

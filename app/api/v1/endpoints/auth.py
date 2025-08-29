@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.schemas.auth import UserCreateRequest, UserLoginRequest, UserData, Token, CurrentUserRequest
-from app.schemas.common import SuccessResponse
+from app.schemas.common_response import SuccessResponse
 from app.services.auth_service import AuthService
 from app.dependencies import get_auth_service
 from app.guards import get_current_active_user
