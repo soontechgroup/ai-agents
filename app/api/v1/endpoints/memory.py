@@ -3,14 +3,30 @@
 统一管理人员、组织和关系的所有操作
 """
 
-from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
 
-# from app.core.models import User  # 暂时禁用认证
-# from app.guards.auth import get_current_user  # 暂时禁用认证
 from app.schemas.common_response import SuccessResponse
-from app.schemas.graph.relationship import EmploymentRequest, FriendshipRequest, PathRequest
+from app.schemas.graph.relationship import (
+    EmploymentRequest, 
+    FriendshipRequest, 
+    PathRequest,
+    ListRelationshipsRequest
+)
+from app.schemas.graph.person import (
+    GetPersonRequest,
+    UpdatePersonRequest,
+    DeletePersonRequest,
+    SearchPersonsRequest,
+    ListPersonsRequest,
+    PersonNetworkRequest
+)
+from app.schemas.graph.organization import (
+    GetOrganizationRequest,
+    GetEmployeesRequest,
+    UpdateOrganizationRequest,
+    DeleteOrganizationRequest,
+    SearchOrganizationsRequest
+)
 from app.utils.response import ResponseUtil
 from app.dependencies.graph import get_graph_service
 from app.services.graph_service import GraphService
@@ -25,89 +41,12 @@ organizations_router = APIRouter(prefix="/organizations", tags=["Memory - Organi
 relationships_router = APIRouter(prefix="/relationships", tags=["Memory - Relationships"])
 
 
-# ==================== 请求模型 ====================
-
-# ========== Person请求模型 ==========
-class GetPersonRequest(BaseModel):
-    """获取人员请求"""
-    uid: str = Field(..., description="人员UID")
-
-
-class UpdatePersonRequest(BaseModel):
-    """更新人员请求"""
-    uid: str = Field(..., description="人员UID")
-    data: PersonNode = Field(..., description="更新的数据")
-
-
-class DeletePersonRequest(BaseModel):
-    """删除人员请求"""
-    uid: str = Field(..., description="人员UID")
-
-
-class SearchPersonsRequest(BaseModel):
-    """搜索人员请求"""
-    keyword: str = Field(..., description="搜索关键词")
-    page: Optional[int] = Field(1, ge=1, description="页码")
-    page_size: Optional[int] = Field(10, ge=1, le=100, description="每页数量")
-
-
-class ListPersonsRequest(BaseModel):
-    """列表查询请求"""
-    page: int = Field(1, ge=1, description="页码")
-    page_size: int = Field(10, ge=1, le=100, description="每页数量")
-    filters: Optional[dict] = Field(None, description="过滤条件")
-
-
-class PersonNetworkRequest(BaseModel):
-    """社交网络请求"""
-    uid: str = Field(..., description="人员UID")
-    depth: int = Field(2, ge=1, le=5, description="网络深度")
-
-
-# ========== Organization请求模型 ==========
-class GetOrganizationRequest(BaseModel):
-    """获取组织请求"""
-    uid: str = Field(..., description="组织UID")
-
-
-class GetEmployeesRequest(BaseModel):
-    """获取组织员工请求"""
-    uid: str = Field(..., description="组织UID")
-
-
-class UpdateOrganizationRequest(BaseModel):
-    """更新组织请求"""
-    uid: str = Field(..., description="组织UID")
-    data: OrganizationNode = Field(..., description="更新的数据")
-
-
-class DeleteOrganizationRequest(BaseModel):
-    """删除组织请求"""
-    uid: str = Field(..., description="组织UID")
-
-
-class SearchOrganizationsRequest(BaseModel):
-    """搜索组织请求"""
-    keyword: Optional[str] = Field(None, description="搜索关键词")
-    industry: Optional[str] = Field(None, description="行业")
-    page: int = Field(1, ge=1, description="页码")
-    page_size: int = Field(10, ge=1, le=100, description="每页数量")
-
-
-# ========== Relationship请求模型 ==========
-class ListRelationshipsRequest(BaseModel):
-    """列出关系请求"""
-    relationship_type: Optional[str] = Field(None, description="关系类型过滤")
-    limit: int = Field(100, ge=1, le=500, description="返回数量限制")
-
-
 # ==================== Person端点 ====================
 
 @persons_router.post("/create", response_model=SuccessResponse, summary="创建人员")
 async def create_person(
     person: PersonNode,
     service: GraphService = Depends(get_graph_service)
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """创建新人员"""
     try:
@@ -123,7 +62,6 @@ async def create_person(
 async def get_person(
     request: GetPersonRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员详细信息"""
     person = await service.get_person(request.uid)
@@ -136,7 +74,6 @@ async def get_person(
 async def update_person(
     request: UpdatePersonRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """更新人员信息"""
     updated = await service.update_person(request.uid, request.data)
@@ -149,7 +86,6 @@ async def update_person(
 async def delete_person(
     request: DeletePersonRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """删除人员"""
     success = await service.delete_person(request.uid)
@@ -162,7 +98,6 @@ async def delete_person(
 async def search_persons(
     request: SearchPersonsRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """搜索人员"""
     persons = await service.search_persons(request.keyword)
@@ -181,7 +116,6 @@ async def search_persons(
 async def list_persons(
     request: ListPersonsRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员列表（带分页）"""
     from app.repositories.neomodel import PersonRepository
@@ -210,7 +144,6 @@ async def list_persons(
 async def get_person_network(
     request: PersonNetworkRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取人员的社交网络"""
     network = await service.get_person_network(request.uid, request.depth)
@@ -225,7 +158,6 @@ async def get_person_network(
 async def create_organization(
     organization: OrganizationNode,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """创建新组织"""
     try:
@@ -241,7 +173,6 @@ async def create_organization(
 async def get_organization(
     request: GetOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取组织详细信息"""
     org = await service.get_organization(request.uid)
@@ -254,7 +185,6 @@ async def get_organization(
 async def update_organization(
     request: UpdateOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """更新组织信息"""
     # TODO: 在GraphService中实现update_organization方法
@@ -265,7 +195,6 @@ async def update_organization(
 async def delete_organization(
     request: DeleteOrganizationRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """删除组织"""
     # TODO: 在GraphService中实现delete_organization方法
@@ -276,7 +205,6 @@ async def delete_organization(
 async def list_organizations(
     request: SearchOrganizationsRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取组织列表"""
     from app.repositories.neomodel import OrganizationRepository
@@ -300,7 +228,6 @@ async def list_organizations(
 async def search_organizations(
     request: SearchOrganizationsRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """搜索组织"""
     # TODO: 在GraphService中实现search_organizations方法
@@ -330,7 +257,6 @@ async def search_organizations(
 async def get_organization_employees(
     request: GetEmployeesRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取组织及其所有员工"""
     result = await service.get_organization_with_employees(request.uid)
@@ -345,7 +271,6 @@ async def get_organization_employees(
 async def add_employment(
     request: EmploymentRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """添加人员与组织的雇佣关系"""
     success = await service.add_employment(
@@ -363,7 +288,6 @@ async def add_employment(
 async def add_friendship(
     request: FriendshipRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """添加两个人之间的朋友关系"""
     try:
@@ -388,7 +312,6 @@ async def add_friendship(
 async def list_relationships(
     request: ListRelationshipsRequest = ListRelationshipsRequest(),
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """获取图数据库中的所有关系"""
     try:
@@ -410,7 +333,6 @@ async def list_relationships(
 async def find_shortest_path(
     request: PathRequest,
     service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
 ):
     """查找两个人之间的最短路径"""
     path = await service.find_shortest_path(
