@@ -5,23 +5,13 @@
 
 from typing import Dict, List, Any, Optional
 import logging
-from datetime import datetime
 
 from app.repositories.neomodel import (
     PersonRepository,
     OrganizationRepository,
-    LocationRepository,
-    EventRepository,
-    ProjectRepository,
-    ProductRepository,
     GraphRepository
 )
 from app.models.graph.nodes import PersonNode, OrganizationNode
-# TODO: 以下模型尚未实现
-# from app.models.graph.nodes import LocationNode
-# from app.models.graph.nodes.event import EventNode
-# from app.models.graph.nodes.project import ProjectNode
-# from app.models.graph.nodes.product import ProductNode
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +26,6 @@ class GraphService:
         """初始化所有仓储"""
         self.person_repo = PersonRepository()
         self.org_repo = OrganizationRepository()
-        self.location_repo = LocationRepository()
-        self.event_repo = EventRepository()
-        self.project_repo = ProjectRepository()
-        self.product_repo = ProductRepository()
         self.graph_repo = GraphRepository()
     
     # ==================== 人员相关 ====================

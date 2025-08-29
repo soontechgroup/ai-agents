@@ -1288,7 +1288,7 @@ async function createPerson() {
     };
     
     try {
-        const response = await apiRequest('/persons/create', 'POST', personData);
+        const response = await apiRequest('/memory/persons/create', 'POST', personData);
         showToast('人物创建成功', 'success');
         
         // 清空表单
@@ -1330,7 +1330,7 @@ function clearPersonForm() {
 // 保留原函数以兼容单独调用的情况（如创建人员后的刷新）
 async function loadPersonList() {
     try {
-        const response = await apiRequest('/persons/list', 'POST', {
+        const response = await apiRequest('/memory/persons/list', 'POST', {
             page: 1,
             page_size: 100
         });
@@ -1444,7 +1444,7 @@ async function createRelation() {
         }
         
         // 使用 UID 而不是名字
-        const response = await apiRequest('/relationships/add-friendship', 'POST', {
+        const response = await apiRequest('/memory/relationships/add-friendship', 'POST', {
             person1_uid: fromPerson.uid || fromPerson.id || fromPerson.name,
             person2_uid: toPerson.uid || toPerson.id || toPerson.name
         });
@@ -1470,7 +1470,7 @@ async function createRelation() {
             // 立即重新加载关系数据以确保同步
             setTimeout(async () => {
                 try {
-                    const relResponse = await apiRequest('/relationships/list', 'POST', {
+                    const relResponse = await apiRequest('/memory/relationships/list', 'POST', {
                         limit: 200
                     });
                     if (relResponse && relResponse.data) {
@@ -1611,7 +1611,7 @@ async function generateTestData() {
         showToast(`正在创建人物 (${currentPersonIndex + 1}/${testPersons.length}): ${person.name}`, 'info');
         
         // 创建人物
-        const response = await apiRequest('/persons/create', 'POST', person);
+        const response = await apiRequest('/memory/persons/create', 'POST', person);
         
         if (response.success) {
             // 如果创建成功，立即添加到图谱中显示
@@ -1654,7 +1654,7 @@ async function generateTestData() {
                         if (!edges.get(edgeId) && !edges.get(`${targetNodeId}-${nodeId}`)) {
                             try {
                                 // 调用后端API创建朋友关系
-                                const relResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                                const relResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
                                     person1_uid: nodeId,
                                     person2_uid: targetNodeId
                                 });
@@ -1741,7 +1741,7 @@ async function generateOrganizationData() {
             tags: ["组织", org.type, `成立于${org.founded}`]
         };
         
-        const response = await apiRequest('/persons/create', 'POST', orgNode);
+        const response = await apiRequest('/memory/persons/create', 'POST', orgNode);
         
         if (response.success) {
             // 添加组织节点到图谱
@@ -1856,14 +1856,14 @@ async function generateRelationships() {
                         
                         if (rel.type === '朋友' || rel.type === '同事' || rel.type === '技术好友' || rel.type === '数据科学伙伴') {
                             // 朋友关系 - 人与人之间
-                            apiResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                            apiResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
                                 person1_uid: fromId,
                                 person2_uid: toId
                             });
                         } else if (rel.type === '雇佣') {
                             // 雇佣关系 - 人与组织之间
                             const position = rel.label === '创始人' ? '创始人' : '员工';
-                            apiResponse = await apiRequest('/relationships/add-employment', 'POST', {
+                            apiResponse = await apiRequest('/memory/relationships/add-employment', 'POST', {
                                 person_uid: fromId,
                                 organization_uid: toId,
                                 position: position,
@@ -1871,7 +1871,7 @@ async function generateRelationships() {
                             });
                         } else {
                             // 其他关系类型，暂时当作朋友关系处理
-                            apiResponse = await apiRequest('/relationships/add-friendship', 'POST', {
+                            apiResponse = await apiRequest('/memory/relationships/add-friendship', 'POST', {
                                 person1_uid: fromId,
                                 person2_uid: toId
                             });
@@ -2082,12 +2082,12 @@ async function loadAllData() {
         // 第一步：并行获取所有原始数据（每个API只调用一次）
         const [personsResponse, orgsResponse, relationshipsResponse, statsResponse] = await Promise.all([
             // 人员数据
-            apiRequest('/persons/list', 'POST', {
+            apiRequest('/memory/persons/list', 'POST', {
                 page: 1,
                 page_size: 100
             }),
             // 组织数据
-            apiRequest('/organizations/list', 'POST', {
+            apiRequest('/memory/organizations/list', 'POST', {
                 page: 1,
                 page_size: 50
             }).catch(err => {
@@ -2095,7 +2095,7 @@ async function loadAllData() {
                 return { data: { items: [] } };
             }),
             // 关系数据
-            apiRequest('/relationships/list', 'POST', {
+            apiRequest('/memory/relationships/list', 'POST', {
                 limit: 200
             }).catch(err => {
                 console.warn('Failed to load relationships:', err);
@@ -2202,18 +2202,18 @@ function showNodeInfo(nodeData) {
 async function loadGraphData() {
     try {
         const [personsResponse, orgsResponse, relationshipsResponse] = await Promise.all([
-            apiRequest('/persons/list', 'POST', {
+            apiRequest('/memory/persons/list', 'POST', {
                 page: 1,
                 page_size: 100
             }),
-            apiRequest('/organizations/list', 'POST', {
+            apiRequest('/memory/organizations/list', 'POST', {
                 page: 1,
                 page_size: 50
             }).catch(err => {
                 console.warn('Failed to load organizations:', err);
                 return { data: { items: [] } };
             }),
-            apiRequest('/relationships/list', 'POST', {
+            apiRequest('/memory/relationships/list', 'POST', {
                 limit: 200
             }).catch(err => {
                 console.warn('Failed to load relationships:', err);
