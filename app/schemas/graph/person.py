@@ -42,7 +42,3 @@ class PersonNetworkRequest(BaseModel):
     uid: str = Field(..., description="人员UID")
     depth: int = Field(2, ge=1, le=5, description="网络深度")
 
-
-class BatchImportRequest(BaseModel):
-    """批量导入请求"""
-    persons: List[PersonNode] = Field(..., description="人员列表")

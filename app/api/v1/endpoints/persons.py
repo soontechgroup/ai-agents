@@ -56,9 +56,6 @@ class PersonNetworkRequest(BaseModel):
     depth: int = Field(2, ge=1, le=5, description="网络深度")
 
 
-class BatchImportRequest(BaseModel):
-    """批量导入请求"""
-    persons: List[PersonNode] = Field(..., description="人员列表")
 
 
 # ==================== API端点 ====================
@@ -178,16 +175,3 @@ async def get_person_network(
         return ResponseUtil.success(data=network)
     return ResponseUtil.error(message="人员不存在")
 
-
-@router.post("/batch-import", response_model=SuccessResponse, summary="批量导入人员")
-async def batch_import_persons(
-    request: BatchImportRequest,
-    service: GraphService = Depends(get_graph_service),
-    # current_user: User = Depends(get_current_user)  # 暂时禁用认证
-):
-    """批量导入人员"""
-    created = await service.import_persons_batch(request.persons)
-    return ResponseUtil.success(
-        data={"persons": created, "count": len(created)},
-        message=f"成功导入{len(created)}个人员"
-    )

@@ -8,8 +8,7 @@ from app.schemas.graph.person import (
     DeletePersonRequest,
     SearchPersonsRequest,
     ListPersonsRequest,
-    PersonNetworkRequest,
-    BatchImportRequest
+    PersonNetworkRequest
 )
 
 from app.schemas.graph.organization import (
@@ -38,7 +37,6 @@ __all__ = [
     'SearchPersonsRequest',
     'ListPersonsRequest',
     'PersonNetworkRequest',
-    'BatchImportRequest',
     
     # Organization
     'GetOrganizationRequest',

@@ -13,7 +13,8 @@ from app.repositories.neomodel import (
     LocationRepository,
     EventRepository,
     ProjectRepository,
-    ProductRepository
+    ProductRepository,
+    GraphRepository
 )
 from app.models.graph.nodes import PersonNode, OrganizationNode
 # TODO: 以下模型尚未实现
@@ -21,8 +22,6 @@ from app.models.graph.nodes import PersonNode, OrganizationNode
 # from app.models.graph.nodes.event import EventNode
 # from app.models.graph.nodes.project import ProjectNode
 # from app.models.graph.nodes.product import ProductNode
-from app.models.converters.graph_converter import GraphModelConverter
-from app.core.neomodel_config import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +40,7 @@ class GraphService:
         self.event_repo = EventRepository()
         self.project_repo = ProjectRepository()
         self.product_repo = ProductRepository()
+        self.graph_repo = GraphRepository()
     
     # ==================== 人员相关 ====================
     
@@ -55,12 +55,10 @@ class GraphService:
             创建的人员模型
         """
         try:
-            # Pydantic → Neomodel → 保存
-            neomodel_person = person_data.to_neomodel()
+            # 使用仓储层创建
+            neomodel_person = self.person_repo.create_from_pydantic(person_data)
             if neomodel_person:
-                neomodel_person.save()
                 logger.info(f"创建人员成功: {person_data.name}")
-                # Neomodel → Pydantic
                 return PersonNode.from_neomodel(neomodel_person)
             return None
         except Exception as e:
@@ -119,9 +117,9 @@ class GraphService:
     async def create_organization(self, org_data: OrganizationNode) -> OrganizationNode:
         """创建组织"""
         try:
-            neomodel_org = org_data.to_neomodel()
+            # 使用仓储层创建
+            neomodel_org = self.org_repo.create_from_pydantic(org_data)
             if neomodel_org:
-                neomodel_org.save()
                 logger.info(f"创建组织成功: {org_data.name}")
                 return OrganizationNode.from_neomodel(neomodel_org)
             return None
@@ -183,159 +181,112 @@ class GraphService:
             logger.error(f"添加雇佣关系失败: {str(e)}")
             return False
     
-    async def add_friendship(self, person1_uid: str, person2_uid: str) -> bool:
-        """添加朋友关系"""
+    async def add_friendship(self, person1_identifier: str, person2_identifier: str) -> bool:
+        """
+        添加朋友关系
+        
+        Args:
+            person1_identifier: 第一个人的UID或名字
+            person2_identifier: 第二个人的UID或名字
+            
+        Returns:
+            bool: 是否成功添加关系
+        """
         logger.info(f"服务层: 进入add_friendship方法")
         try:
+            import re
+            
+            # UUID模式匹配
+            uuid_pattern = re.compile(r'^[a-f0-9]{32}$')
+            
+            # 处理第一个人物标识
+            person1_uid = person1_identifier
+            if not uuid_pattern.match(person1_identifier):
+                # 可能是名字，尝试查找
+                persons = self.person_repo.find_by_name(person1_identifier)
+                if persons:
+                    person1_uid = persons[0].uid
+                    logger.info(f"服务层: 将名字 {person1_identifier} 转换为UID: {person1_uid}")
+                else:
+                    logger.error(f"服务层: 找不到人物: {person1_identifier}")
+                    return False
+            
+            # 处理第二个人物标识
+            person2_uid = person2_identifier
+            if not uuid_pattern.match(person2_identifier):
+                # 可能是名字，尝试查找
+                persons = self.person_repo.find_by_name(person2_identifier)
+                if persons:
+                    person2_uid = persons[0].uid
+                    logger.info(f"服务层: 将名字 {person2_identifier} 转换为UID: {person2_uid}")
+                else:
+                    logger.error(f"服务层: 找不到人物: {person2_identifier}")
+                    return False
+            
             logger.info(f"服务层: 开始添加朋友关系 {person1_uid} <-> {person2_uid}")
             
-            logger.info(f"服务层: 准备查找person1: {person1_uid}")
+            # 查找人物节点
             person1 = self.person_repo.find_by_uid(person1_uid)
-            logger.info(f"服务层: person1查找完成: {person1}")
-            
-            logger.info(f"服务层: 准备查找person2: {person2_uid}")
             person2 = self.person_repo.find_by_uid(person2_uid)
-            logger.info(f"服务层: person2查找完成: {person2}")
             
-            logger.info(f"服务层: 查找结果 - Person1: {person1 is not None}, Person2: {person2 is not None}")
+            if not person1:
+                logger.error(f"服务层: UID {person1_uid} 对应的人物不存在")
+                return False
             
-            if person1 and person2:
-                logger.info(f"服务层: 找到两个人物 - {person1.name} 和 {person2.name}")
+            if not person2:
+                logger.error(f"服务层: UID {person2_uid} 对应的人物不存在")
+                return False
+            
+            logger.info(f"服务层: 找到两个人物 - {person1.name} 和 {person2.name}")
+            
+            try:
+                # 检查friends属性是否存在
+                if not hasattr(person1, 'friends'):
+                    logger.error(f"服务层: Person1没有friends属性")
+                    return False
                 
-                try:
-                    # 检查friends属性是否存在
-                    if not hasattr(person1, 'friends'):
-                        logger.error(f"服务层: Person1没有friends属性")
-                        return False
-                    
-                    # Relationship是双向的，只需要连接一次
-                    # 连接时会自动创建双向关系
-                    rel = person1.friends.connect(person2)
-                    logger.info(f"服务层: 已创建朋友关系: {person1.name} <-> {person2.name}")
-                    
-                    # 如果需要更新关系属性，可以在这里设置
-                    if rel:
-                        # rel.mutual = True  # 默认已经是True
-                        # rel.closeness = 5  # 默认已经是5
-                        rel.save()
-                        logger.info(f"服务层: 关系属性已保存")
-                    
-                    logger.info(f"服务层: 成功添加朋友关系: {person1_uid} <-> {person2_uid}")
+                # Relationship是双向的，只需要连接一次
+                rel = person1.friends.connect(person2)
+                
+                if rel:
+                    rel.save()
+                    logger.info(f"服务层: 成功添加朋友关系: {person1.name} <-> {person2.name}")
                     return True
-                except AttributeError as ae:
-                    logger.error(f"服务层: 属性错误 - {str(ae)}")
-                    return False
-                except Exception as inner_e:
-                    logger.error(f"服务层: 连接关系时出错 - {str(inner_e)}")
-                    logger.error(f"服务层: 错误类型 - {type(inner_e).__name__}")
-                    import traceback
-                    logger.error(f"服务层: 堆栈跟踪 - {traceback.format_exc()}")
-                    return False
+                
+                return False
+                
+            except AttributeError as ae:
+                logger.error(f"服务层: 属性错误 - {str(ae)}")
+                return False
+            except Exception as inner_e:
+                logger.error(f"服务层: 连接关系时出错 - {str(inner_e)}")
+                return False
             
-            logger.error(f"服务层: 无法找到人物 - Person1: {person1}, Person2: {person2}")
-            return False
         except Exception as e:
             logger.exception(f"服务层: 添加朋友关系异常: {str(e)}")
-            import traceback
-            logger.error(f"服务层: 完整堆栈 - {traceback.format_exc()}")
             return False
-    
-    # ==================== 批量操作 ====================
-    
-    async def import_persons_batch(self, persons_data: List[PersonNode]) -> List[PersonNode]:
-        """批量导入人员"""
-        try:
-            created_persons = []
-            
-            with transaction():
-                for person_data in persons_data:
-                    neomodel_person = person_data.to_neomodel()
-                    if neomodel_person:
-                        neomodel_person.save()
-                        created_persons.append(PersonNode.from_neomodel(neomodel_person))
-            
-            logger.info(f"批量导入{len(created_persons)}个人员")
-            return created_persons
-        except Exception as e:
-            logger.error(f"批量导入失败: {str(e)}")
-            return []
     
     # ==================== 分析功能 ====================
     
     async def get_system_statistics(self) -> Dict[str, Any]:
         """获取系统统计信息"""
-        try:
-            from neomodel import db
-            
-            # 统计各类节点数量
-            stats_query = """
-                MATCH (n)
-                RETURN labels(n)[0] as label, count(n) as count
-                ORDER BY count DESC
-            """
-            results, _ = db.cypher_query(stats_query)
-            
-            node_stats = {}
-            for row in results:
-                if row[0]:  # 确保label不为空
-                    node_stats[row[0]] = row[1]
-            
-            # 统计关系数量
-            rel_query = """
-                MATCH ()-[r]->()
-                RETURN type(r) as type, count(r) as count
-                ORDER BY count DESC
-            """
-            rel_results, _ = db.cypher_query(rel_query)
-            
-            rel_stats = {}
-            for row in rel_results:
-                if row[0]:
-                    rel_stats[row[0]] = row[1]
-            
-            return {
-                "nodes": node_stats,
-                "relationships": rel_stats,
-                "total_nodes": sum(node_stats.values()),
-                "total_relationships": sum(rel_stats.values())
-            }
-        except Exception as e:
-            logger.error(f"获取系统统计失败: {str(e)}")
-            return {
-                "error": str(e),
-                "nodes": {},
-                "relationships": {},
-                "total_nodes": 0,
-                "total_relationships": 0
-            }
+        return self.graph_repo.get_statistics()
     
     # ==================== 复杂查询 ====================
     
-    async def find_shortest_path(self, from_uid: str, to_uid: str) -> Optional[List[Dict]]:
+    async def find_shortest_path(self, from_uid: str, to_uid: str) -> Optional[Dict[str, Any]]:
         """查找两个节点之间的最短路径"""
-        try:
-            from neomodel import db
+        return self.graph_repo.find_shortest_path(from_uid, to_uid)
+    
+    async def list_relationships(self, relationship_type: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+        """
+        获取图数据库中的所有关系
+        
+        Args:
+            relationship_type: 可选的关系类型过滤
+            limit: 返回数量限制
             
-            query = """
-                MATCH path = shortestPath(
-                    (from:Person {uid: $from_uid})-[*]-(to:Person {uid: $to_uid})
-                )
-                RETURN [n in nodes(path) | {uid: n.uid, name: n.name}] as nodes,
-                       [r in relationships(path) | type(r)] as relationships
-            """
-            
-            results, _ = db.cypher_query(
-                query,
-                {"from_uid": from_uid, "to_uid": to_uid}
-            )
-            
-            if results:
-                return {
-                    "nodes": results[0][0],
-                    "relationships": results[0][1],
-                    "length": len(results[0][1])
-                }
-            return None
-        except Exception as e:
-            logger.error(f"查找最短路径失败: {str(e)}")
-            return None
+        Returns:
+            包含关系列表和总数的字典
+        """
+        return self.graph_repo.list_all_relationships(relationship_type, limit)
