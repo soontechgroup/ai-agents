@@ -10,6 +10,8 @@ services:
     - "3306:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
+    networks:
+      - ai-agents-network
 
   mongodb:
     image: mongo:7.0
@@ -23,6 +25,8 @@ services:
       - ./data/mongodb/data:/data/db
       - ./data/mongodb/config:/data/configdb
     restart: always
+    networks:
+      - ai-agents-network
 
   neo4j:
     image: neo4j:5.15
@@ -42,3 +46,41 @@ services:
       - ./data/neo4j/import:/var/lib/neo4j/import
       - ./data/neo4j/plugins:/plugins
     restart: always
+    networks:
+      - ai-agents-network
+
+  ai-agents:
+    image: docker.io/deuspio/ai-agents:latest
+    container_name: ai-agents-app
+    profiles:
+      - dev
+    depends_on:
+      - mysql
+      - mongodb
+      - neo4j
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:123456@ai-agent-mysql:3306/ai_agents
+      - MONGODB_URL=mongodb://admin:password123@ai-agent-mongodb:27017/?authSource=admin
+      - NEO4J_URI=bolt://ai-agent-neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=password123
+      - ENVIRONMENT=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_api_key_here}
+    volumes:
+      - ./logs:/app/logs
+      - ./data/chroma_db:/app/data/chroma_db
+    networks:
+      - ai-agents-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  ai-agents-network:
+    driver: bridge

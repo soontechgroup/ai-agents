@@ -51,9 +51,6 @@ jobs:
       run: |
         echo "name=latest" >> $GITHUB_OUTPUT
 
-
-
-
     # 4. 提取元数据
     - name: Extract metadata
       id: meta
@@ -63,7 +60,7 @@ jobs:
         tags: |
           # 只使用 latest 标签
           type=raw,value=latest
-    
+
     # 5. 构建并推送 Docker 镜像
     - name: Build and push Docker image
       id: build
@@ -160,78 +157,58 @@ jobs:
         
         echo "🐳 开始在服务器上部署 Docker 容器..."
         
-        # 设置镜像标签
-        FULL_IMAGE_NAME="$FULL_IMAGE_NAME"
-        echo "📋 使用镜像: \$FULL_IMAGE_NAME"
+        # 进入项目目录
+        echo "📂 进入项目目录..."
+        cd /root/ai-agents || { echo "❌ 项目目录不存在"; exit 1; }
+        
+        # 拉取最新代码（包含最新的docker-compose.yml配置）
+        echo "📥 拉取最新代码..."
+        git pull origin main
         
         # 登录 Docker Hub
         echo "🔑 登录到 Docker Hub..."
         echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
         
-        # 拉取最新镜像
+        # 使用docker-compose更新和部署（自动处理网络、依赖等）
         echo "📥 拉取最新镜像..."
-        docker pull \$FULL_IMAGE_NAME
+        docker-compose --profile dev pull
         
-        # 停止并删除现有容器（如果存在）
-        echo "🛑 停止现有容器..."
-        if docker ps -a | grep -q "ai-agents-app"; then
-            docker stop ai-agents-app || true
-            docker rm ai-agents-app || true
-        fi
+        echo "🚀 启动所有服务..."
+        docker-compose --profile dev up -d
         
-        # 创建必要的目录
-        echo "📁 创建数据目录..."
-        mkdir -p /root/ai-agents-data/{chroma_db,logs}
+        # 等待服务完全启动
+        echo "⏳ 等待服务启动..."
+        sleep 20
         
-        # 检查现有数据库容器
-        echo "🔍 检查现有数据库容器..."
-        docker ps | grep -E "(mysql|ai-agent-mysql)"
+        # 检查服务状态
+        echo "🔍 检查服务状态..."
+        docker-compose ps
         
-        # 简单启动容器（所有配置都在 .env.dev 中）
-        echo "🚀 启动新容器..."
-        docker run -d \
-          --name ai-agents-app \
-          --restart unless-stopped \
-          -p 8000:8000 \
-          -v /root/ai-agents-data/chroma_db:/app/data/chroma_db \
-          -v /root/ai-agents-data/logs:/app/logs \
-          \$FULL_IMAGE_NAME
+        # 显示应用日志
+        echo "📋 应用启动日志："
+        docker-compose logs --tail=30 ai-agents
         
-        # 等待容器启动
-        echo "⏳ 等待容器启动..."
-        sleep 30
-
-        
-        
-        # 检查数据库连接
-        echo "🔧 检查数据库连接..."
-       
-        
-        # 检查容器状态
-        echo "🔍 检查容器状态..."
-        docker ps -a | grep ai-agents-app
-        
-        # 检查容器日志
-        echo "📋 检查应用日志..."
-        docker logs --tail=20 ai-agents-app
-        
-        # 健康检查
+        # 健康检查（利用docker-compose的健康检查）
         echo "🩺 执行健康检查..."
-        sleep 10
-        
-        if curl -s -f http://localhost:8000/docs > /dev/null; then
+        for i in {1..5}; do
+          if docker-compose ps ai-agents | grep -q "healthy"; then
             echo "✅ 应用健康检查通过！"
-        else
-            echo "❌ 应用健康检查失败，查看详细日志："
-            docker logs ai-agents-app
+            break
+          elif [ \$i -eq 5 ]; then
+            echo "❌ 健康检查超时，检查详细日志："
+            docker-compose logs --tail=50 ai-agents
             exit 1
-        fi
+          else
+            echo "⏳ 等待健康检查... (\$i/5)"
+            sleep 10
+          fi
+        done
         
-        # 清理旧镜像
-        echo "🧹 清理旧的 Docker 镜像..."
+        # 清理未使用的镜像
+        echo "🧹 清理未使用的镜像..."
         docker image prune -f
         
-        echo "✅ CD 部署完成！"
+        echo "✅ 部署成功完成！"
         
         ENDSSH
         
@@ -255,7 +232,9 @@ jobs:
         echo "  - 应用首页: http://34.129.46.22:8000/"
         echo ""
         echo "🔧 服务器管理命令："
-        echo "  - 查看容器状态: docker ps | grep ai-agents-app"
-        echo "  - 查看容器日志: docker logs ai-agents-app"
-        echo "  - 重启容器: docker restart ai-agents-app"
-        echo "  - 停止容器: docker stop ai-agents-app" 
+        echo "  - 查看所有服务状态: docker-compose ps"
+        echo "  - 查看应用日志: docker-compose logs ai-agents"
+        echo "  - 实时查看日志: docker-compose logs -f ai-agents"
+        echo "  - 重启应用: docker-compose restart ai-agents"
+        echo "  - 停止所有服务: docker-compose --profile dev down"
+        echo "  - 启动所有服务: docker-compose --profile dev up -d" 
