@@ -72,6 +72,26 @@ Chat Mode:
 
 ### 🚧 Pending Implementation
 
+#### 0. Code TODOs - Model Integrations
+The current implementation has several TODOs for future model integrations:
+
+**In `app/models/neomodel/entity.py`:**
+- Line 70: `# TODO: Uncomment when MemoryNode is implemented`
+  - Relationship to MemoryNode for tracking which memories mention this entity
+
+**In `app/models/neomodel/knowledge.py`:**
+- Line 118: `# TODO: Uncomment when MemoryNode is implemented`
+  - Relationship to track which memories this knowledge was derived from
+- Line 125: `# TODO: Uncomment when DigitalHumanNode is implemented`
+  - Direct relationship to DigitalHumanNode instead of just storing ID
+- Line 132: `# TODO: Uncomment when UserNode is implemented`
+  - Relationship to track which user validated this knowledge
+
+These TODOs indicate future integration points with:
+- **MemoryNode**: For connecting knowledge to conversation memories
+- **DigitalHumanNode**: For better graph-based digital human management
+- **UserNode**: For tracking user interactions and validations
+
 #### 1. Knowledge Service (`app/services/knowledge_service.py`)
 ```python
 class KnowledgeService:
