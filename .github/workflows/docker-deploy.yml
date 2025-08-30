@@ -188,18 +188,19 @@ jobs:
         echo "📋 应用启动日志："
         docker-compose logs --tail=30 ai-agents
         
-        # 健康检查（利用docker-compose的健康检查）
+        # 健康检查（直接使用curl检查）
         echo "🩺 执行健康检查..."
-        for i in {1..5}; do
-          if docker-compose ps ai-agents | grep -q "healthy"; then
+        for i in {1..6}; do
+          if curl -s -f http://localhost:8000/docs > /dev/null 2>&1; then
             echo "✅ 应用健康检查通过！"
+            docker-compose ps
             break
-          elif [ \$i -eq 5 ]; then
+          elif [ \$i -eq 6 ]; then
             echo "❌ 健康检查超时，检查详细日志："
             docker-compose logs --tail=50 ai-agents
             exit 1
           else
-            echo "⏳ 等待健康检查... (\$i/5)"
+            echo "⏳ 等待应用启动... (\$i/6)"
             sleep 10
           fi
         done
