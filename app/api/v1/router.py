@@ -5,10 +5,8 @@ from .endpoints import (
     user, 
     conversations, 
     chroma,
-    # 新的图数据库端点
-    persons,
-    organizations,
-    relationships,
+    # 记忆体系统端点
+    memory,
     analytics
 )
 from .admin import admin_router
@@ -50,26 +48,12 @@ api_router.include_router(
     tags=["Chroma 向量数据库"]
 )
 
-# ==================== 图数据库路由 ====================
-# 人员管理
+# ==================== 记忆体系统路由 ====================
+# 记忆体系统（包含人员、组织、关系管理）
 api_router.include_router(
-    persons.router,
+    memory.router,
     prefix="/graph",
-    tags=["人员管理"]
-)
-
-# 组织管理
-api_router.include_router(
-    organizations.router,
-    prefix="/graph",
-    tags=["组织管理"]
-)
-
-# 关系管理
-api_router.include_router(
-    relationships.router,
-    prefix="/graph",
-    tags=["关系管理"]
+    tags=["记忆体系统"]
 )
 
 # 图分析
