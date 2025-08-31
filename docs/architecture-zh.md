@@ -140,11 +140,8 @@ graph LR
 3. **进程管理**：Supervisor/PM2
 4. **环境配置**：通过环境变量管理不同环境
 
-### 环境划分
+### 环境配置
 
 | 环境 | 前端域名 | 后端API | 数据库 |
 |------|---------|---------|--------|
 | 开发 | localhost:3000 | localhost:8000 | ai_agents_dev |
-| 测试 | test.yourdomain.com | api-test.yourdomain.com | ai_agents_test |
-| 预发布 | staging.yourdomain.com | api-staging.yourdomain.com | ai_agents_staging |
-| 生产 | app.yourdomain.com | api.yourdomain.com | ai_agents |
