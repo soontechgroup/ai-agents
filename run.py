@@ -5,13 +5,10 @@ PyCharm 开发环境启动脚本
 使用方法：
     python run.py                    # 默认开发环境
     python run.py --env dev          # 开发环境
-    python run.py --env prod         # 生产环境
-    python run.py --env staging      # 预发环境
 """
 
 import uvicorn
 import os
-import sys
 import argparse
 
 def parse_args():
@@ -21,13 +18,13 @@ def parse_args():
         "--env", 
         type=str, 
         default="dev",
-        choices=["dev", "development", "test", "staging", "prod", "production"],
+        choices=["dev", "development"],
         help="指定运行环境 (默认: dev)"
     )
     parser.add_argument(
         "--host", 
         type=str, 
-        default="127.0.0.1",
+        default="0.0.0.0",
         help="服务器主机地址 (默认: 127.0.0.1)"
     )
     parser.add_argument(
@@ -67,6 +64,6 @@ if __name__ == "__main__":
         host=host,
         port=port,
         reload=reload,
-        log_level="info",
+        log_level="info",  # 改为info级别，与应用配置一致
         access_log=True  # 显示访问日志
     ) 

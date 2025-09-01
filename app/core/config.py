@@ -11,11 +11,7 @@ def load_env_file():
     """根据环境变量加载对应的配置文件"""
     env_files = {
         "dev": ".env.dev",
-        "development": ".env.dev", 
-        "test": ".env.test",
-        "staging": ".env.staging",
-        "prod": ".env.prod",
-        "production": ".env.prod"
+        "development": ".env.dev"
     }
     
     # 获取对应环境的配置文件
@@ -44,6 +40,19 @@ class Settings(BaseSettings):
     # 数据库配置 (与 docker-compose.yml 匹配)
     DATABASE_URL: str = "mysql+pymysql://root:123456@localhost:3306/ai_agents"
     
+    # MongoDB 配置
+    MONGODB_URL: str = "mongodb://admin:password123@localhost:27018/?authSource=admin"
+    MONGODB_DATABASE: str = "ai_agents"
+    
+    # Neo4j 配置
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USERNAME: str = "neo4j"
+    NEO4J_PASSWORD: str = "password123"
+    NEO4J_DATABASE: str = "neo4j"
+    NEO4J_MAX_CONNECTION_LIFETIME: int = 3600
+    NEO4J_MAX_CONNECTION_POOL_SIZE: int = 50
+    NEO4J_CONNECTION_ACQUISITION_TIMEOUT: float = 60.0
+    
     # 应用配置
     PROJECT_NAME: str = "AI Agents API"
     VERSION: str = "1.0.0"
@@ -54,12 +63,19 @@ class Settings(BaseSettings):
 
     # 可选配置
     LOG_LEVEL: str = "INFO"
+    LOG_PATH: str = "logs"
+    LOG_ROTATION: str = "00:00"
+    LOG_RETENTION: str = "30 days"
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
 
     # 服务器配置
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     RELOAD: bool = False
+
+    # Chroma 数据库配置
+    CHROMA_PERSIST_DIRECTORY: str = "./data/chroma_db"
+    CHROMA_COLLECTION_NAME: str = "default_collection"
 
     class Config:
         # 不在这里指定 env_file，因为我们已经手动加载了
@@ -72,4 +88,6 @@ settings = Settings()
 # 打印当前环境信息
 print(f"🚀 当前运行环境: {settings.ENVIRONMENT}")
 print(f"📊 调试模式: {'开启' if settings.DEBUG else '关闭'}")
-print(f"🔗 数据库连接: {settings.DATABASE_URL}")
+print(f"🔗 MySQL 数据库: {settings.DATABASE_URL}")
+print(f"🔗 MongoDB 数据库: {settings.MONGODB_URL}")
+print(f"🔗 Neo4j 数据库: {settings.NEO4J_URI}")

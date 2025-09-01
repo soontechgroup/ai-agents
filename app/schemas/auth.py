@@ -29,6 +29,11 @@ class UserData(BaseModel):
         from_attributes = True
 
 
+class CurrentUserRequest(BaseModel):
+    """获取当前用户请求模式"""
+    pass
+
+
 class Token(BaseModel):
     """令牌响应模式"""
     access_token: str

@@ -43,6 +43,7 @@ DEFAULT_HOST="0.0.0.0"
 DEFAULT_PORT="8000"
 PID_FILE="pids/app.pid"
 LOG_FILE="logs/app.log"
+CONDA_ENV_NAME="ai-agents"
 
 # 检查Python环境
 check_python() {
@@ -75,14 +76,38 @@ check_python() {
     check_dependencies
 }
 
-# 检查依赖是否已安装
-check_dependencies() {
-    log_info "检查必要依赖..."
+# 设置conda环境
+setup_conda_env() {
+    log_info "设置conda环境..."
     
-    # 检查uvicorn是否已安装
-    if ! $PYTHON_CMD -c "import uvicorn" 2>/dev/null; then
-        log_error "uvicorn 未安装，请先安装项目依赖"
-        log_info "运行: pip install -r requirements.txt"
+    # 检查conda是否安装
+    if ! command -v conda &> /dev/null; then
+        log_error "Conda 未安装，请先安装Conda"
+        exit 1
+    fi
+    
+    # 检查conda环境是否存在
+    if ! conda env list | grep -q "^$CONDA_ENV_NAME "; then
+        log_error "Conda环境 '$CONDA_ENV_NAME' 不存在"
+        log_info "请先创建环境: conda create -n $CONDA_ENV_NAME python=3.11"
+        exit 1
+    fi
+    
+    # 激活conda环境
+    log_info "激活conda环境: $CONDA_ENV_NAME"
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
+    
+    # 显示Python路径
+    log_success "Conda环境已激活: $(which python)"
+}
+
+# 安装依赖
+install_dependencies() {
+    log_info "安装项目依赖..."
+    
+    if [ ! -f "requirements.txt" ]; then
+        log_error "requirements.txt 文件不存在"
         exit 1
     fi
     
@@ -112,15 +137,6 @@ check_env() {
     case "$ENVIRONMENT" in
         "dev"|"development")
             ENV_FILE=".env.dev"
-            ;;
-        "test")
-            ENV_FILE=".env.test"
-            ;;
-        "staging")
-            ENV_FILE=".env.staging"
-            ;;
-        "prod"|"production")
-            ENV_FILE=".env.prod"
             ;;
         *)
             ENV_FILE=".env"
@@ -190,8 +206,15 @@ start_app() {
     log_info "API文档地址: http://$HOST:$PORT/docs"
     log_info "主页地址: http://$HOST:$PORT/"
     
-    # 后台启动应用（不使用虚拟环境）
-    nohup $PYTHON_CMD -m uvicorn app.main:app --host "$HOST" --port "$PORT" --reload="$RELOAD" --log-level info > "$LOG_FILE" 2>&1 &
+    # 激活conda环境并后台启动应用
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
+    # 根据 RELOAD 变量决定是否添加 --reload 参数
+    if [ "$RELOAD" = "true" ]; then
+        nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info > "$LOG_FILE" 2>&1 &
+    else
+        nohup uvicorn app.main:app --host "$HOST" --port "$PORT" --log-level info > "$LOG_FILE" 2>&1 &
+    fi
     APP_PID=$!
     
     # 保存PID
@@ -352,6 +375,8 @@ start_service() {
     echo "=================================="
     
     check_python
+    setup_conda_env
+    install_dependencies
     check_env
     setup_directories
     
@@ -369,10 +394,13 @@ dev_start() {
     export PORT="${PORT:-8000}"
     
     check_python
+    setup_conda_env
     check_env
     setup_directories
     
-    # 直接运行（前台模式，不使用虚拟环境）
+    # 激活conda环境并直接运行（前台模式）
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV_NAME"
     log_success "开发模式启动，热重载已开启"
     log_info "API文档地址: http://$HOST:$PORT/docs"
     $PYTHON_CMD -m uvicorn app.main:app --host "$HOST" --port "$PORT" --reload --log-level info
@@ -419,7 +447,7 @@ show_help() {
     echo "  PORT        - 服务监听端口 (默认: $DEFAULT_PORT)"
     echo "  RELOAD      - 是否启用热重载 (默认: false)"
     echo "  ENVIRONMENT - 运行环境 (默认: dev)"
-    echo "                可选值: dev, development, test, staging, prod, production"
+    echo "                可选值: dev, development"
     echo ""
     echo "注意："
     echo "  此脚本假设Python环境和依赖已预先配置完成"
@@ -430,8 +458,7 @@ show_help() {
     echo "  $0 dev                             # 开发模式启动"
     echo "  PORT=9000 $0 start                 # 指定端口启动"
     echo "  HOST=127.0.0.1 $0 start            # 指定监听地址启动"
-    echo "  ENVIRONMENT=prod $0 start          # 生产环境启动"
-    echo "  ENVIRONMENT=staging $0 start       # 预发环境启动"
+    echo "  ENVIRONMENT=dev $0 start           # 开发环境启动"
 }
 
 # 主函数

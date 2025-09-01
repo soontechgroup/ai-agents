@@ -1,5 +1,5 @@
 from typing import Any, Optional, List
-from app.schemas.common import BaseResponse, SuccessResponse, ErrorResponse
+from app.schemas.common_response import BaseResponse, SuccessResponse, ErrorResponse, PaginatedResponse, PaginationMeta
 import math
 
 
@@ -30,17 +30,27 @@ class ResponseUtil:
             message=message
         )
     
-    # 分页响应已移除，如需要请重新添加 PaginationMeta 和 PaginatedResponse 类
-    # @staticmethod
-    # def paginated(
-    #     data: List[Any],
-    #     page: int,
-    #     size: int,
-    #     total: int,
-    #     message: str = "获取成功"
-    # ) -> PaginatedResponse:
-    #     """构造分页响应"""
-    #     pass
+    @staticmethod
+    def page_success(
+        data: List[Any],
+        page: int,
+        size: int,
+        total: int,
+        message: str = "查询成功"
+    ) -> PaginatedResponse:
+        """构造分页成功响应"""
+        total_pages = math.ceil(total / size) if size > 0 else 0
+        return PaginatedResponse(
+            code=200,
+            message=message,
+            data=data,
+            pagination=PaginationMeta(
+                page=page,
+                size=size,
+                total=total,
+                pages=total_pages
+            )
+        )
     
     @staticmethod
     def unauthorized(message: str = "未授权访问") -> ErrorResponse:

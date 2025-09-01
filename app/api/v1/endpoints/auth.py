@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.schemas.auth import UserCreateRequest, UserLoginRequest, UserData, Token
-from app.schemas.common import SuccessResponse
+from fastapi import APIRouter, Depends
+from app.schemas.auth import UserCreateRequest, UserLoginRequest, UserData, Token, CurrentUserRequest
+from app.schemas.common_response import SuccessResponse
 from app.services.auth_service import AuthService
 from app.dependencies import get_auth_service
-from app.guards import get_current_active_user, get_current_user
+from app.guards import get_current_active_user
 from app.utils.response import ResponseUtil
 from app.core.models import User
 
@@ -46,8 +46,9 @@ async def login(
     return ResponseUtil.success(data=token_data, message="登录成功")
 
 
-@router.get("/me", response_model=SuccessResponse[UserData], summary="获取当前用户信息")
+@router.post("/current", response_model=SuccessResponse[UserData], summary="获取当前用户信息")
 async def get_current_user_info(
+    request: CurrentUserRequest,
     current_user: User = Depends(get_current_active_user)
 ):
     """

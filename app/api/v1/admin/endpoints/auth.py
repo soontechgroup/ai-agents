@@ -3,12 +3,13 @@ from app.schemas.admin_auth import (
     AdminLoginRequest, 
     AdminLoginResponse,
     AdminAccountInfo,
+    AdminAccountRequest,
     AdminAccountUpdateRequest,
     AdminPasswordChangeRequest,
     AdminTokenRefreshRequest,
     AdminTokenRefreshResponse
 )
-from app.schemas.common import SuccessResponse
+from app.schemas.common_response import SuccessResponse
 from app.guards.auth import get_current_superuser
 from app.core.models import User
 from app.utils.response import ResponseUtil
@@ -57,8 +58,9 @@ async def admin_logout(
     )
 
 
-@router.get("/account", response_model=SuccessResponse[AdminAccountInfo], summary="获取管理员账户信息")
+@router.post("/current", response_model=SuccessResponse[AdminAccountInfo], summary="获取管理员账户信息")
 async def get_admin_account(
+    request: AdminAccountRequest,
     current_admin: User = Depends(get_current_superuser)
 ):
     """
@@ -75,7 +77,7 @@ async def get_admin_account(
     )
 
 
-@router.put("/account", response_model=SuccessResponse[AdminAccountInfo], summary="更新管理员账户信息")
+@router.post("/update", response_model=SuccessResponse[AdminAccountInfo], summary="更新管理员账户信息")
 async def update_admin_account(
     update_request: AdminAccountUpdateRequest,
     current_admin: User = Depends(get_current_superuser)
