@@ -509,6 +509,127 @@ class RelationshipService:
 ```
 **状态**: ✅ 已实现
 
+#### 3.4.3 动态实体架构设计（基于 GraphRAG 理念）
+
+**架构决策：从预定义到动态发现**
+
+**原始问题**
+预定义的实体模型（如 OrganizationNode 包含 38 个字段）存在认知锁定：
+- 假设所有组织都是商业实体（revenue、valuation）
+- 假设组织都有物理总部（headquarters）
+- 无法适应新型组织形式（DAO、开源社区）
+- 限制了知识发现的可能性
+
+**新架构理念**
+采用 GraphRAG 的核心思想：**让 AI 从数据中发现结构，而不是把数据塞进预定义结构**。
+
+```mermaid
+graph TD
+    subgraph "新架构：动态实体模型"
+        Text[输入文本]
+        AI[AI 抽取]
+        Dynamic[DynamicEntity<br/>完全动态]
+        Storage[统一存储]
+        
+        Text --> AI
+        AI --> Dynamic
+        Dynamic --> Storage
+    end
+    
+    subgraph "实体特征"
+        F1[核心：name + uid]
+        F2[类型：List动态推断]
+        F3[属性：Dict无限制]
+        F4[上下文：保留差异]
+    end
+    
+    Dynamic -.-> F1
+    Dynamic -.-> F2
+    Dynamic -.-> F3
+    Dynamic -.-> F4
+```
+
+**DynamicEntity 核心设计**
+
+```python
+class DynamicEntity:
+    """动态实体 - 不预设任何领域特定结构"""
+    
+    # 核心标识（仅这些是必需的）
+    uid: str
+    name: str
+    
+    # 动态属性
+    types: List[str]  # 可以同时属于多个类型
+    properties: Dict[str, Any]  # 完全动态的属性
+    
+    # 元信息
+    contexts: List[Dict]  # 不同上下文中的表现
+    sources: List[str]  # 信息来源
+    confidence: float  # 置信度
+    
+    # 时间演化
+    temporal_changes: List[Dict]  # 属性的时间变化
+    
+    def merge_with(self, other: 'DynamicEntity'):
+        """合并另一个实体的信息，保留上下文差异"""
+```
+
+**实际案例对比**
+
+分析"OpenAI"这个实体：
+
+**旧方式（预定义）**：
+```python
+OrganizationNode(
+    name="OpenAI",
+    type="COMPANY",
+    revenue=None,  # 不适用
+    valuation=100B,
+    stock_symbol=None  # 不适用
+    # 大量无关字段...
+)
+```
+
+**新方式（动态发现）**：
+```python
+# AI 可能在不同上下文中发现：
+DynamicEntity(
+    name="OpenAI",
+    types=["研究机构", "公司", "标准制定者", "伦理倡导者"],
+    properties={
+        "context_1": {"focus": "AGI研究", "model": "GPT系列"},
+        "context_2": {"role": "行业领导者", "impact": "改变AI格局"},
+        "context_3": {"debate": "AI安全", "split": "Anthropic分裂"}
+    },
+    contexts=[...]  # 保留每个上下文的原始信息
+)
+```
+
+**架构优势**
+
+1. **认知解锁**：不再被预设结构限制，能发现意想不到的模式
+2. **代码精简**：删除 600+ 行预定义代码，系统更简洁
+3. **完全灵活**：任何实体、任何属性、任何关系都可表达
+4. **上下文感知**：同一实体在不同场景可有不同表现
+5. **知识发现**：让 AI 告诉我们什么是重要的，而不是我们告诉 AI
+
+**实施效果**
+
+- ✅ 删除 PersonNode.py (336行)
+- ✅ 删除 OrganizationNode.py (337行)  
+- ✅ 创建 DynamicEntity.py (约170行)
+- ✅ 简化 GraphService
+- ✅ 移除所有预定义验证逻辑
+
+**核心理念**
+
+> "The best model is no model. Let the data define the structure."
+> 
+> 最好的模型就是没有模型。让数据定义结构。
+
+**状态**: ✅ 已实现
+
 ### 3.5 混合记忆系统
 
 #### 3.5.1 记忆架构设计
