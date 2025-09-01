@@ -15,6 +15,7 @@ from app.repositories.neomodel.category import CategoryRepository
 from app.repositories.neomodel.knowledge import KnowledgeRepository
 from app.repositories.neomodel.entity import EntityRepository
 from app.repositories.neomodel.graph_repository import GraphRepository
+from app.repositories.neomodel.extracted_knowledge import ExtractedKnowledgeRepository
 
 __all__ = [
     'NeomodelRepository',
@@ -28,5 +29,6 @@ __all__ = [
     'CategoryRepository',
     'KnowledgeRepository',
     'EntityRepository',
-    'GraphRepository'
+    'GraphRepository',
+    'ExtractedKnowledgeRepository'
 ]
