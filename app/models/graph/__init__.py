@@ -1,6 +1,6 @@
 """
 图数据模型模块
-提供Neo4j图数据库的节点和关系模型定义
+提供Neo4j图数据库的动态节点和关系模型定义
 """
 
 # 基础类
@@ -36,36 +36,19 @@ from app.models.graph.types import (
     level_to_confidence
 )
 
-# 节点模型
-from app.models.graph.nodes import (
-    PersonNode,
-    OrganizationNode
-)
+# 动态模型
+from app.models.graph.dynamic_entity import DynamicEntity
+from app.models.graph.dynamic_relationship import DynamicRelationship
 
-# 关系模型
-from app.models.graph.relationships import (
-    BaseRelationship,
-    # 社交关系
-    FriendRelationship,
-    FamilyRelationship,
-    KnowsRelationship,
-    # 职业关系
-    WorksAtRelationship,
-    ColleagueRelationship,
-    MentorshipRelationship,
-    BusinessPartnershipRelationship
-)
-
-# 工厂类和方法
-from app.models.graph.factory import (
-    GraphModelFactory,
-    create_node,
+# 动态工厂
+from app.models.graph.dynamic_factory import (
+    DynamicGraphFactory,
+    create_entity,
     create_relationship,
-    register_node,
-    register_relationship
+    infer_from_context
 )
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 __all__ = [
     # 基础类
@@ -96,24 +79,13 @@ __all__ = [
     "confidence_to_level",
     "level_to_confidence",
     
-    # 节点模型
-    "PersonNode",
-    "OrganizationNode",
+    # 动态模型
+    "DynamicEntity",
+    "DynamicRelationship",
     
-    # 关系模型
-    "BaseRelationship",
-    "FriendRelationship",
-    "FamilyRelationship",
-    "KnowsRelationship",
-    "WorksAtRelationship",
-    "ColleagueRelationship",
-    "MentorshipRelationship",
-    "BusinessPartnershipRelationship",
-    
-    # 工厂类和方法
-    "GraphModelFactory",
-    "create_node",
+    # 动态工厂
+    "DynamicGraphFactory",
+    "create_entity",
     "create_relationship",
-    "register_node",
-    "register_relationship",
+    "infer_from_context",
 ]

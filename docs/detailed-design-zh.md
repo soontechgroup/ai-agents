@@ -614,19 +614,63 @@ DynamicEntity(
 4. **上下文感知**：同一实体在不同场景可有不同表现
 5. **知识发现**：让 AI 告诉我们什么是重要的，而不是我们告诉 AI
 
+**DynamicRelationship 设计（完全动态关系）**
+
+```python
+class DynamicRelationship:
+    """动态关系 - 不预设任何关系类型"""
+    
+    # 核心标识
+    uid: str
+    source_name: str  
+    target_name: str
+    
+    # 动态属性
+    relationship_types: List[str]  # 可以同时有多种关系类型
+    properties: Dict[str, Any]  # 完全动态的属性
+    
+    # 元信息
+    contexts: List[Dict]  # 不同上下文中的关系表现
+    confidence: float  # 关系置信度
+    strength: float  # 关系强度
+    
+    # 时间属性
+    bidirectional: bool  # 是否双向
+    temporal_aspects: List[Dict]  # 关系的时间演化
+    valid_from: Optional[datetime]  # 关系开始时间
+    valid_until: Optional[datetime]  # 关系结束时间
+```
+
 **实施效果**
 
 - ✅ 删除 PersonNode.py (336行)
 - ✅ 删除 OrganizationNode.py (337行)  
-- ✅ 创建 DynamicEntity.py (约170行)
+- ✅ 删除 relationships/professional.py (11,982行)
+- ✅ 删除 relationships/social.py (10,717行) 
+- ✅ 创建 DynamicEntity.py (114行)
+- ✅ 创建 DynamicRelationship.py (107行)
+- ✅ 重写 factory.py → dynamic_factory.py (251行)
 - ✅ 简化 GraphService
 - ✅ 移除所有预定义验证逻辑
+
+**架构演进总结**
+
+1. **第一阶段**：删除预定义实体模型（PersonNode、OrganizationNode）
+2. **第二阶段**：删除预定义关系模型（22,699行预定义代码）  
+3. **第三阶段**：重构工厂模式为动态工厂
+4. **最终成果**：删除约 23,372 行预定义代码，用约 472 行动态代码替代
 
 **核心理念**
 
 > "The best model is no model. Let the data define the structure."
 > 
 > 最好的模型就是没有模型。让数据定义结构。
+
+**GraphRAG 原则**
+- 不预设实体类型，让 AI 从文本中发现
+- 不限制属性字段，让数据决定需要什么
+- 不固定关系类型，让内容定义连接方式
+- 保留上下文差异，同一实体可有多种表现
 
 **状态**: ✅ 已实现
 

@@ -194,3 +194,4 @@ API 层 (FastAPI 路由)
 2. 确保 `.env.dev` 中的数据库 URL 与 docker-compose 端口匹配
 3. 始终使用 `app/utils/response.py` 中的标准化响应格式
 4. 维护分层架构 - 避免从 API 端点直接访问数据库
+5. 我们不需要那么多不必要的注释
