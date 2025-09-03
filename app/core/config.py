@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # Chroma 数据库配置
     CHROMA_PERSIST_DIRECTORY: str = "./data/chroma_db"
     CHROMA_COLLECTION_NAME: str = "default_collection"
+    
+    # OpenAI 配置
+    OPENAI_API_KEY: Optional[str] = None
+    LLM_MODEL: str = "gpt-4o-mini"
 
     class Config:
         # 不在这里指定 env_file，因为我们已经手动加载了

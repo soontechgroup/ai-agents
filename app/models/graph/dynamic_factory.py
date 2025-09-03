@@ -134,21 +134,57 @@ class DynamicGraphFactory:
         relationships = []
         
         for entity_data in extraction_result.get('entities', []):
+            # 支持新的多类型和结构化属性格式
+            types = entity_data.get('types', [])
+            if not types and entity_data.get('type'):
+                # 向后兼容：处理旧的单一类型格式
+                types = [t.strip() for t in entity_data['type'].split('|') if t.strip()]
+            
+            properties = entity_data.get('properties', {})
+            # 如果没有结构化属性，使用描述作为属性
+            if not properties and entity_data.get('description'):
+                properties = {'description': entity_data.get('description')}
+            
             entity = cls.create_entity(
-                name=entity_data.get('name'),
-                initial_types=[entity_data.get('type')] if entity_data.get('type') else [],
-                initial_properties={'description': entity_data.get('description')}
+                name=entity_data.get('name', ''),
+                initial_types=types,
+                initial_properties=properties,
+                confidence=entity_data.get('confidence', 0.5)
             )
+            
+            # 设置置信度和其他元数据
+            entity.confidence = entity_data.get('confidence', 0.5)
             entities.append(entity)
+            
+            logger.info(f"创建实体: {entity.name} 类型: {entity.types} 置信度: {entity.confidence}")
         
         for rel_data in extraction_result.get('relationships', []):
+            # 支持新的多类型和结构化属性格式
+            types = rel_data.get('types', [])
+            if not types and rel_data.get('relation_type'):
+                # 向后兼容：处理旧的单一类型格式
+                types = [t.strip() for t in rel_data['relation_type'].split('|') if t.strip()]
+            
+            properties = rel_data.get('properties', {})
+            # 如果没有结构化属性，使用描述作为属性
+            if not properties and rel_data.get('description'):
+                properties = {'description': rel_data.get('description')}
+            
             relationship = cls.create_relationship(
-                source_name=rel_data.get('source'),
-                target_name=rel_data.get('target'),
-                initial_types=[rel_data.get('relation_type')] if rel_data.get('relation_type') else [],
-                initial_properties={'description': rel_data.get('description')}
+                source_name=rel_data.get('source', ''),
+                target_name=rel_data.get('target', ''),
+                initial_types=types,
+                initial_properties=properties,
+                confidence=rel_data.get('confidence', 0.5)
             )
+            
+            # 设置关系的置信度和强度
+            relationship.confidence = rel_data.get('confidence', 0.5)
+            relationship.strength = rel_data.get('strength', 0.5)
             relationships.append(relationship)
+            
+            logger.info(f"创建关系: {relationship.source_name} -> {relationship.target_name} "
+                       f"类型: {relationship.relationship_types} 置信度: {relationship.confidence}")
         
         return entities, relationships
 
