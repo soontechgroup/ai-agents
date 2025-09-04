@@ -108,3 +108,9 @@ class DigitalHumanPageRequest(BaseModel):
 class DigitalHumanPageResponse(PaginatedResponse[List[DigitalHumanResponse]]):
     """数字人分页响应模型"""
     pass
+
+
+class DigitalHumanTrainRequest(BaseModel):
+    """数字人训练请求模型"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    message: str = Field(..., description="训练消息内容")

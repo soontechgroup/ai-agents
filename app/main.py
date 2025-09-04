@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
-from app.core.models import Base  # 移到顶部导入
+from app.core.models import Base
 from app.api.v1.router import api_router
 from alembic.config import Config
 from alembic import command
@@ -12,26 +12,21 @@ import os
 import time
 import traceback
 
-# 导入 loguru logger
 from app.core.logger import logger, set_request_id, get_request_id
 
-# 导入 MongoDB 相关
 from app.core.mongodb import init_mongodb, close_mongodb
 
-# 导入 Neomodel 相关
 from app.core.neomodel_config import setup_neomodel
 
-# 创建FastAPI应用
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="基于FastAPI的AI代理系统，包含JWT认证功能"
 )
 
-# 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 开发环境允许所有来源
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,30 +35,23 @@ app.add_middleware(
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """记录所有HTTP请求和响应"""
     start_time = time.time()
     
-    # 生成并设置请求ID
     request_id = set_request_id()
     
-    # 记录请求信息（在消息中包含请求ID）
     logger.bind(request_id=request_id).info(f"📥 [{request_id}] 收到请求: {request.method} {request.url.path}")
     
     if request.url.query:
         logger.bind(request_id=request_id).debug(f"查询参数: {request.url.query}")
     
-    # 记录请求头（调试模式）
     if settings.DEBUG:
         logger.bind(request_id=request_id).debug(f"请求头: {dict(request.headers)}")
     
     try:
-        # 处理请求
         response = await call_next(request)
         
-        # 计算处理时间
         process_time = time.time() - start_time
         
-        # 根据状态码使用不同级别
         if response.status_code < 400:
             logger.bind(request_id=request_id).success(
                 f"✅ [{request_id}] 请求完成: {request.method} {request.url.path} | "
@@ -80,66 +68,54 @@ async def log_requests(request: Request, call_next):
                 f"状态: {response.status_code} | 耗时: {process_time:.3f}s"
             )
         
-        # 添加请求ID到响应头
         response.headers["X-Request-ID"] = request_id
         
         return response
         
     except Exception as e:
-        # 计算处理时间
         process_time = time.time() - start_time
         
-        # 使用 loguru 的异常处理
         logger.bind(request_id=request_id).exception(
             f"💥 [{request_id}] 请求处理异常: {request.method} {request.url.path} | "
             f"耗时: {process_time:.3f}s | 异常: {type(e).__name__}"
         )
         
-        # 重新抛出异常，让FastAPI处理
         raise
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """全局异常处理器"""
-    # 使用当前请求的 request_id
     request_id = get_request_id() or "no-request-id"
     
-    # 使用 loguru 的异常记录
     logger.bind(request_id=request_id).exception(
         f"🔥 [{request_id}] 未处理异常 | 路径: {request.url.path} | "
         f"异常: {type(exc).__name__}: {str(exc)}"
     )
     
-    # 返回友好的错误响应
     return JSONResponse(
         status_code=500,
         content={
             "code": 500,
             "message": "内部服务器错误",
             "detail": str(exc) if settings.DEBUG else "服务器处理请求时发生错误",
-            "request_id": request_id  # 返回请求ID便于追踪
+            "request_id": request_id
         }
     )
 
 
 @app.on_event("startup")
 async def startup_event():
-    """应用启动时检查数据库连接"""
     max_retries = 2
     retry_interval = 1
     
-    # 初始化 MySQL
     for attempt in range(max_retries):
         try:
             logger.info(f"🔄 尝试连接 MySQL 数据库 (第{attempt + 1}次尝试)")
-            # 测试数据库连接
             with engine.connect() as conn:
                 from sqlalchemy import text
                 conn.execute(text("SELECT 1"))
             logger.success("✅ MySQL 数据库连接成功!")
             
-            # 使用 Alembic 自动执行数据库迁移
             try:
                 logger.info("📦 开始执行数据库迁移...")
                 alembic_cfg = Config("alembic.ini")
@@ -147,7 +123,6 @@ async def startup_event():
                 logger.success("✅ 数据库迁移完成!")
             except Exception as migration_error:
                 logger.warning(f"⚠️ 数据库迁移失败: {migration_error}")
-                # 如果迁移失败，尝试使用原来的方式创建表（用于首次部署）
                 logger.info("🔧 尝试使用 SQLAlchemy 创建表结构...")
                 Base.metadata.create_all(bind=engine)
                 logger.success("✅ 数据库表结构同步完成!")
@@ -162,20 +137,18 @@ async def startup_event():
                 logger.error("❌ MySQL 数据库连接失败，已达到最大重试次数")
                 raise
     
-    # 初始化 MongoDB
     try:
         logger.info("🔄 正在初始化 MongoDB...")
         await init_mongodb(
             mongodb_url=settings.MONGODB_URL,
             database_name=settings.MONGODB_DATABASE,
-            document_models=[]  # 暂时没有模型，未来添加记忆体相关模型
+            document_models=[]
         )
         logger.success("✅ MongoDB 初始化成功!")
     except Exception as e:
         logger.error(f"❌ MongoDB 初始化失败: {e}")
         logger.warning("⚠️ 应用将继续运行，但 MongoDB 相关功能将不可用")
     
-    # 初始化 Neomodel (Neo4j ORM)
     try:
         logger.info("🔄 正在初始化 Neo4j (Neomodel)...")
         setup_neomodel()
@@ -187,20 +160,16 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """应用关闭时清理资源"""
     logger.info("🔄 正在关闭 MongoDB 连接...")
     await close_mongodb()
     logger.info("✅ MongoDB 连接已关闭")
 
 
-# 包含API路由
 app.include_router(api_router, prefix="/api/v1")
 
-# 挂载静态文件目录
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/")
 async def root():
-    """返回欢迎页面"""
     return FileResponse('static/index.html')

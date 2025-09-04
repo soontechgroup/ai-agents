@@ -53,10 +53,12 @@ class ContextManager:
         self.global_entities.update(merged_entities)
         
 
+        chunk_entity_names = []
         for entity_data in chunk_result.get('entities', []):
             entity_name = entity_data.get('name', '').strip()
             if entity_name:
                 self.entity_mentions[entity_name] += 1
+                chunk_entity_names.append(entity_name)
         
 
         for entity in merged_entities.values():
@@ -71,7 +73,8 @@ class ContextManager:
             "chunk_index": chunk_index,
             "entities_found": len(chunk_result.get('entities', [])),
             "relationships_found": len(chunk_result.get('relationships', [])),
-            "processing_time": chunk_result.get('processing_time', 0)
+            "processing_time": chunk_result.get('processing_time', 0),
+            "entity_names": chunk_entity_names
         })
     
     def _generate_context_info(self, current_chunk_index: int) -> str:
@@ -141,15 +144,26 @@ class ContextManager:
         
 
         start_index = max(0, current_chunk_index - self.config.context_window_size)
-        recent_chunks = self.chunk_history[start_index:]
+        recent_chunks = self.chunk_history[start_index:current_chunk_index]
         
-        recent_entity_names = set()
+        recent_entity_counter = Counter()
         for chunk_info in recent_chunks:
-            pass
+            entity_names = chunk_info.get('entity_names', [])
+            for entity_name in entity_names:
+                recent_entity_counter[entity_name] += 1
         
-
+        
+        if not recent_entity_counter:
+            recent_entities = []
+            for entity_name, count in self.entity_mentions.most_common(5):
+                if entity_name in self.global_entities:
+                    entity = self.global_entities[entity_name]
+                    types_str = ", ".join(entity.types[:2])
+                    recent_entities.append(f"- {entity_name} ({types_str})")
+            return "\n".join(recent_entities)
+        
         recent_entities = []
-        for entity_name, count in self.entity_mentions.most_common(5):
+        for entity_name, recent_count in recent_entity_counter.most_common(5):
             if entity_name in self.global_entities:
                 entity = self.global_entities[entity_name]
                 types_str = ", ".join(entity.types[:2])

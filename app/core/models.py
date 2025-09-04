@@ -96,4 +96,22 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 关联关系
-    conversation = relationship("Conversation", back_populates="messages") 
+    conversation = relationship("Conversation", back_populates="messages")
+
+
+class DigitalHumanTrainingMessage(Base):
+    """数字人训练消息模型 - 记录训练过程中的对话和知识抽取"""
+    __tablename__ = "digital_human_training_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(Enum("user", "assistant", name="training_message_role"), nullable=False, comment="消息角色")
+    content = Column(Text, nullable=False, comment="消息内容")
+    extracted_knowledge = Column(JSON, nullable=True, comment="抽取的知识（实体和关系）")
+    extraction_metadata = Column(JSON, nullable=True, comment="知识提取的溯源信息")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 关联关系
+    digital_human = relationship("DigitalHuman")
+    user = relationship("User") 
