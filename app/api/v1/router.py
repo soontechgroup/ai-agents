@@ -6,8 +6,7 @@ from .endpoints import (
     conversations, 
     chroma,
     # 记忆体系统端点
-    memory,
-    analytics
+    memory
 )
 from .admin import admin_router
 
@@ -56,12 +55,6 @@ api_router.include_router(
     tags=["记忆体系统"]
 )
 
-# 图分析
-api_router.include_router(
-    analytics.router,
-    prefix="/graph",
-    tags=["图分析"]
-)
 
 
 # 包含管理后台路由
