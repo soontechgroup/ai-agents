@@ -247,20 +247,21 @@ class TestDigitalHumanTrainingService:
     
     @pytest.mark.asyncio
     async def test_fallback_to_ainvoke(self, training_service):
-        with patch.object(training_service.training_graph, 'astream_events', side_effect=AttributeError("'async_generator' object has no attribute 'astream_events'")):
+        """测试当 astream 不可用时的异常处理"""
+        with patch.object(training_service.training_graph, 'astream', side_effect=AttributeError("'async_generator' object has no attribute 'astream'")):
             events = []
             
             async for event in training_service.process_training_conversation(
                 digital_human_id=1,
-                user_message="测试降级处理",
+                user_message="测试异常处理",
                 user_id=1
             ):
                 events.append(json.loads(event))
             
+            # 验证异常被正确捕获并返回错误事件
             assert len(events) > 0
-            event_types = [e["type"] for e in events]
-            
-            assert any(e["type"] == "info" and "备用" in e.get("data", "") for e in events)
+            # 确保有错误事件产生
+            assert any(e["type"] == "error" for e in events)
     
     @pytest.mark.asyncio
     async def test_error_handling(self, training_service):

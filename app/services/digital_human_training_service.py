@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Generator, Optional
+from typing import Dict, List, Any, Generator, Optional, AsyncGenerator
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -375,6 +375,42 @@ class DigitalHumanTrainingService:
             logger.error(f"获取训练上下文失败: {str(e)}")
             return {"total_knowledge_points": 0, "categories": {}}
     
+    async def _save_and_send_assistant_message(
+        self,
+        digital_human_id: int,
+        user_id: int,
+        question: str
+    ) -> AsyncGenerator[str, None]:
+        """保存助手消息并发送事件"""
+        assistant_msg = DigitalHumanTrainingMessage(
+            digital_human_id=digital_human_id,
+            user_id=user_id,
+            role="assistant",
+            content=question
+        )
+        self.db.add(assistant_msg)
+        self.db.flush()
+        
+        yield json.dumps({
+            "type": "assistant_question",
+            "id": assistant_msg.id,
+            "data": question
+        }, ensure_ascii=False)
+    
+    def _extract_next_question(self, result) -> Optional[str]:
+        """从结果中提取下一个问题"""
+        if not result:
+            return None
+            
+        # 尝试作为字典访问
+        if hasattr(result, '__getitem__') and 'next_question' in result:
+            return result['next_question']
+        # 尝试作为对象属性访问
+        elif hasattr(result, 'next_question'):
+            return result.next_question
+            
+        return None
+    
     async def process_training_conversation(
         self,
         digital_human_id: int,
@@ -412,396 +448,100 @@ class DigitalHumanTrainingService:
                 "data": "开始分析对话..."
             }, ensure_ascii=False)
             
-            # 记录已发送的事件索引，避免重复
-            last_event_index = 0
-            final_state = None  # 保存最终状态
+            # 保存最终状态
+            final_state = None
+            previous_state = None
             
-            # 定义业务相关的主要节点
-            BUSINESS_NODES = {
-                'intent_recognition', 'knowledge_extraction', 'context_analysis',
-                'question_generation', 'save_message'
-            }
-            
-            # 记录节点开始时间（用于计算执行时间）
-            node_start_times = {}
-            
-            async for event in self.training_graph.astream_events(state, version="v2"):
-                if event["event"] == "on_chain_start":
-                    node_name = event.get("name", "")
+            # 使用 astream 获取状态更新
+            async for chunk in self.training_graph.astream(state):
+                # chunk 是状态更新
+                if chunk:
+                    logger.debug(f"📊 状态更新: {list(chunk.keys()) if isinstance(chunk, dict) else type(chunk)}")
                     
-                    # 只发送业务节点的事件，过滤内部节点
-                    if node_name in BUSINESS_NODES:
-                        node_start_times[node_name] = datetime.now()
-                        yield json.dumps({
-                            "type": "node_start",
-                            "node": node_name,
-                            "data": f"⏳ 开始执行: {node_name}",
-                            "timestamp": datetime.now().isoformat()
-                        }, ensure_ascii=False)
-                    elif node_name == "LangGraph":
-                        # 保留主图的开始事件
-                        yield json.dumps({
-                            "type": "workflow_start",
-                            "data": "开始执行工作流",
-                            "timestamp": datetime.now().isoformat()
-                        }, ensure_ascii=False)
-                
-                elif event["event"] == "on_chain_stream":
-                    # 处理流式更新的状态
-                    if "data" in event and isinstance(event["data"], dict):
-                        chunk = event["data"].get("chunk", {})
-                        
-                        # 保存可能的最终状态
-                        if chunk:
-                            logger.debug(f"📊 on_chain_stream chunk keys: {list(chunk.keys()) if isinstance(chunk, dict) else type(chunk)}")
-                            # 如果chunk包含next_question，保存为最终状态
-                            if isinstance(chunk, dict) and "next_question" in chunk:
-                                final_state = chunk
-                                logger.info(f"✨ 在流事件中找到问题: {chunk['next_question']}")
-                
-                elif event["event"] == "on_chain_end":
-                    output = event.get("output", {})
-                    node_name = event.get("name", "")
-                    
-                    # 只处理业务节点
-                    if node_name in BUSINESS_NODES:
-                        # 计算执行时间
-                        execution_time = None
-                        if node_name in node_start_times:
-                            elapsed = (datetime.now() - node_start_times[node_name]).total_seconds()
-                            execution_time = f"{elapsed:.2f}秒"
-                        
-                        # 准备节点输出摘要和详细数据
-                        output_summary = None
-                        node_result = {}
-                        
-                        # 尝试从输出中提取节点特定的数据
-                        if isinstance(output, dict):
-                            node_output = output.get(node_name, {})
+                    # 检测新完成的步骤
+                    if isinstance(chunk, dict):
+                        # 检查是否有新完成的步骤
+                        if 'completed_steps' in chunk:
+                            if previous_state and 'completed_steps' in previous_state:
+                                # 找出新完成的步骤
+                                new_steps = set(chunk['completed_steps']) - set(previous_state.get('completed_steps', []))
+                                for step in new_steps:
+                                    yield json.dumps({
+                                        "type": "node_complete",
+                                        "node": step,
+                                        "data": f"✅ 完成: {step}",
+                                        "timestamp": datetime.now().isoformat()
+                                    }, ensure_ascii=False)
                             
-                            if node_name == "intent_recognition":
-                                output_summary = "识别用户意图"
-                                # 如果输出包含意图信息，提取它
-                                if 'intent' in node_output:
-                                    node_result['intent'] = node_output['intent']
-                                    output_summary = f"识别意图: {node_output['intent']}"
-                                    
-                            elif node_name == "knowledge_extraction":
-                                output_summary = "提取知识点"
-                                if 'extracted_knowledge' in node_output:
-                                    entities = node_output['extracted_knowledge'].get('entities', [])
-                                    node_result['entities_count'] = len(entities)
-                                    output_summary = f"提取了 {len(entities)} 个知识点"
-                                    
-                            elif node_name == "context_analysis":
-                                output_summary = "分析上下文"
-                                if 'total_knowledge_points' in node_output:
-                                    node_result['total_points'] = node_output['total_knowledge_points']
-                                    output_summary = f"当前共 {node_output['total_knowledge_points']} 个知识点"
-                                    
-                            elif node_name == "question_generation":
-                                output_summary = "生成引导问题"
-                                if 'next_question' in node_output:
-                                    # 截取问题的前50个字符作为摘要
-                                    question_preview = node_output['next_question'][:50]
-                                    node_result['question_preview'] = question_preview
-                                    output_summary = f"生成问题: {question_preview}..."
-                                    
-                            elif node_name == "save_message":
-                                output_summary = "保存消息记录"
-                                node_result['saved'] = True
+                        # 检查思考过程
+                        if 'thinking_process' in chunk and chunk['thinking_process']:
+                            # 发送新的思考过程
+                            if previous_state and 'thinking_process' in previous_state:
+                                prev_count = len(previous_state.get('thinking_process', []))
+                                new_thoughts = chunk['thinking_process'][prev_count:]
+                                for thought in new_thoughts:
+                                    yield json.dumps({
+                                        "type": "thinking",
+                                        "data": thought
+                                    }, ensure_ascii=False)
+                            else:
+                                for thought in chunk.get('thinking_process', []):
+                                    yield json.dumps({
+                                        "type": "thinking",
+                                        "data": thought
+                                    }, ensure_ascii=False)
                         
-                        yield json.dumps({
-                            "type": "node_complete",
-                            "node": node_name,
-                            "data": f"✅ 完成执行: {node_name}",
-                            "execution_time": execution_time,
-                            "summary": output_summary,
-                            "result": node_result if node_result else None,
-                            "timestamp": datetime.now().isoformat()
-                        }, ensure_ascii=False)
-                    
-                    elif node_name == "LangGraph":
-                        # 工作流完成事件
-                        logger.info(f"🎯 工作流完成!")
-                        yield json.dumps({
-                            "type": "workflow_complete",
-                            "data": "工作流执行完成",
-                            "timestamp": datetime.now().isoformat()
-                        }, ensure_ascii=False)
-                    
-                    # 如果是 question_generation 节点完成，输出生成的问题
-                    if node_name == "question_generation" and output:
-                        # 调试：查看 output 的内容
-                        logger.debug(f"question_generation output type: {type(output)}")
-                        
-                        # 提取最终的问题 - output 可能是 TrainingState 或 dict
-                        final_question = None
-                        
-                        # 如果 output 有 keys 方法，说明是 dict
-                        if hasattr(output, 'keys'):
-                            # 尝试从 dict 中获取
-                            if 'next_question' in output:
-                                final_question = output['next_question']
-                            # 或者尝试从嵌套的 state 中获取
-                            elif isinstance(output, dict) and 'state' in output:
-                                state_obj = output['state']
-                                if hasattr(state_obj, 'next_question'):
-                                    final_question = state_obj.next_question
-                                elif isinstance(state_obj, dict) and 'next_question' in state_obj:
-                                    final_question = state_obj['next_question']
-                        # 如果 output 是 TrainingState 对象
-                        elif hasattr(output, 'next_question'):
-                            final_question = output.next_question
-                        
-                        logger.info(f"✨ 提取到的问题: {final_question}")
-                        
-                        if final_question:
-                            # 保存助手消息
-                            assistant_msg = DigitalHumanTrainingMessage(
-                                digital_human_id=digital_human_id,
-                                user_id=user_id,
-                                role="assistant",
-                                content=final_question
-                            )
-                            self.db.add(assistant_msg)
-                            self.db.flush()
-                            
-                            # 发送助手问题事件
+                        # 检查意图识别
+                        if 'intent' in chunk and chunk['intent']:
                             yield json.dumps({
-                                "type": "assistant_question",
-                                "id": assistant_msg.id,
-                                "data": final_question
+                                "type": "intent_recognized",
+                                "data": chunk['intent']
                             }, ensure_ascii=False)
-                    
-                    # 检查 output 是否有正确的属性
-                    if hasattr(output, 'completed_steps'):
-                        # output 是 TrainingState 对象
-                        completed_steps = output.completed_steps
-                        intent = output.intent
-                        stage = output.conversation_stage
-                        should_extract = output.should_extract
-                        extracted_knowledge = output.extracted_knowledge
-                        total_points = output.total_knowledge_points
-                        categories = output.categories
-                        should_explore = output.should_explore_deeper
-                        next_question = output.next_question
-                        thinking_process = output.thinking_process
-                        events = output.events
-                    else:
-                        # output 是字典，需要提取值
-                        completed_steps = output.get('completed_steps', [])
-                        intent = output.get('intent', '')
-                        stage = output.get('conversation_stage', '')
-                        should_extract = output.get('should_extract', False)
-                        extracted_knowledge = output.get('extracted_knowledge', {})
-                        total_points = output.get('total_knowledge_points', 0)
-                        categories = output.get('categories', {})
-                        should_explore = output.get('should_explore_deeper', False)
-                        next_question = output.get('next_question', '')
-                        thinking_process = output.get('thinking_process', [])
-                        events = output.get('events', [])
-                    
-                    # 发送未处理的事件
-                    if events and isinstance(events, list) and len(events) > last_event_index:
-                        new_events = events[last_event_index:]
-                        for evt in new_events:
-                            yield json.dumps(evt, ensure_ascii=False)
-                        last_event_index = len(events)
-                    
-                    if "intent_recognition" in completed_steps:
-                        yield json.dumps({
-                            "type": "intent_recognized",
-                            "data": {
-                                "intent": intent,
-                                "stage": stage,
-                                "should_extract": should_extract
-                            }
-                        }, ensure_ascii=False)
-                    
-                    if "knowledge_extraction" in completed_steps and extracted_knowledge.get("entities"):
-                        user_msg.extracted_knowledge = extracted_knowledge
-                        user_msg.extraction_metadata = {
-                            "extraction_time": datetime.now().isoformat(),
-                            "intent": intent,
-                            "stage": stage,
-                            "thinking_process": thinking_process
-                        }
                         
-                        yield json.dumps({
-                            "type": "knowledge_extracted",
-                            "id": user_msg.id,
-                            "data": extracted_knowledge["entities"]
-                        }, ensure_ascii=False)
-                    
-                    if "context_analysis" in completed_steps:
-                        yield json.dumps({
-                            "type": "context_analyzed",
-                            "data": {
-                                "total_points": total_points,
-                                "categories": list(categories.keys()) if categories else [],
-                                "should_explore_deeper": should_explore
+                        # 检查知识提取
+                        if 'extracted_knowledge' in chunk and chunk['extracted_knowledge'].get('entities'):
+                            user_msg.extracted_knowledge = chunk['extracted_knowledge']
+                            user_msg.extraction_metadata = {
+                                "extraction_time": datetime.now().isoformat(),
+                                "intent": chunk.get('intent', ''),
+                                "stage": chunk.get('conversation_stage', '')
                             }
-                        }, ensure_ascii=False)
-                    
-                    if "question_generation" in completed_steps and next_question:
-                        assistant_msg = DigitalHumanTrainingMessage(
-                            digital_human_id=digital_human_id,
-                            user_id=user_id,
-                            role="assistant",
-                            content=next_question
-                        )
-                        self.db.add(assistant_msg)
-                        self.db.flush()
-                        
-                        yield json.dumps({
-                            "type": "assistant_question",
-                            "id": assistant_msg.id,
-                            "data": next_question
-                        }, ensure_ascii=False)
-                
-                elif event["event"] == "on_chain_stream":
-                    if event.get("data", {}).get("thinking_process"):
-                        for thought in event["data"]["thinking_process"]:
                             yield json.dumps({
-                                "type": "thinking",
-                                "data": thought
+                                "type": "knowledge_extracted",
+                                "id": user_msg.id,
+                                "data": chunk['extracted_knowledge']['entities']
                             }, ensure_ascii=False)
+                        
+                        # 检查下一个问题
+                        if 'next_question' in chunk and chunk['next_question']:
+                            final_state = chunk
+                            logger.info(f"✨ 找到下一个问题: {chunk['next_question'][:50]}...")
+                        
+                        # 保存当前状态作为上一个状态
+                        previous_state = chunk
+                    
             
             # 在流结束后，检查是否有最终状态
             if final_state and "next_question" in final_state:
                 logger.info(f"🤖 从最终状态提取问题: {final_state['next_question']}")
-                
-                # 保存助手消息
-                assistant_msg = DigitalHumanTrainingMessage(
-                    digital_human_id=digital_human_id,
-                    user_id=user_id,
-                    role="assistant",
-                    content=final_state['next_question']
-                )
-                self.db.add(assistant_msg)
-                self.db.flush()
-                
-                # 发送助手问题事件
-                yield json.dumps({
-                    "type": "assistant_question",
-                    "id": assistant_msg.id,
-                    "data": final_state['next_question']
-                }, ensure_ascii=False)
+                async for msg in self._save_and_send_assistant_message(
+                    digital_human_id, user_id, final_state['next_question']
+                ):
+                    yield msg
             else:
-                # 如果没有从流中获取到状态，尝试直接运行一次获取结果
+                # 如果没有从流中获取到状态，尝试直接运行
                 logger.debug("没有从流事件中获取到最终状态，尝试直接运行...")
-                try:
-                    result = await self.training_graph.ainvoke(state)
-                    logger.info(f"📦 直接运行结果类型: {type(result)}")
-                    
-                    # 尝试多种方式提取 next_question
-                    next_question = None
-                    if result:
-                        # 先尝试作为字典访问（AddableValuesDict 是字典类型）
-                        if hasattr(result, '__getitem__') and 'next_question' in result:
-                            next_question = result['next_question']
-                        # 再尝试作为对象属性访问
-                        elif hasattr(result, 'next_question'):
-                            next_question = result.next_question
-                        
-                        # 记录结果详情
-                        if hasattr(result, '__dict__'):
-                            logger.info(f"📦 结果属性: {list(vars(result).keys())[:10]}")
-                    
-                    if next_question:
-                        logger.info(f"🤖 从直接运行结果提取问题: {next_question}")
-                        
-                        # 保存助手消息
-                        assistant_msg = DigitalHumanTrainingMessage(
-                            digital_human_id=digital_human_id,
-                            user_id=user_id,
-                            role="assistant",
-                            content=result.next_question
-                        )
-                        self.db.add(assistant_msg)
-                        self.db.flush()
-                        
-                        # 发送助手问题事件
-                        yield json.dumps({
-                            "type": "assistant_question",
-                            "id": assistant_msg.id,
-                            "data": next_question
-                        }, ensure_ascii=False)
-                except Exception as e:
-                    # 忽略属性错误，因为我们已经成功提取了问题
-                    if "has no attribute 'next_question'" not in str(e):
-                        logger.debug(f"直接运行出现异常: {e}")
+                result = await self.training_graph.ainvoke(state)
+                next_question = self._extract_next_question(result)
+                
+                if next_question:
+                    logger.info(f"🤖 从直接运行结果提取问题: {next_question}")
+                    async for msg in self._save_and_send_assistant_message(
+                        digital_human_id, user_id, next_question
+                    ):
+                        yield msg
             
             self.db.commit()
-            
-        except AttributeError as e:
-            if "'async_generator' object has no attribute 'astream_events'" in str(e):
-                yield json.dumps({
-                    "type": "info",
-                    "data": "使用备用流式处理方法..."
-                }, ensure_ascii=False)
-                
-                result = await self.training_graph.ainvoke(state)
-                
-                # Handle result as AddableValuesDict
-                if hasattr(result, '__getitem__'):
-                    # Extract thinking_process if exists
-                    if 'thinking_process' in result:
-                        for thought in result['thinking_process']:
-                            yield json.dumps({
-                                "type": "thinking",
-                                "data": thought
-                            }, ensure_ascii=False)
-                    
-                    # Extract step_results if exists
-                    if 'step_results' in result and result['step_results'].get("intent_recognition"):
-                        yield json.dumps({
-                            "type": "intent_recognized",
-                            "data": result['step_results']["intent_recognition"]
-                        }, ensure_ascii=False)
-                    
-                    # Extract knowledge if exists
-                    if 'extracted_knowledge' in result and result['extracted_knowledge'].get("entities"):
-                        user_msg.extracted_knowledge = result['extracted_knowledge']
-                        user_msg.extraction_metadata = {
-                            "extraction_time": datetime.now().isoformat(),
-                            "intent": result.get('intent', ''),
-                            "stage": result.get('conversation_stage', '')
-                        }
-                        
-                        yield json.dumps({
-                            "type": "knowledge_extracted",
-                            "id": user_msg.id,
-                            "data": result['extracted_knowledge']["entities"]
-                        }, ensure_ascii=False)
-                    
-                    # Extract context analysis if exists
-                    if 'step_results' in result and result['step_results'].get("context_analysis"):
-                        yield json.dumps({
-                            "type": "context_analyzed",
-                            "data": result['step_results']["context_analysis"]
-                        }, ensure_ascii=False)
-                    
-                    # Extract next_question if exists
-                    if 'next_question' in result:
-                        assistant_msg = DigitalHumanTrainingMessage(
-                            digital_human_id=digital_human_id,
-                            user_id=user_id,
-                            role="assistant",
-                            content=result['next_question']
-                        )
-                        self.db.add(assistant_msg)
-                        self.db.flush()
-                        self.db.commit()
-                        
-                        yield json.dumps({
-                            "type": "assistant_question",
-                            "id": assistant_msg.id,
-                            "data": result['next_question']
-                        }, ensure_ascii=False)
-            else:
-                raise e
         except Exception as e:
             logger.error(f"训练对话处理失败: {str(e)}")
             yield json.dumps({
