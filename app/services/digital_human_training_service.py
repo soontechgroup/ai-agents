@@ -744,53 +744,62 @@ class DigitalHumanTrainingService:
                 
                 result = await self.training_graph.ainvoke(state)
                 
-                for thought in result.thinking_process:
-                    yield json.dumps({
-                        "type": "thinking",
-                        "data": thought
-                    }, ensure_ascii=False)
-                
-                if result.step_results.get("intent_recognition"):
-                    yield json.dumps({
-                        "type": "intent_recognized",
-                        "data": result.step_results["intent_recognition"]
-                    }, ensure_ascii=False)
-                
-                if result.extracted_knowledge.get("entities"):
-                    user_msg.extracted_knowledge = result.extracted_knowledge
-                    user_msg.extraction_metadata = {
-                        "extraction_time": datetime.now().isoformat(),
-                        "intent": result.intent,
-                        "stage": result.conversation_stage
-                    }
+                # Handle result as AddableValuesDict
+                if hasattr(result, '__getitem__'):
+                    # Extract thinking_process if exists
+                    if 'thinking_process' in result:
+                        for thought in result['thinking_process']:
+                            yield json.dumps({
+                                "type": "thinking",
+                                "data": thought
+                            }, ensure_ascii=False)
                     
-                    yield json.dumps({
-                        "type": "knowledge_extracted",
-                        "id": user_msg.id,
-                        "data": result.extracted_knowledge["entities"]
-                    }, ensure_ascii=False)
-                
-                if result.step_results.get("context_analysis"):
-                    yield json.dumps({
-                        "type": "context_analyzed",
-                        "data": result.step_results["context_analysis"]
-                    }, ensure_ascii=False)
-                
-                assistant_msg = DigitalHumanTrainingMessage(
-                    digital_human_id=digital_human_id,
-                    user_id=user_id,
-                    role="assistant",
-                    content=result.next_question
-                )
-                self.db.add(assistant_msg)
-                self.db.flush()
-                self.db.commit()
-                
-                yield json.dumps({
-                    "type": "assistant_question",
-                    "id": assistant_msg.id,
-                    "data": result.next_question
-                }, ensure_ascii=False)
+                    # Extract step_results if exists
+                    if 'step_results' in result and result['step_results'].get("intent_recognition"):
+                        yield json.dumps({
+                            "type": "intent_recognized",
+                            "data": result['step_results']["intent_recognition"]
+                        }, ensure_ascii=False)
+                    
+                    # Extract knowledge if exists
+                    if 'extracted_knowledge' in result and result['extracted_knowledge'].get("entities"):
+                        user_msg.extracted_knowledge = result['extracted_knowledge']
+                        user_msg.extraction_metadata = {
+                            "extraction_time": datetime.now().isoformat(),
+                            "intent": result.get('intent', ''),
+                            "stage": result.get('conversation_stage', '')
+                        }
+                        
+                        yield json.dumps({
+                            "type": "knowledge_extracted",
+                            "id": user_msg.id,
+                            "data": result['extracted_knowledge']["entities"]
+                        }, ensure_ascii=False)
+                    
+                    # Extract context analysis if exists
+                    if 'step_results' in result and result['step_results'].get("context_analysis"):
+                        yield json.dumps({
+                            "type": "context_analyzed",
+                            "data": result['step_results']["context_analysis"]
+                        }, ensure_ascii=False)
+                    
+                    # Extract next_question if exists
+                    if 'next_question' in result:
+                        assistant_msg = DigitalHumanTrainingMessage(
+                            digital_human_id=digital_human_id,
+                            user_id=user_id,
+                            role="assistant",
+                            content=result['next_question']
+                        )
+                        self.db.add(assistant_msg)
+                        self.db.flush()
+                        self.db.commit()
+                        
+                        yield json.dumps({
+                            "type": "assistant_question",
+                            "id": assistant_msg.id,
+                            "data": result['next_question']
+                        }, ensure_ascii=False)
             else:
                 raise e
         except Exception as e:

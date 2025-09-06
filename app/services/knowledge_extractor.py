@@ -380,7 +380,9 @@ RELATIONSHIP|{{"source":"马斯克","target":"特斯拉","types":["LEADS","WORKS
         all_chunk_results = []
         merged_entities = {}
         
-        for start_idx in range(0, len(chunks), window_size // 2):
+        # 确保步长至少为1，避免除零错误
+        step_size = max(1, window_size // 2)
+        for start_idx in range(0, len(chunks), step_size):
             end_idx = min(start_idx + window_size, len(chunks))
             window_chunks = chunks[start_idx:end_idx]
             

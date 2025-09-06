@@ -1,0 +1,24 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	intent_recognition(intent_recognition)
+	knowledge_extraction(knowledge_extraction)
+	context_analysis(context_analysis)
+	question_generation(question_generation)
+	save_message(save_message)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> intent_recognition;
+	context_analysis --> question_generation;
+	knowledge_extraction --> context_analysis;
+	question_generation --> save_message;
+	save_message --> __end__;
+	intent_recognition -. &nbsp;extract&nbsp; .-> knowledge_extraction;
+	intent_recognition -. &nbsp;analyze&nbsp; .-> context_analysis;
+	intent_recognition -. &nbsp;direct&nbsp; .-> question_generation;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

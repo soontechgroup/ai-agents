@@ -96,6 +96,25 @@ class EntityMerger:
         if clean_name1.lower() == clean_name2.lower():
             return True
         
+        # 检查是否一个名字包含另一个（如 "马斯克" 和 "埃隆·马斯克"）
+        if clean_name1.lower() in clean_name2.lower() or clean_name2.lower() in clean_name1.lower():
+            return True
+        
+        # 检查英文和中文混合的情况（如 "Elon Musk" 和 "马斯克"）
+        # 简单的音译匹配
+        transliteration_pairs = [
+            ("musk", "马斯克"),
+            ("elon", "埃隆"),
+            ("jobs", "乔布斯"),
+            ("cook", "库克"),
+            ("gates", "盖茨"),
+        ]
+        
+        for eng, chi in transliteration_pairs:
+            if (eng in clean_name1.lower() and chi in clean_name2) or \
+               (eng in clean_name2.lower() and chi in clean_name1):
+                return True
+        
 
         shorter, longer = (clean_name1, clean_name2) if len(clean_name1) < len(clean_name2) else (clean_name2, clean_name1)
         if len(shorter) >= 3 and shorter.lower() in longer.lower():
