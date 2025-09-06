@@ -8,13 +8,11 @@ import json
 
 
 class ConversationService:
-    """对话服务层"""
     
     def __init__(self, db: Session, langgraph_service: LangGraphService):
         self.db = db
         self.conversation_repo = ConversationRepository(db)
         self.message_repo = MessageRepository(db)
-        # 通过依赖注入获取 LangGraphService 实例
         self.langgraph_service = langgraph_service
     
     def create_conversation(
@@ -22,11 +20,8 @@ class ConversationService:
         conversation_data: ConversationCreate,
         user_id: int
     ) -> ConversationResponse:
-        """创建新对话"""
-        # 生成新的线程ID
         thread_id = self.langgraph_service.create_thread_id()
         
-        # 创建对话
         conversation = self.conversation_repo.create_conversation(
             conversation_data, user_id, thread_id
         )
@@ -38,7 +33,6 @@ class ConversationService:
         conversation_id: int,
         user_id: int
     ) -> Optional[ConversationResponse]:
-        """获取对话详情"""
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
@@ -53,7 +47,6 @@ class ConversationService:
         page_request: ConversationPageRequest,
         user_id: int
     ) -> Tuple[List[ConversationResponse], int]:
-        """分页获取对话列表"""
         conversations, total = self.conversation_repo.get_conversations_paginated(
             page_request, user_id
         )
@@ -70,7 +63,6 @@ class ConversationService:
         conversation_data: ConversationUpdate,
         user_id: int
     ) -> Optional[ConversationResponse]:
-        """更新对话"""
         conversation = self.conversation_repo.update_conversation(
             conversation_id, conversation_data, user_id
         )
@@ -81,7 +73,6 @@ class ConversationService:
         return ConversationResponse.from_orm(conversation)
     
     def delete_conversation(self, conversation_id: int, user_id: int) -> bool:
-        """删除对话"""
         return self.conversation_repo.delete_conversation(conversation_id, user_id)
     
     def get_conversation_with_messages(
@@ -90,7 +81,6 @@ class ConversationService:
         user_id: int,
         message_limit: Optional[int] = None
     ) -> Optional[ConversationWithMessages]:
-        """获取包含消息的对话"""
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
@@ -98,12 +88,10 @@ class ConversationService:
         if not conversation:
             return None
         
-        # 获取消息
         messages = self.message_repo.get_conversation_messages(
             conversation_id, message_limit
         )
         
-        # 转换为响应模型
         conversation_response = ConversationResponse.from_orm(conversation)
         message_responses = [MessageResponse.from_orm(msg) for msg in messages]
         
@@ -118,33 +106,27 @@ class ConversationService:
         message_content: str,
         user_id: int
     ) -> Optional[MessageResponse]:
-        """发送消息（同步）"""
-        # 验证对话
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
         if not conversation:
             return None
         
-        # 保存用户消息
         user_message = self.message_repo.create_message(
             conversation_id, "user", message_content
         )
         
-        # 获取数字人配置
         digital_human_config = self._get_digital_human_config(
             conversation.digital_human_id
         )
         
         try:
-            # 生成AI响应
             ai_response = self.langgraph_service.chat_sync(
                 message_content,
                 conversation.thread_id,
                 digital_human_config
             )
             
-            # 保存AI消息
             ai_message = self.message_repo.create_message(
                 conversation_id, "assistant", ai_response
             )
@@ -152,7 +134,6 @@ class ConversationService:
             return MessageResponse.from_orm(ai_message)
             
         except ValueError as e:
-            # LangGraph service errors (包括API密钥错误)
             raise ValueError(str(e))
         except Exception as e:
             raise ValueError(f"消息发送失败: {str(e)}")
@@ -163,8 +144,6 @@ class ConversationService:
         message_content: str,
         user_id: int
     ) -> Generator[str, None, None]:
-        """发送消息（流式）"""
-        # 验证对话
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
@@ -175,7 +154,6 @@ class ConversationService:
             })
             return
         
-        # 保存用户消息
         try:
             user_message = self.message_repo.create_message(
                 conversation_id, "user", message_content
@@ -187,7 +165,6 @@ class ConversationService:
             })
             return
 
-        # 发送用户消息确认
         yield json.dumps({
             "type": "message",
             "content": "",
@@ -198,12 +175,10 @@ class ConversationService:
             }
         })
 
-        # 获取数字人配置
         digital_human_config = self._get_digital_human_config(
             conversation.digital_human_id
         )
 
-        # 流式生成AI响应
         full_response = ""
         try:
             for chunk in self.langgraph_service.chat_stream(
@@ -217,7 +192,6 @@ class ConversationService:
                     "content": chunk
                 })
         except ValueError as e:
-            # LangGraph service errors (包括API密钥错误)
             yield json.dumps({
                 "type": "error",
                 "content": str(e)
@@ -230,17 +204,14 @@ class ConversationService:
             })
             return
 
-        # 保存AI消息
         try:
             ai_message = self.message_repo.create_message(
                 conversation_id, "assistant", full_response
             )
         except Exception as e:
-            # 即使保存失败，用户已经收到响应，记录警告即可
             print(f"Warning: Failed to save AI message: {str(e)}")
             ai_message = None
 
-        # 发送完成消息
         yield json.dumps({
             "type": "done",
             "content": "",
@@ -251,7 +222,6 @@ class ConversationService:
         })
     
     def _get_digital_human_config(self, digital_human_id: int) -> Dict[str, Any]:
-        """获取数字人配置"""
         digital_human = self.db.query(DigitalHuman).filter(
             DigitalHuman.id == digital_human_id
         ).first()
@@ -276,7 +246,6 @@ class ConversationService:
         user_id: int,
         limit: Optional[int] = None
     ) -> List[MessageResponse]:
-        """获取对话消息"""
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
@@ -294,18 +263,15 @@ class ConversationService:
         conversation_id: int,
         user_id: int
     ) -> bool:
-        """清除对话历史"""
         conversation = self.conversation_repo.get_conversation_by_id(
             conversation_id, user_id
         )
         if not conversation:
             return False
         
-        # 清除数据库中的消息
         success = self.message_repo.delete_conversation_messages(conversation_id)
         
         if success:
-            # 清除LangChain中的对话历史
             self.langgraph_service.clear_conversation(conversation.thread_id)
         
         return success

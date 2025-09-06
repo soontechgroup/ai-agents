@@ -4,8 +4,8 @@ Neomodel Repository 模块
 """
 
 from app.repositories.neomodel.base import NeomodelRepository
-from app.repositories.neomodel.person import PersonRepository
-from app.repositories.neomodel.organization import OrganizationRepository
+# from app.repositories.neomodel.person import PersonRepository
+# from app.repositories.neomodel.organization import OrganizationRepository
 from app.repositories.neomodel.location import LocationRepository
 from app.repositories.neomodel.event import EventRepository
 from app.repositories.neomodel.project import ProjectRepository
@@ -19,8 +19,8 @@ from app.repositories.neomodel.extracted_knowledge import ExtractedKnowledgeRepo
 
 __all__ = [
     'NeomodelRepository',
-    'PersonRepository',
-    'OrganizationRepository',
+    # 'PersonRepository',
+    # 'OrganizationRepository',
     'LocationRepository',
     'EventRepository',
     'ProjectRepository',
