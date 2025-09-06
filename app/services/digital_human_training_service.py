@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Generator, Optional, AsyncGenerator
+from typing import Dict, List, Any, Generator, Optional, AsyncGenerator, TypedDict, Annotated
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -6,6 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
+import operator
 
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
@@ -15,25 +16,24 @@ from app.repositories.neomodel import GraphRepository
 from app.core.config import settings
 
 
-class TrainingState(BaseModel):
-    messages: List[BaseMessage] = []
+class TrainingState(TypedDict):
+    messages: Annotated[List[BaseMessage], operator.add]
     digital_human_id: int
     user_id: int
-    current_message: str = ""
-    extracted_knowledge: Dict[str, Any] = {}
-    knowledge_context: Dict[str, Any] = {}
-    intent: str = ""
-    next_question: str = ""
-    should_extract: bool = False
-    should_explore_deeper: bool = False
-    conversation_stage: str = "initial"
-    total_knowledge_points: int = 0
-    categories: Dict[str, Any] = {}
-    current_step: str = ""
-    completed_steps: List[str] = []
-    step_results: Dict[str, Any] = {}
-    thinking_process: List[str] = []
-    events: List[Dict[str, Any]] = []  # 事件队列，用于流式通知
+    current_message: str
+    extracted_knowledge: Dict[str, Any]
+    knowledge_context: Dict[str, Any]
+    next_question: str
+    should_extract: bool
+    should_explore_deeper: bool
+    conversation_stage: str
+    total_knowledge_points: int
+    categories: Dict[str, Any]
+    current_step: str
+    completed_steps: Annotated[List[str], operator.add]
+    step_results: Dict[str, Any]
+    thinking_process: Annotated[List[str], operator.add]
+    events: Annotated[List[Dict[str, Any]], operator.add]  # 事件队列，用于流式通知
 
 
 class DigitalHumanTrainingService:
@@ -70,7 +70,7 @@ class DigitalHumanTrainingService:
         
         workflow.add_conditional_edges(
             "intent_recognition",
-            self._route_by_intent,
+            self._route_after_intent,
             {
                 "extract": "knowledge_extraction",
                 "analyze": "context_analysis",
@@ -138,40 +138,38 @@ class DigitalHumanTrainingService:
             logger.error(f"无法生成 Mermaid 图: {e}")
             return "无法生成 Mermaid 图"
     
-    def _recognize_intent(self, state: TrainingState) -> TrainingState:
+    def _recognize_intent(self, state: TrainingState) -> Dict[str, Any]:
         # 节点开始事件
-        state.events.append({
+        events = [{
             "type": "node_start",
             "node": "intent_recognition",
-            "message": "🔍 开始分析用户意图...",
+            "message": "🔍 开始识别用户意图...",
             "timestamp": datetime.now().isoformat()
-        })
+        }]
         
-        state.current_step = "recognizing_intent"
-        state.thinking_process.append("正在分析用户消息意图...")
+        current_step = "recognizing_intent"
+        thinking_process = ["正在识别用户意图..."]
         
         # 添加思考步骤
-        state.events.append({
+        events.append({
             "type": "thinking",
             "node": "intent_recognition",
-            "message": "💭 解析消息内容，识别关键信息...",
+            "message": "💭 分析消息内容，识别用户意图...",
             "timestamp": datetime.now().isoformat()
         })
         
         prompt = f"""
 分析以下用户消息的意图和内容类型：
 
-用户消息: {state.current_message}
+用户消息: {state['current_message']}
 
 请判断：
 1. 意图类型（information_sharing/question_asking/clarification/greeting/other）
-2. 是否包含可提取的知识（yes/no）
-3. 当前对话阶段（initial/exploring/deepening/concluding）
+2. 当前对话阶段（initial/exploring/deepening/concluding）
 
 返回JSON格式：
 {{
     "intent": "...",
-    "has_knowledge": true/false,
     "stage": "..."
 }}
 """
@@ -184,99 +182,211 @@ class DigitalHumanTrainingService:
             logger.error(f"原始响应: {response.content}")
             raise ValueError(f"意图识别响应格式错误: {str(e)}")
         
-        state.intent = result.get("intent", "other")
-        state.should_extract = result.get("has_knowledge", False)
-        state.conversation_stage = result.get("stage", "exploring")
+        intent = result.get("intent", "other")
+        conversation_stage = result.get("stage", "exploring")
         
-        state.step_results["intent_recognition"] = {
-            "intent": state.intent,
-            "should_extract": state.should_extract,
-            "stage": state.conversation_stage
+        # 基于意图设置是否需要提取知识
+        should_extract = False
+        if intent == "information_sharing":
+            should_extract = True
+        elif intent == "greeting":
+            should_extract = False
+        elif intent == "question_asking":
+            # 问题可能包含知识，也可能不包含
+            # 这里简单处理，如果是探索阶段的问题，可能有知识
+            should_extract = conversation_stage in ["exploring", "deepening"]
+        elif intent == "other":
+            # 对于 other 类型，基于文本长度和内容密度判断
+            # 长文本（超过100字符）或包含专业术语的文本应该提取
+            text_length = len(state['current_message'])
+            if text_length > 100:
+                should_extract = True
+                logger.debug(f"长文本({text_length}字符)被识别为需要提取知识")
+            else:
+                should_extract = False
+        else:
+            should_extract = False
+        
+        # 意图存储在 step_results 中，不污染顶级 state
+        step_results = state.get('step_results', {}).copy()
+        step_results["intent_recognition"] = {
+            "intent": intent,
+            "should_extract": should_extract,
+            "stage": conversation_stage
         }
         
         # 节点完成事件
-        state.events.append({
+        events.append({
             "type": "node_complete",
             "node": "intent_recognition",
-            "message": f"✅ 意图识别完成: {state.intent}",
+            "message": f"✅ 意图识别完成: {intent}",
             "result": {
-                "intent": state.intent,
-                "stage": state.conversation_stage,
-                "should_extract": state.should_extract
+                "intent": intent,
+                "stage": conversation_stage,
+                "should_extract": should_extract
             },
             "timestamp": datetime.now().isoformat()
         })
         
-        state.completed_steps.append("intent_recognition")
-        state.thinking_process.append(f"识别到意图: {state.intent}, 对话阶段: {state.conversation_stage}")
-        return state
+        completed_steps = ["intent_recognition"]
+        thinking_process.append(f"识别到意图: {intent}, 对话阶段: {conversation_stage}")
+        
+        # 返回更新的字段
+        return {
+            "current_step": current_step,
+            "conversation_stage": conversation_stage,
+            "should_extract": should_extract,
+            "step_results": step_results,
+            "completed_steps": completed_steps,
+            "thinking_process": thinking_process,
+            "events": events
+        }
     
-    def _route_by_intent(self, state: TrainingState) -> str:
-        if state.should_extract:
+    def _route_after_intent(self, state: TrainingState) -> str:
+        if state.get('should_extract', False):
             return "extract"
-        elif state.total_knowledge_points > 5:
+        elif state.get('total_knowledge_points', 0) > 5:
             return "analyze"
         else:
             return "direct"
     
-    async def _extract_knowledge(self, state: TrainingState) -> TrainingState:
-        state.current_step = "extracting_knowledge"
-        state.thinking_process.append("正在提取知识点...")
+    async def _extract_knowledge(self, state: TrainingState) -> Dict[str, Any]:
+        events = [{
+            "type": "node_start",
+            "node": "knowledge_extraction",
+            "message": "🧠 开始提取知识点...",
+            "timestamp": datetime.now().isoformat()
+        }]
         
-        if not state.should_extract:
-            state.extracted_knowledge = {"entities": [], "relationships": []}
-            state.completed_steps.append("knowledge_extraction")
-            return state
+        current_step = "extracting_knowledge"
+        thinking_process = ["正在提取知识点..."]
         
-        extraction_result = await self.knowledge_extractor.extract(state.current_message)
-        state.extracted_knowledge = extraction_result
+        if not state.get('should_extract', False):
+            extracted_knowledge = {"entities": [], "relationships": []}
+            completed_steps = ["knowledge_extraction"]
+            
+            events.append({
+                "type": "node_complete",
+                "node": "knowledge_extraction",
+                "message": "ℹ️ 无需提取知识",
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            return {
+                "current_step": current_step,
+                "extracted_knowledge": extracted_knowledge,
+                "completed_steps": completed_steps,
+                "thinking_process": thinking_process,
+                "events": events
+            }
+        
+        extraction_result = await self.knowledge_extractor.extract(state['current_message'])
+        extracted_knowledge = extraction_result
         
         entity_count = len(extraction_result.get("entities", []))
         relationship_count = len(extraction_result.get("relationships", []))
         
         for entity in extraction_result.get("entities", []):
-            await self._store_entity_to_graph(state.digital_human_id, entity)
+            await self._store_entity_to_graph(state['digital_human_id'], entity)
         
         for relationship in extraction_result.get("relationships", []):
-            await self._store_relationship_to_graph(state.digital_human_id, relationship)
+            await self._store_relationship_to_graph(state['digital_human_id'], relationship)
         
-        state.step_results["knowledge_extraction"] = {
+        step_results = state.get('step_results', {}).copy()
+        step_results["knowledge_extraction"] = {
             "entities_count": entity_count,
             "relationships_count": relationship_count,
             "extracted": extraction_result
         }
         
-        state.completed_steps.append("knowledge_extraction")
-        state.thinking_process.append(f"提取到 {entity_count} 个实体, {relationship_count} 个关系")
-        return state
+        events.append({
+            "type": "node_complete",
+            "node": "knowledge_extraction",
+            "message": f"✅ 知识提取完成: {entity_count} 个实体, {relationship_count} 个关系",
+            "result": {
+                "entities_count": entity_count,
+                "relationships_count": relationship_count
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        completed_steps = ["knowledge_extraction"]
+        thinking_process.append(f"提取到 {entity_count} 个实体, {relationship_count} 个关系")
+        
+        return {
+            "current_step": current_step,
+            "extracted_knowledge": extracted_knowledge,
+            "step_results": step_results,
+            "completed_steps": completed_steps,
+            "thinking_process": thinking_process,
+            "events": events
+        }
     
-    def _analyze_context(self, state: TrainingState) -> TrainingState:
-        state.current_step = "analyzing_context"
-        state.thinking_process.append("正在分析知识图谱上下文...")
+    def _analyze_context(self, state: TrainingState) -> Dict[str, Any]:
+        events = [{
+            "type": "node_start",
+            "node": "context_analysis",
+            "message": "🔎 开始分析知识图谱上下文...",
+            "timestamp": datetime.now().isoformat()
+        }]
         
-        context = self._get_current_context(state.digital_human_id)
-        state.knowledge_context = context
-        state.total_knowledge_points = context.get("total_knowledge_points", 0)
-        state.categories = context.get("categories", {})
+        current_step = "analyzing_context"
+        thinking_process = ["正在分析知识图谱上下文..."]
         
-        if state.total_knowledge_points > 20 and not state.categories.get("hobby"):
-            state.should_explore_deeper = True
-        elif state.total_knowledge_points > 10 and len(state.categories) < 3:
-            state.should_explore_deeper = True
+        context = self._get_current_context(state['digital_human_id'])
+        knowledge_context = context
+        total_knowledge_points = context.get("total_knowledge_points", 0)
+        categories = context.get("categories", {})
         
-        state.step_results["context_analysis"] = {
-            "total_points": state.total_knowledge_points,
-            "categories_count": len(state.categories),
-            "should_explore_deeper": state.should_explore_deeper
+        should_explore_deeper = False
+        if total_knowledge_points > 20 and not categories.get("hobby"):
+            should_explore_deeper = True
+        elif total_knowledge_points > 10 and len(categories) < 3:
+            should_explore_deeper = True
+        
+        step_results = state.get('step_results', {}).copy()
+        step_results["context_analysis"] = {
+            "total_points": total_knowledge_points,
+            "categories_count": len(categories),
+            "should_explore_deeper": should_explore_deeper
         }
         
-        state.completed_steps.append("context_analysis")
-        state.thinking_process.append(f"已了解 {state.total_knowledge_points} 个知识点，涵盖 {len(state.categories)} 个领域")
-        return state
+        events.append({
+            "type": "node_complete",
+            "node": "context_analysis",
+            "message": f"✅ 上下文分析完成: {total_knowledge_points} 个知识点",
+            "result": {
+                "total_points": total_knowledge_points,
+                "categories_count": len(categories)
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        completed_steps = ["context_analysis"]
+        thinking_process.append(f"已了解 {total_knowledge_points} 个知识点，涵盖 {len(categories)} 个领域")
+        
+        return {
+            "current_step": current_step,
+            "knowledge_context": knowledge_context,
+            "total_knowledge_points": total_knowledge_points,
+            "categories": categories,
+            "should_explore_deeper": should_explore_deeper,
+            "step_results": step_results,
+            "completed_steps": completed_steps,
+            "thinking_process": thinking_process,
+            "events": events
+        }
     
-    def _generate_question(self, state: TrainingState) -> TrainingState:
-        state.current_step = "generating_question"
-        state.thinking_process.append("正在生成引导性问题...")
+    def _generate_question(self, state: TrainingState) -> Dict[str, Any]:
+        events = [{
+            "type": "node_start",
+            "node": "question_generation",
+            "message": "❓ 开始生成引导性问题...",
+            "timestamp": datetime.now().isoformat()
+        }]
+        
+        current_step = "generating_question"
+        thinking_process = ["正在生成引导性问题..."]
         
         context_prompt = self._build_context_prompt(state)
         
@@ -295,45 +405,109 @@ class DigitalHumanTrainingService:
 """
         
         response = self.llm.invoke([SystemMessage(content=prompt)])
-        state.next_question = response.content.strip()
+        next_question = response.content.strip()
         
-        state.step_results["question_generation"] = {
-            "question": state.next_question,
-            "based_on_stage": state.conversation_stage
+        step_results = state.get('step_results', {}).copy()
+        step_results["question_generation"] = {
+            "question": next_question,
+            "based_on_stage": state.get('conversation_stage', 'exploring')
         }
         
-        state.completed_steps.append("question_generation")
-        state.thinking_process.append("已生成引导性问题")
-        return state
+        events.append({
+            "type": "node_complete",
+            "node": "question_generation",
+            "message": "✅ 问题生成完成",
+            "result": {
+                "question": next_question[:50] + "..." if len(next_question) > 50 else next_question
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        completed_steps = ["question_generation"]
+        thinking_process.append("已生成引导性问题")
+        
+        return {
+            "current_step": current_step,
+            "next_question": next_question,
+            "step_results": step_results,
+            "completed_steps": completed_steps,
+            "thinking_process": thinking_process,
+            "events": events
+        }
     
-    def _build_context_prompt(self, state: TrainingState) -> str:
+    def _build_context_prompt(self, state: Dict[str, Any]) -> str:
         prompt_parts = []
         
-        if state.current_message:
-            prompt_parts.append(f"用户刚才说: {state.current_message}")
+        if state.get('current_message'):
+            prompt_parts.append(f"用户刚才说: {state['current_message']}")
         
-        if state.extracted_knowledge.get("entities"):
-            entities = state.extracted_knowledge["entities"]
+        extracted_knowledge = state.get('extracted_knowledge', {})
+        if extracted_knowledge and extracted_knowledge.get("entities"):
+            entities = extracted_knowledge["entities"]
             entity_names = [e.get("name") for e in entities[:3]]
             prompt_parts.append(f"提取到的实体: {', '.join(entity_names)}")
         
-        if state.total_knowledge_points > 0:
-            prompt_parts.append(f"已了解的知识点数: {state.total_knowledge_points}")
+        total_knowledge_points = state.get('total_knowledge_points', 0)
+        if total_knowledge_points > 0:
+            prompt_parts.append(f"已了解的知识点数: {total_knowledge_points}")
         
-        if state.categories:
+        categories = state.get('categories', {})
+        if categories:
             cat_summary = []
-            for cat, info in state.categories.items():
+            for cat, info in categories.items():
                 if isinstance(info, dict) and info.get("count"):
                     cat_summary.append(f"{cat}({info['count']}个)")
             if cat_summary:
                 prompt_parts.append(f"已了解的领域: {', '.join(cat_summary)}")
         
-        prompt_parts.append(f"当前对话阶段: {state.conversation_stage}")
+        conversation_stage = state.get('conversation_stage', 'exploring')
+        prompt_parts.append(f"当前对话阶段: {conversation_stage}")
         
         return "\n".join(prompt_parts)
     
-    async def _save_message(self, state: TrainingState) -> TrainingState:
-        pass
+    async def _save_message(self, state: TrainingState) -> Dict[str, Any]:
+        events = [{
+            "type": "node_start",
+            "node": "save_message",
+            "message": "💾 开始保存对话记录...",
+            "timestamp": datetime.now().isoformat()
+        }]
+        
+        current_step = "saving_message"
+        thinking_process = ["正在保存对话记录..."]
+        
+        message_data = {
+            "digital_human_id": state['digital_human_id'],
+            "user_id": state['user_id'],
+            "content": state['current_message'],
+            "extracted_knowledge": state.get('extracted_knowledge', {}),
+            "conversation_stage": state.get('conversation_stage', 'exploring'),
+            "next_question": state.get('next_question', '')
+        }
+        
+        step_results = state.get('step_results', {}).copy()
+        step_results["message_saving"] = {
+            "saved": True,
+            "message_length": len(state['current_message'])
+        }
+        
+        events.append({
+            "type": "node_complete",
+            "node": "save_message",
+            "message": "✅ 对话记录保存完成",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        completed_steps = ["save_message"]
+        thinking_process.append("对话记录已保存")
+        
+        return {
+            "current_step": current_step,
+            "step_results": step_results,
+            "completed_steps": completed_steps,
+            "thinking_process": thinking_process,
+            "events": events
+        }
     
     def _get_current_context(self, digital_human_id: int) -> Dict[str, Any]:
         try:
@@ -454,80 +628,107 @@ class DigitalHumanTrainingService:
             
             # 使用 astream 获取状态更新
             async for chunk in self.training_graph.astream(state):
-                # chunk 是状态更新
-                if chunk:
-                    logger.debug(f"📊 状态更新: {list(chunk.keys()) if isinstance(chunk, dict) else type(chunk)}")
+                # chunk 是 {"节点名": 节点状态} 格式
+                if chunk and isinstance(chunk, dict):
+                    logger.debug(f"📊 状态更新: {list(chunk.keys())}")
                     
-                    # 检测新完成的步骤
-                    if isinstance(chunk, dict):
-                        # 检查是否有新完成的步骤
-                        if 'completed_steps' in chunk:
-                            if previous_state and 'completed_steps' in previous_state:
+                    # 处理每个节点的输出
+                    for node_name, node_state in chunk.items():
+                        # 跳过内部节点
+                        if node_name.startswith('__'):
+                            continue
+                            
+                        # 节点状态可能是 dict 或对象
+                        if isinstance(node_state, dict):
+                            # 从 dict 中提取字段
+                            events = node_state.get('events', [])
+                            completed_steps = node_state.get('completed_steps', [])
+                            thinking_process = node_state.get('thinking_process', [])
+                            extracted_knowledge = node_state.get('extracted_knowledge', {})
+                            next_question = node_state.get('next_question', '')
+                            conversation_stage = node_state.get('conversation_stage', '')
+                        else:
+                            # 从对象中提取字段
+                            events = getattr(node_state, 'events', [])
+                            completed_steps = getattr(node_state, 'completed_steps', [])
+                            thinking_process = getattr(node_state, 'thinking_process', [])
+                            extracted_knowledge = getattr(node_state, 'extracted_knowledge', {})
+                            next_question = getattr(node_state, 'next_question', '')
+                            conversation_stage = getattr(node_state, 'conversation_stage', '')
+                            
+                        # 发送节点事件
+                        if events:
+                            for event in events:
+                                # 发送节点内部的事件
+                                logger.debug(f"📨 发送事件: {event.get('type')} - {event.get('node')}")
+                                yield json.dumps(event, ensure_ascii=False)
+                        
+                        # 检测新完成的步骤
+                        if completed_steps:
+                            if previous_state:
+                                prev_completed = previous_state.get('completed_steps', []) if isinstance(previous_state, dict) else getattr(previous_state, 'completed_steps', [])
                                 # 找出新完成的步骤
-                                new_steps = set(chunk['completed_steps']) - set(previous_state.get('completed_steps', []))
+                                new_steps = set(completed_steps) - set(prev_completed)
                                 for step in new_steps:
-                                    yield json.dumps({
-                                        "type": "node_complete",
-                                        "node": step,
-                                        "data": f"✅ 完成: {step}",
-                                        "timestamp": datetime.now().isoformat()
-                                    }, ensure_ascii=False)
+                                    # 如果事件中没有包含，才发送
+                                    if not any(e.get('type') == 'node_complete' and e.get('node') == step for e in events):
+                                        yield json.dumps({
+                                            "type": "node_complete",
+                                            "node": step,
+                                            "data": f"✅ 完成: {step}",
+                                            "timestamp": datetime.now().isoformat()
+                                        }, ensure_ascii=False)
                             
                         # 检查思考过程
-                        if 'thinking_process' in chunk and chunk['thinking_process']:
+                        if thinking_process:
                             # 发送新的思考过程
-                            if previous_state and 'thinking_process' in previous_state:
-                                prev_count = len(previous_state.get('thinking_process', []))
-                                new_thoughts = chunk['thinking_process'][prev_count:]
+                            if previous_state:
+                                prev_thinking = previous_state.get('thinking_process', []) if isinstance(previous_state, dict) else getattr(previous_state, 'thinking_process', [])
+                                prev_count = len(prev_thinking)
+                                new_thoughts = thinking_process[prev_count:]
                                 for thought in new_thoughts:
                                     yield json.dumps({
                                         "type": "thinking",
                                         "data": thought
                                     }, ensure_ascii=False)
                             else:
-                                for thought in chunk.get('thinking_process', []):
+                                for thought in thinking_process:
                                     yield json.dumps({
                                         "type": "thinking",
                                         "data": thought
                                     }, ensure_ascii=False)
                         
-                        # 检查意图识别
-                        if 'intent' in chunk and chunk['intent']:
-                            yield json.dumps({
-                                "type": "intent_recognized",
-                                "data": chunk['intent']
-                            }, ensure_ascii=False)
-                        
                         # 检查知识提取
-                        if 'extracted_knowledge' in chunk and chunk['extracted_knowledge'].get('entities'):
-                            user_msg.extracted_knowledge = chunk['extracted_knowledge']
+                        if extracted_knowledge and extracted_knowledge.get('entities'):
+                            user_msg.extracted_knowledge = extracted_knowledge
                             user_msg.extraction_metadata = {
                                 "extraction_time": datetime.now().isoformat(),
-                                "intent": chunk.get('intent', ''),
-                                "stage": chunk.get('conversation_stage', '')
+                                "stage": conversation_stage
                             }
                             yield json.dumps({
                                 "type": "knowledge_extracted",
                                 "id": user_msg.id,
-                                "data": chunk['extracted_knowledge']['entities']
+                                "data": extracted_knowledge['entities']
                             }, ensure_ascii=False)
                         
                         # 检查下一个问题
-                        if 'next_question' in chunk and chunk['next_question']:
-                            final_state = chunk
-                            logger.info(f"✨ 找到下一个问题: {chunk['next_question'][:50]}...")
+                        if next_question:
+                            final_state = node_state
+                            logger.info(f"✨ 找到下一个问题: {next_question[:50]}...")
                         
-                        # 保存当前状态作为上一个状态
-                        previous_state = chunk
+                        # 保存当前状态
+                        previous_state = node_state
                     
             
             # 在流结束后，检查是否有最终状态
-            if final_state and "next_question" in final_state:
-                logger.info(f"🤖 从最终状态提取问题: {final_state['next_question']}")
-                async for msg in self._save_and_send_assistant_message(
-                    digital_human_id, user_id, final_state['next_question']
-                ):
-                    yield msg
+            if final_state:
+                next_q = final_state.get('next_question') if isinstance(final_state, dict) else getattr(final_state, 'next_question', None)
+                if next_q:
+                    logger.info(f"🤖 从最终状态提取问题: {next_q}")
+                    async for msg in self._save_and_send_assistant_message(
+                        digital_human_id, user_id, next_q
+                    ):
+                        yield msg
             else:
                 # 如果没有从流中获取到状态，尝试直接运行
                 logger.debug("没有从流事件中获取到最终状态，尝试直接运行...")
