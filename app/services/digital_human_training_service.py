@@ -5,14 +5,12 @@ from sqlalchemy.orm import Session
 from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel
 import operator
 
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
 from app.core.models import DigitalHumanTrainingMessage
 from app.core.logger import logger
-from app.repositories.neomodel import GraphRepository
 from app.core.config import settings
 
 
@@ -47,7 +45,6 @@ class DigitalHumanTrainingService:
         self.db = db
         self.knowledge_extractor = knowledge_extractor
         self.graph_service = graph_service
-        self.graph_repo = GraphRepository()
         
         self.llm = ChatOpenAI(
             api_key=settings.OPENAI_API_KEY,
@@ -87,56 +84,30 @@ class DigitalHumanTrainingService:
     
     def save_graph_visualization(self, output_dir: str = "graph_visualizations"):
         """保存工作流图的可视化"""
-        import os
-        from datetime import datetime
+        from pathlib import Path
         
-        # 创建输出目录
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # 获取图对象
+        Path(output_dir).mkdir(exist_ok=True)
         graph = self.training_graph.get_graph()
         
         # 1. 尝试生成 PNG 图片
+        png_path = f"{output_dir}/training_graph.png"
         try:
-            png_data = graph.draw_png()
-            png_path = f"{output_dir}/training_graph.png"
-            with open(png_path, "wb") as f:
-                f.write(png_data)
+            graph.draw_png(output_file_path=png_path)
             logger.info(f"✅ 图已保存为 PNG: {png_path}")
             return png_path
-        except Exception as e:
-            logger.warning(f"⚠️ 无法生成 PNG（可能需要安装 graphviz）: {e}")
+        except Exception:
+            logger.debug("PNG 生成失败，尝试 Mermaid 格式")
         
-        # 2. 如果 PNG 失败，至少保存 Mermaid
+        # 2. 备选方案：保存 Mermaid
         try:
-            mermaid_text = graph.draw_mermaid()
             mermaid_path = f"{output_dir}/training_graph.mmd"
-            with open(mermaid_path, "w") as f:
-                f.write(mermaid_text)
+            Path(mermaid_path).write_text(graph.draw_mermaid())
             logger.info(f"✅ 图已保存为 Mermaid: {mermaid_path}")
             logger.info("📊 可在 https://mermaid.live 查看")
             return mermaid_path
         except Exception as e:
             logger.error(f"❌ 无法生成任何可视化: {e}")
             return None
-    
-    def get_graph_ascii(self) -> str:
-        """获取 ASCII 格式的图"""
-        try:
-            graph = self.training_graph.get_graph()
-            return graph.print_ascii()
-        except Exception as e:
-            logger.error(f"无法生成 ASCII 图: {e}")
-            return "无法生成 ASCII 图"
-    
-    def get_graph_mermaid(self) -> str:
-        """获取 Mermaid 格式的图"""
-        try:
-            graph = self.training_graph.get_graph()
-            return graph.draw_mermaid()
-        except Exception as e:
-            logger.error(f"无法生成 Mermaid 图: {e}")
-            return "无法生成 Mermaid 图"
     
     def _recognize_intent(self, state: TrainingState) -> Dict[str, Any]:
         # 节点开始事件
@@ -287,10 +258,10 @@ class DigitalHumanTrainingService:
         relationship_count = len(extraction_result.get("relationships", []))
         
         for entity in extraction_result.get("entities", []):
-            await self._store_entity_to_graph(state['digital_human_id'], entity)
+            await self.graph_service.store_digital_human_entity(state['digital_human_id'], entity)
         
         for relationship in extraction_result.get("relationships", []):
-            await self._store_relationship_to_graph(state['digital_human_id'], relationship)
+            await self.graph_service.store_digital_human_relationship(state['digital_human_id'], relationship)
         
         step_results = state.get('step_results', {}).copy()
         step_results["knowledge_extraction"] = {
@@ -511,43 +482,10 @@ class DigitalHumanTrainingService:
     
     def _get_current_context(self, digital_human_id: int) -> Dict[str, Any]:
         try:
-            query = """
-            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
-            WITH k, 
-                 CASE 
-                   WHEN k.type IN ['person', 'profession'] THEN 'profession'
-                   WHEN k.type IN ['skill', 'technology'] THEN 'skill'
-                   WHEN k.type IN ['project', 'product'] THEN 'project'
-                   WHEN k.type IN ['organization', 'company'] THEN 'organization'
-                   WHEN k.type IN ['hobby', 'interest'] THEN 'hobby'
-                   ELSE 'other'
-                 END as category
-            RETURN category, collect(k.name) as items, count(k) as count
-            """
-            
-            results = self.graph_repo.execute_query(query, {"dh_id": digital_human_id})
-            
-            context = {
-                "total_knowledge_points": 0,
-                "categories": {},
-                "recent_entities": []
-            }
-            
-            for row in results:
-                category = row[0]
-                items = row[1]
-                count = row[2]
-                context["categories"][category] = {
-                    "count": count,
-                    "items": items[:5]
-                }
-                context["total_knowledge_points"] += count
-            
-            return context
-            
+            return self.graph_service.get_digital_human_knowledge_context(digital_human_id)
         except Exception as e:
             logger.error(f"获取训练上下文失败: {str(e)}")
-            return {"total_knowledge_points": 0, "categories": {}}
+            return {"total_knowledge_points": 0, "categories": {}, "recent_entities": []}
     
     async def _save_and_send_assistant_message(
         self,
@@ -750,73 +688,6 @@ class DigitalHumanTrainingService:
                 "data": f"处理失败: {str(e)}"
             }, ensure_ascii=False)
     
-    
-    async def _store_entity_to_graph(
-        self,
-        digital_human_id: int,
-        entity: Dict[str, Any]
-    ):
-        try:
-            query = """
-            MERGE (dh:DigitalHuman {id: $dh_id})
-            MERGE (k:Knowledge {
-                name: $name,
-                digital_human_id: $dh_id
-            })
-            SET k.type = $type,
-                k.types = $types,
-                k.confidence = $confidence,
-                k.properties = $properties,
-                k.updated_at = datetime()
-            MERGE (dh)-[r:HAS_KNOWLEDGE]->(k)
-            SET r.updated_at = datetime()
-            """
-            
-            self.graph_repo.execute_query(query, {
-                "dh_id": digital_human_id,
-                "name": entity.get("name"),
-                "type": entity.get("type", "unknown"),
-                "types": json.dumps(entity.get("types", [])),
-                "confidence": entity.get("confidence", 0.5),
-                "properties": json.dumps(entity.get("properties", {}))
-            })
-            
-        except Exception as e:
-            logger.error(f"存储实体到图数据库失败: {str(e)}")
-    
-    async def _store_relationship_to_graph(
-        self,
-        digital_human_id: int,
-        relationship: Dict[str, Any]
-    ):
-        try:
-            query = """
-            MATCH (k1:Knowledge {
-                name: $source,
-                digital_human_id: $dh_id
-            })
-            MATCH (k2:Knowledge {
-                name: $target,
-                digital_human_id: $dh_id
-            })
-            MERGE (k1)-[r:RELATES_TO]->(k2)
-            SET r.relation_type = $relation_type,
-                r.confidence = $confidence,
-                r.properties = $properties,
-                r.updated_at = datetime()
-            """
-            
-            self.graph_repo.execute_query(query, {
-                "dh_id": digital_human_id,
-                "source": relationship.get("source"),
-                "target": relationship.get("target"),
-                "relation_type": relationship.get("relation_type"),
-                "confidence": relationship.get("confidence", 0.5),
-                "properties": json.dumps(relationship.get("properties", {}))
-            })
-            
-        except Exception as e:
-            logger.error(f"存储关系到图数据库失败: {str(e)}")
     
     
     

@@ -290,3 +290,130 @@ class GraphService:
         except Exception as e:
             logger.error(f"获取演化路径失败: {str(e)}")
             return {"entity_name": entity_name, "error": str(e)}
+    
+    async def store_digital_human_entity(
+        self,
+        digital_human_id: int,
+        entity: Dict[str, Any]
+    ) -> bool:
+        """存储数字人的知识实体到图数据库"""
+        try:
+            import json
+            query = """
+            MERGE (dh:DigitalHuman {id: $dh_id})
+            MERGE (k:Knowledge {
+                name: $name,
+                digital_human_id: $dh_id
+            })
+            SET k.type = $type,
+                k.types = $types,
+                k.confidence = $confidence,
+                k.properties = $properties,
+                k.updated_at = datetime()
+            MERGE (dh)-[r:HAS_KNOWLEDGE]->(k)
+            SET r.updated_at = datetime()
+            """
+            
+            self.graph_repo.execute_query(query, {
+                "dh_id": digital_human_id,
+                "name": entity.get("name"),
+                "type": entity.get("type", "unknown"),
+                "types": json.dumps(entity.get("types", [])),
+                "confidence": entity.get("confidence", 0.5),
+                "properties": json.dumps(entity.get("properties", {}))
+            })
+            
+            logger.info(f"存储数字人实体成功: {entity.get('name')} (数字人ID: {digital_human_id})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"存储数字人实体失败: {str(e)}")
+            return False
+    
+    async def store_digital_human_relationship(
+        self,
+        digital_human_id: int,
+        relationship: Dict[str, Any]
+    ) -> bool:
+        """存储数字人的知识关系到图数据库"""
+        try:
+            import json
+            query = """
+            MATCH (k1:Knowledge {
+                name: $source,
+                digital_human_id: $dh_id
+            })
+            MATCH (k2:Knowledge {
+                name: $target,
+                digital_human_id: $dh_id
+            })
+            MERGE (k1)-[r:RELATES_TO]->(k2)
+            SET r.relation_type = $relation_type,
+                r.confidence = $confidence,
+                r.properties = $properties,
+                r.updated_at = datetime()
+            """
+            
+            self.graph_repo.execute_query(query, {
+                "dh_id": digital_human_id,
+                "source": relationship.get("source"),
+                "target": relationship.get("target"),
+                "relation_type": relationship.get("relation_type"),
+                "confidence": relationship.get("confidence", 0.5),
+                "properties": json.dumps(relationship.get("properties", {}))
+            })
+            
+            logger.info(f"存储数字人关系成功: {relationship.get('source')} -> {relationship.get('target')}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"存储数字人关系失败: {str(e)}")
+            return False
+    
+    def get_digital_human_knowledge_context(self, digital_human_id: int) -> Dict[str, Any]:
+        """获取数字人的知识上下文（同步方法）"""
+        try:
+            query = """
+            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            RETURN k.name as name, k.type as type, k.properties as properties
+            ORDER BY k.updated_at DESC
+            LIMIT 100
+            """
+            
+            results = self.graph_repo.execute_query(query, {"dh_id": digital_human_id})
+            
+            context = {
+                "total_knowledge_points": 0,
+                "categories": {},
+                "recent_entities": []
+            }
+            
+            for row in results:
+                context["total_knowledge_points"] += 1
+                
+                entity_type = row.get("type", "unknown")
+                if entity_type not in context["categories"]:
+                    context["categories"][entity_type] = {
+                        "count": 0,
+                        "examples": []
+                    }
+                
+                context["categories"][entity_type]["count"] += 1
+                if len(context["categories"][entity_type]["examples"]) < 3:
+                    context["categories"][entity_type]["examples"].append(row.get("name"))
+                
+                if len(context["recent_entities"]) < 10:
+                    context["recent_entities"].append({
+                        "name": row.get("name"),
+                        "type": entity_type
+                    })
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"获取数字人知识上下文失败: {str(e)}")
+            return {
+                "total_knowledge_points": 0,
+                "categories": {},
+                "recent_entities": []
+            }
