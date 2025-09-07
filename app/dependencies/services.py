@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.dependencies.database import get_db
 from app.repositories.user_repository import UserRepository
 from app.repositories.chroma_repository import ChromaRepository
+from app.repositories.training_message_repository import TrainingMessageRepository
 from app.services.auth_service import AuthService
 from app.services.chroma_service import ChromaService
 from app.services.embedding_service import EmbeddingService
@@ -11,6 +12,7 @@ from app.services.langgraph_service import LangGraphService
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.digital_human_training_service import DigitalHumanTrainingService
 from app.services.graph_service import GraphService
+from app.services.conversation_service import ConversationService
 from app.dependencies.graph import get_graph_service
 
 
@@ -49,9 +51,22 @@ def get_knowledge_extractor() -> KnowledgeExtractor:
     return KnowledgeExtractor()
 
 
-def get_digital_human_training_service(
+def get_conversation_service(
     db: Session = Depends(get_db),
+    langgraph_service: LangGraphService = Depends(get_langgraph_service)
+) -> ConversationService:
+    return ConversationService(db, langgraph_service)
+
+
+def get_training_message_repository(
+    db: Session = Depends(get_db)
+) -> TrainingMessageRepository:
+    return TrainingMessageRepository(db)
+
+
+def get_digital_human_training_service(
+    training_message_repo: TrainingMessageRepository = Depends(get_training_message_repository),
     knowledge_extractor: KnowledgeExtractor = Depends(get_knowledge_extractor),
     graph_service: GraphService = Depends(get_graph_service)
 ) -> DigitalHumanTrainingService:
-    return DigitalHumanTrainingService(db, knowledge_extractor, graph_service)
+    return DigitalHumanTrainingService(training_message_repo, knowledge_extractor, graph_service)

@@ -1,7 +1,6 @@
 from typing import Dict, List, Any, Generator, Optional, AsyncGenerator, TypedDict, Annotated
 import json
 from datetime import datetime
-from sqlalchemy.orm import Session
 from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
@@ -9,7 +8,7 @@ import operator
 
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
-from app.core.models import DigitalHumanTrainingMessage
+from app.repositories.training_message_repository import TrainingMessageRepository
 from app.core.logger import logger
 from app.core.config import settings
 
@@ -38,18 +37,18 @@ class DigitalHumanTrainingService:
     
     def __init__(
         self,
-        db: Session,
+        training_message_repo: TrainingMessageRepository,
         knowledge_extractor: KnowledgeExtractor,
         graph_service: GraphService
     ):
-        self.db = db
+        self.training_message_repo = training_message_repo
         self.knowledge_extractor = knowledge_extractor
         self.graph_service = graph_service
         
         self.llm = ChatOpenAI(
             api_key=settings.OPENAI_API_KEY,
             model="gpt-4o-mini",
-            temperature=0.7
+            temperature=0.3
         )
         
         self.training_graph = self._build_training_graph()
@@ -82,6 +81,23 @@ class DigitalHumanTrainingService:
         
         return workflow.compile()
     
+    def _create_event(
+        self, 
+        event_type: str, 
+        node: str, 
+        message: str, 
+        result: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        event = {
+            "type": event_type,
+            "node": node,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        if result is not None:
+            event["result"] = result
+        return event
+    
     def save_graph_visualization(self, output_dir: str = "graph_visualizations"):
         """保存工作流图的可视化"""
         from pathlib import Path
@@ -110,24 +126,39 @@ class DigitalHumanTrainingService:
             return None
     
     def _recognize_intent(self, state: TrainingState) -> Dict[str, Any]:
+        """
+        识别用户意图并判断对话阶段。
+        
+        分析用户消息内容，识别其意图类型（如信息分享、提问、打招呼等），
+        并判断当前对话所处的阶段（初始、探索、深化、总结）。
+        
+        Args:
+            state: 当前训练状态，必须包含 current_message 字段
+            
+        Returns:
+            更新后的状态字典，包含：
+            - intent: 识别出的意图类型
+            - should_extract: 是否需要进行知识抽取
+            - conversation_stage: 当前对话阶段
+            - step_results: 包含意图识别结果
+            - events: 节点执行事件列表
+        """
         # 节点开始事件
-        events = [{
-            "type": "node_start",
-            "node": "intent_recognition",
-            "message": "🔍 开始识别用户意图...",
-            "timestamp": datetime.now().isoformat()
-        }]
+        events = [self._create_event(
+            "node_start",
+            "intent_recognition",
+            "🔍 开始识别用户意图..."
+        )]
         
         current_step = "recognizing_intent"
         thinking_process = ["正在识别用户意图..."]
         
         # 添加思考步骤
-        events.append({
-            "type": "thinking",
-            "node": "intent_recognition",
-            "message": "💭 分析消息内容，识别用户意图...",
-            "timestamp": datetime.now().isoformat()
-        })
+        events.append(self._create_event(
+            "thinking",
+            "intent_recognition",
+            "💭 分析消息内容，识别用户意图..."
+        ))
         
         prompt = f"""
 分析以下用户消息的意图和内容类型：
@@ -187,17 +218,16 @@ class DigitalHumanTrainingService:
         }
         
         # 节点完成事件
-        events.append({
-            "type": "node_complete",
-            "node": "intent_recognition",
-            "message": f"✅ 意图识别完成: {intent}",
-            "result": {
+        events.append(self._create_event(
+            "node_complete",
+            "intent_recognition",
+            f"✅ 意图识别完成: {intent}",
+            {
                 "intent": intent,
                 "stage": conversation_stage,
                 "should_extract": should_extract
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+            }
+        ))
         
         completed_steps = ["intent_recognition"]
         thinking_process.append(f"识别到意图: {intent}, 对话阶段: {conversation_stage}")
@@ -222,12 +252,26 @@ class DigitalHumanTrainingService:
             return "direct"
     
     async def _extract_knowledge(self, state: TrainingState) -> Dict[str, Any]:
-        events = [{
-            "type": "node_start",
-            "node": "knowledge_extraction",
-            "message": "🧠 开始提取知识点...",
-            "timestamp": datetime.now().isoformat()
-        }]
+        """
+        从用户消息中提取知识实体和关系。
+        
+        使用知识抽取器分析文本，识别实体（人物、组织、技能等）
+        及其之间的关系，并将结果存储到图数据库中。
+        
+        Args:
+            state: 当前训练状态，必须包含 current_message 和 digital_human_id
+            
+        Returns:
+            更新后的状态字典，包含：
+            - extracted_knowledge: 提取的实体和关系
+            - step_results: 包含知识抽取结果统计
+            - events: 节点执行事件列表
+        """
+        events = [self._create_event(
+            "node_start",
+            "knowledge_extraction",
+            "🧠 开始提取知识点..."
+        )]
         
         current_step = "extracting_knowledge"
         thinking_process = ["正在提取知识点..."]
@@ -236,12 +280,11 @@ class DigitalHumanTrainingService:
             extracted_knowledge = {"entities": [], "relationships": []}
             completed_steps = ["knowledge_extraction"]
             
-            events.append({
-                "type": "node_complete",
-                "node": "knowledge_extraction",
-                "message": "ℹ️ 无需提取知识",
-                "timestamp": datetime.now().isoformat()
-            })
+            events.append(self._create_event(
+                "node_complete",
+                "knowledge_extraction",
+                "ℹ️ 无需提取知识"
+            ))
             
             return {
                 "current_step": current_step,
@@ -270,16 +313,15 @@ class DigitalHumanTrainingService:
             "extracted": extraction_result
         }
         
-        events.append({
-            "type": "node_complete",
-            "node": "knowledge_extraction",
-            "message": f"✅ 知识提取完成: {entity_count} 个实体, {relationship_count} 个关系",
-            "result": {
+        events.append(self._create_event(
+            "node_complete",
+            "knowledge_extraction",
+            f"✅ 知识提取完成: {entity_count} 个实体, {relationship_count} 个关系",
+            {
                 "entities_count": entity_count,
                 "relationships_count": relationship_count
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+            }
+        ))
         
         completed_steps = ["knowledge_extraction"]
         thinking_process.append(f"提取到 {entity_count} 个实体, {relationship_count} 个关系")
@@ -294,12 +336,28 @@ class DigitalHumanTrainingService:
         }
     
     def _analyze_context(self, state: TrainingState) -> Dict[str, Any]:
-        events = [{
-            "type": "node_start",
-            "node": "context_analysis",
-            "message": "🔎 开始分析知识图谱上下文...",
-            "timestamp": datetime.now().isoformat()
-        }]
+        """
+        分析数字人已有的知识上下文。
+        
+        从图数据库获取数字人已存储的知识点，分析其分布情况，
+        判断是否需要深入探索某些领域。
+        
+        Args:
+            state: 当前训练状态，必须包含 digital_human_id
+            
+        Returns:
+            更新后的状态字典，包含：
+            - knowledge_context: 知识上下文信息
+            - total_knowledge_points: 总知识点数
+            - categories: 知识分类统计
+            - should_explore_deeper: 是否需要深入探索
+            - events: 节点执行事件列表
+        """
+        events = [self._create_event(
+            "node_start",
+            "context_analysis",
+            "🔎 开始分析知识图谱上下文..."
+        )]
         
         current_step = "analyzing_context"
         thinking_process = ["正在分析知识图谱上下文..."]
@@ -322,16 +380,15 @@ class DigitalHumanTrainingService:
             "should_explore_deeper": should_explore_deeper
         }
         
-        events.append({
-            "type": "node_complete",
-            "node": "context_analysis",
-            "message": f"✅ 上下文分析完成: {total_knowledge_points} 个知识点",
-            "result": {
+        events.append(self._create_event(
+            "node_complete",
+            "context_analysis",
+            f"✅ 上下文分析完成: {total_knowledge_points} 个知识点",
+            {
                 "total_points": total_knowledge_points,
                 "categories_count": len(categories)
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+            }
+        ))
         
         completed_steps = ["context_analysis"]
         thinking_process.append(f"已了解 {total_knowledge_points} 个知识点，涵盖 {len(categories)} 个领域")
@@ -349,12 +406,26 @@ class DigitalHumanTrainingService:
         }
     
     def _generate_question(self, state: TrainingState) -> Dict[str, Any]:
-        events = [{
-            "type": "node_start",
-            "node": "question_generation",
-            "message": "❓ 开始生成引导性问题...",
-            "timestamp": datetime.now().isoformat()
-        }]
+        """
+        基于当前状态生成引导性问题。
+        
+        根据用户的回答、已提取的知识和对话阶段，
+        生成下一个自然的引导性问题，推动对话深入。
+        
+        Args:
+            state: 当前训练状态，包含对话历史和知识上下文
+            
+        Returns:
+            更新后的状态字典，包含：
+            - next_question: 生成的引导性问题
+            - step_results: 包含问题生成相关信息
+            - events: 节点执行事件列表
+        """
+        events = [self._create_event(
+            "node_start",
+            "question_generation",
+            "❓ 开始生成引导性问题..."
+        )]
         
         current_step = "generating_question"
         thinking_process = ["正在生成引导性问题..."]
@@ -384,15 +455,14 @@ class DigitalHumanTrainingService:
             "based_on_stage": state.get('conversation_stage', 'exploring')
         }
         
-        events.append({
-            "type": "node_complete",
-            "node": "question_generation",
-            "message": "✅ 问题生成完成",
-            "result": {
+        events.append(self._create_event(
+            "node_complete",
+            "question_generation",
+            "✅ 问题生成完成",
+            {
                 "question": next_question[:50] + "..." if len(next_question) > 50 else next_question
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+            }
+        ))
         
         completed_steps = ["question_generation"]
         thinking_process.append("已生成引导性问题")
@@ -437,12 +507,26 @@ class DigitalHumanTrainingService:
         return "\n".join(prompt_parts)
     
     async def _save_message(self, state: TrainingState) -> Dict[str, Any]:
-        events = [{
-            "type": "node_start",
-            "node": "save_message",
-            "message": "💾 开始保存对话记录...",
-            "timestamp": datetime.now().isoformat()
-        }]
+        """
+        保存消息到数据库。
+        
+        将用户消息和助手回复持久化到数据库中，
+        用于后续的对话历史查询和分析。
+        
+        Args:
+            state: 当前训练状态，必须包含 digital_human_id, user_id 和 current_message
+            
+        Returns:
+            更新后的状态字典，包含：
+            - messages: 更新后的消息列表（追加新消息）
+            - step_results: 包含消息保存结果
+            - events: 节点执行事件列表
+        """
+        events = [self._create_event(
+            "node_start",
+            "save_message",
+            "💾 开始保存对话记录..."
+        )]
         
         current_step = "saving_message"
         thinking_process = ["正在保存对话记录..."]
@@ -462,12 +546,11 @@ class DigitalHumanTrainingService:
             "message_length": len(state['current_message'])
         }
         
-        events.append({
-            "type": "node_complete",
-            "node": "save_message",
-            "message": "✅ 对话记录保存完成",
-            "timestamp": datetime.now().isoformat()
-        })
+        events.append(self._create_event(
+            "node_complete",
+            "save_message",
+            "✅ 对话记录保存完成"
+        ))
         
         completed_steps = ["save_message"]
         thinking_process.append("对话记录已保存")
@@ -494,14 +577,12 @@ class DigitalHumanTrainingService:
         question: str
     ) -> AsyncGenerator[str, None]:
         """保存助手消息并发送事件"""
-        assistant_msg = DigitalHumanTrainingMessage(
+        assistant_msg = self.training_message_repo.create_training_message(
             digital_human_id=digital_human_id,
             user_id=user_id,
             role="assistant",
             content=question
         )
-        self.db.add(assistant_msg)
-        self.db.flush()
         
         yield json.dumps({
             "type": "assistant_question",
@@ -533,14 +614,12 @@ class DigitalHumanTrainingService:
         state = None
         
         try:
-            user_msg = DigitalHumanTrainingMessage(
+            user_msg = self.training_message_repo.create_training_message(
                 digital_human_id=digital_human_id,
                 user_id=user_id,
                 role="user",
                 content=user_message
             )
-            self.db.add(user_msg)
-            self.db.flush()
             
             yield json.dumps({
                 "type": "user_message",
@@ -610,12 +689,14 @@ class DigitalHumanTrainingService:
                                 for step in new_steps:
                                     # 如果事件中没有包含，才发送
                                     if not any(e.get('type') == 'node_complete' and e.get('node') == step for e in events):
-                                        yield json.dumps({
-                                            "type": "node_complete",
-                                            "node": step,
-                                            "data": f"✅ 完成: {step}",
-                                            "timestamp": datetime.now().isoformat()
-                                        }, ensure_ascii=False)
+                                        yield json.dumps(
+                                            self._create_event(
+                                                "node_complete",
+                                                step,
+                                                f"✅ 完成: {step}"
+                                            ),
+                                            ensure_ascii=False
+                                        )
                             
                         # 检查思考过程
                         if thinking_process:
@@ -625,12 +706,14 @@ class DigitalHumanTrainingService:
                                 prev_count = len(prev_thinking)
                                 new_thoughts = thinking_process[prev_count:]
                                 for thought in new_thoughts:
+                                    # thinking 事件没有 node 属性，使用简化格式
                                     yield json.dumps({
                                         "type": "thinking",
                                         "data": thought
                                     }, ensure_ascii=False)
                             else:
                                 for thought in thinking_process:
+                                    # thinking 事件没有 node 属性，使用简化格式
                                     yield json.dumps({
                                         "type": "thinking",
                                         "data": thought
@@ -680,7 +763,7 @@ class DigitalHumanTrainingService:
                     ):
                         yield msg
             
-            self.db.commit()
+            self.training_message_repo.commit()
         except Exception as e:
             logger.error(f"训练对话处理失败: {str(e)}")
             yield json.dumps({

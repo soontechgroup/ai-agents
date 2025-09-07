@@ -16,24 +16,27 @@ from langchain.schema import HumanMessage, SystemMessage
 class TestDigitalHumanTrainingService:
     
     @pytest.fixture
-    def mock_db(self):
-        db = Mock()
-        db.add = Mock()
-        db.flush = Mock()
-        db.commit = Mock()
-        db.rollback = Mock()
-        
+    def mock_training_message_repo(self):
+        repo = Mock()
         message_counter = [0]
-        def flush_side_effect():
-            for call in db.add.call_args_list:
-                if call and len(call[0]) > 0:
-                    obj = call[0][0]
-                    if isinstance(obj, DigitalHumanTrainingMessage) and not hasattr(obj, 'id'):
-                        message_counter[0] += 1
-                        obj.id = message_counter[0]
         
-        db.flush.side_effect = flush_side_effect
-        return db
+        def create_training_message_side_effect(**kwargs):
+            message_counter[0] += 1
+            msg = DigitalHumanTrainingMessage(
+                id=message_counter[0],
+                digital_human_id=kwargs.get('digital_human_id'),
+                user_id=kwargs.get('user_id'),
+                role=kwargs.get('role'),
+                content=kwargs.get('content'),
+                extracted_knowledge=kwargs.get('extracted_knowledge'),
+                extraction_metadata=kwargs.get('extraction_metadata')
+            )
+            return msg
+        
+        repo.create_training_message = Mock(side_effect=create_training_message_side_effect)
+        repo.commit = Mock()
+        repo.rollback = Mock()
+        return repo
     
     @pytest.fixture
     def mock_knowledge_extractor(self):
@@ -82,9 +85,9 @@ class TestDigitalHumanTrainingService:
         return repo
     
     @pytest.fixture
-    async def training_service(self, mock_db, mock_knowledge_extractor, mock_graph_service):
+    async def training_service(self, mock_training_message_repo, mock_knowledge_extractor, mock_graph_service):
         service = DigitalHumanTrainingService(
-            db=mock_db,
+            training_message_repo=mock_training_message_repo,
             knowledge_extractor=mock_knowledge_extractor,
             graph_service=mock_graph_service
         )
@@ -296,7 +299,7 @@ class TestDigitalHumanTrainingService:
     
     @pytest.mark.asyncio
     async def test_error_handling(self, training_service):
-        training_service.db.add.side_effect = Exception("数据库连接失败")
+        training_service.training_message_repo.create_training_message.side_effect = Exception("数据库连接失败")
         
         events = []
         async for event in training_service.process_training_conversation(
@@ -321,15 +324,19 @@ class TestDigitalHumanTrainingService:
         ):
             events.append(json.loads(event))
         
-        assert training_service.db.add.called
-        assert training_service.db.flush.called
-        assert training_service.db.commit.called
+        # 验证 training_message_repo 的 create_training_message 被调用
+        assert training_service.training_message_repo.create_training_message.called
         
-        add_calls = training_service.db.add.call_args_list
-        messages_added = [call[0][0] for call in add_calls if call and len(call[0]) > 0]
+        # 获取调用参数
+        save_calls = training_service.training_message_repo.create_training_message.call_args_list
         
-        user_messages = [m for m in messages_added if isinstance(m, DigitalHumanTrainingMessage) and m.role == "user"]
-        assert len(user_messages) > 0
+        # 验证至少有一个用户消息被保存
+        user_message_calls = [call for call in save_calls if call.kwargs.get('role') == 'user']
+        assert len(user_message_calls) > 0
+        assert user_message_calls[0].kwargs['content'] == "测试消息持久化"
+        
+        # 验证 commit 被调用
+        assert training_service.training_message_repo.commit.called
     
     @pytest.mark.asyncio
     async def test_complete_workflow_integration(self, training_service):
@@ -524,7 +531,7 @@ class TestDigitalHumanTrainingService:
         
         # 这里传入 None 因为只需要图的结构，不需要真实的依赖
         service = DigitalHumanTrainingService(
-            db=None,
+            training_message_repo=None,
             knowledge_extractor=None,
             graph_service=None
         )
