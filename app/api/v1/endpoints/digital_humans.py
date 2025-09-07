@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.schemas.digital_human import (
     DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse, 
     DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, 
-    DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest
+    DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest,
+    MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics
 )
 from app.schemas.common_response import SuccessResponse
 from app.schemas.common_response import PaginationMeta
@@ -15,6 +16,7 @@ import asyncio
 from app.core.logger import logger
 from app.services.digital_human_service import DigitalHumanService
 from app.services.digital_human_training_service import DigitalHumanTrainingService
+from app.services.graph_service import GraphService
 from app.dependencies.services import get_digital_human_training_service
 from app.core.database import get_db
 from app.core.models import User
@@ -26,6 +28,10 @@ router = APIRouter()
 
 def get_digital_human_service(db: Session = Depends(get_db)) -> DigitalHumanService:
     return DigitalHumanService(db)
+
+
+def get_graph_service() -> GraphService:
+    return GraphService()
 
 
 @router.post("/create", response_model=SuccessResponse[DigitalHumanResponse], summary="创建数字人模板")
@@ -158,3 +164,63 @@ async def train_digital_human(
             "Access-Control-Allow-Headers": "*",
         }
     )
+
+
+@router.post("/memory-graph", response_model=SuccessResponse[MemoryGraphResponse], summary="获取数字人记忆图谱")
+async def get_digital_human_memory_graph(
+    request: MemoryGraphRequest,
+    current_user: User = Depends(get_current_active_user),
+    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
+    graph_service: GraphService = Depends(get_graph_service)
+):
+    """
+    获取指定数字人的记忆图谱数据，用于前端可视化展示
+    
+    权限验证：
+    - 用户只能查看自己创建的数字人记忆
+    - 公开的数字人记忆暂不支持查看
+    
+    返回格式：
+    - nodes: 知识节点列表，包含节点ID、标签、类型、大小等信息
+    - edges: 关系边列表，包含源节点、目标节点、关系类型等信息
+    - statistics: 统计信息，包含总节点数、总边数、各类型节点数量等
+    """
+    # 验证用户是否有权限访问该数字人
+    digital_human = digital_human_service.get_digital_human_by_id(
+        request.digital_human_id, 
+        current_user.id
+    )
+    
+    if not digital_human:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="数字人不存在或您无权限访问"
+        )
+    
+    logger.info(f"📊 用户 {current_user.id} 获取数字人记忆图谱: ID={request.digital_human_id}")
+    
+    # 获取记忆图谱数据
+    graph_data = await graph_service.get_digital_human_memory_graph(
+        digital_human_id=request.digital_human_id,
+        limit=request.limit,
+        node_types=request.node_types
+    )
+    
+    # 检查是否有错误
+    if "error" in graph_data:
+        logger.error(f"获取记忆图谱失败: {graph_data['error']}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取记忆图谱失败，请稍后重试"
+        )
+    
+    # 构建响应
+    memory_graph = MemoryGraphResponse(
+        nodes=[MemoryGraphNode(**node) for node in graph_data["nodes"]],
+        edges=[MemoryGraphEdge(**edge) for edge in graph_data["edges"]],
+        statistics=MemoryGraphStatistics(**graph_data["statistics"])
+    )
+    
+    logger.success(f"✅ 成功获取数字人记忆图谱: {graph_data['statistics']['displayed_nodes']} 个节点, {graph_data['statistics']['displayed_edges']} 条边")
+    
+    return ResponseUtil.success(data=memory_graph, message="获取数字人记忆图谱成功")

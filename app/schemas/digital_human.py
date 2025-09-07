@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.schemas.common_response import PaginatedResponse, PaginationMeta
 
@@ -114,3 +114,46 @@ class DigitalHumanTrainRequest(BaseModel):
     """数字人训练请求模型"""
     digital_human_id: int = Field(..., description="数字人ID")
     message: str = Field(..., description="训练消息内容")
+
+
+class MemoryGraphNode(BaseModel):
+    """记忆图谱节点"""
+    id: str = Field(..., description="节点ID")
+    label: str = Field(..., description="节点标签")
+    type: str = Field(..., description="节点类型")
+    size: float = Field(..., description="节点大小")
+    confidence: float = Field(..., description="置信度")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="节点属性")
+    updated_at: Optional[str] = Field(None, description="更新时间")
+
+
+class MemoryGraphEdge(BaseModel):
+    """记忆图谱边"""
+    source: str = Field(..., description="源节点ID")
+    target: str = Field(..., description="目标节点ID")
+    type: str = Field(..., description="关系类型")
+    confidence: float = Field(default=0.5, description="置信度")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="边属性")
+
+
+class MemoryGraphStatistics(BaseModel):
+    """记忆图谱统计信息"""
+    total_nodes: int = Field(..., description="总节点数")
+    total_edges: int = Field(..., description="总边数")
+    displayed_nodes: int = Field(..., description="显示的节点数")
+    displayed_edges: int = Field(..., description="显示的边数")
+    categories: Dict[str, int] = Field(..., description="各类型节点数量")
+
+
+class MemoryGraphResponse(BaseModel):
+    """记忆图谱响应"""
+    nodes: List[MemoryGraphNode] = Field(..., description="节点列表")
+    edges: List[MemoryGraphEdge] = Field(..., description="边列表")
+    statistics: MemoryGraphStatistics = Field(..., description="统计信息")
+
+
+class MemoryGraphRequest(BaseModel):
+    """记忆图谱请求"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    limit: int = Field(default=100, ge=1, le=500, description="返回的最大节点数")
+    node_types: Optional[List[str]] = Field(None, description="要筛选的节点类型列表")

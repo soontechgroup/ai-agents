@@ -314,7 +314,7 @@ class GraphService:
             SET r.updated_at = datetime()
             """
             
-            self.graph_repo.execute_query(query, {
+            self.graph_repo.execute_cypher(query, {
                 "dh_id": digital_human_id,
                 "name": entity.get("name"),
                 "type": entity.get("type", "unknown"),
@@ -354,7 +354,7 @@ class GraphService:
                 r.updated_at = datetime()
             """
             
-            self.graph_repo.execute_query(query, {
+            self.graph_repo.execute_cypher(query, {
                 "dh_id": digital_human_id,
                 "source": relationship.get("source"),
                 "target": relationship.get("target"),
@@ -380,7 +380,7 @@ class GraphService:
             LIMIT 100
             """
             
-            results = self.graph_repo.execute_query(query, {"dh_id": digital_human_id})
+            results, _ = self.graph_repo.execute_cypher(query, {"dh_id": digital_human_id})
             
             context = {
                 "total_knowledge_points": 0,
@@ -416,4 +416,155 @@ class GraphService:
                 "total_knowledge_points": 0,
                 "categories": {},
                 "recent_entities": []
+            }
+    
+    async def get_digital_human_memory_graph(
+        self,
+        digital_human_id: int,
+        limit: int = 100,
+        node_types: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        获取数字人的记忆图谱数据，用于前端可视化展示
+        
+        Args:
+            digital_human_id: 数字人ID
+            limit: 返回的最大节点数
+            node_types: 要筛选的节点类型列表
+            
+        Returns:
+            包含节点、边和统计信息的字典，适合前端图形化展示
+        """
+        try:
+            # 查询知识节点
+            node_query = """
+            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            WHERE $types IS NULL OR k.type IN $types
+            RETURN k.name as id,
+                   k.name as label,
+                   k.type as type,
+                   k.confidence as confidence,
+                   k.properties as properties,
+                   k.updated_at as updated_at
+            ORDER BY k.updated_at DESC
+            LIMIT $limit
+            """
+            
+            node_results, _ = self.graph_repo.execute_cypher(node_query, {
+                "dh_id": digital_human_id,
+                "types": node_types,
+                "limit": limit
+            })
+            
+            # 构建节点列表和节点名称集合
+            nodes = []
+            node_names = set()
+            type_counts = {}
+            
+            for row in node_results:
+                # row 是一个列表，按照查询中的顺序访问
+                # [id, label, type, confidence, properties, updated_at]
+                node_id = row[0] if len(row) > 0 else None
+                node_label = row[1] if len(row) > 1 else ""
+                node_type = row[2] if len(row) > 2 else "unknown"
+                confidence = row[3] if len(row) > 3 else 0.5
+                properties = row[4] if len(row) > 4 else "{}"
+                updated_at = row[5] if len(row) > 5 else None
+                
+                # 统计各类型节点数量
+                if node_type not in type_counts:
+                    type_counts[node_type] = 0
+                type_counts[node_type] += 1
+                
+                # 根据confidence计算节点大小
+                size = 10 + confidence * 20  # 基础大小10，最大30
+                
+                nodes.append({
+                    "id": node_id,
+                    "label": node_label,
+                    "type": node_type,
+                    "size": size,
+                    "confidence": confidence,
+                    "properties": json.loads(properties) if isinstance(properties, str) else properties or {},
+                    "updated_at": str(updated_at) if updated_at else None
+                })
+                node_names.add(node_id)
+            
+            # 查询关系（只查询已有节点之间的关系）
+            edges = []
+            if node_names:
+                rel_query = """
+                MATCH (k1:Knowledge {digital_human_id: $dh_id})-[r:RELATES_TO]->(k2:Knowledge {digital_human_id: $dh_id})
+                WHERE k1.name IN $node_names AND k2.name IN $node_names
+                RETURN k1.name as source,
+                       k2.name as target,
+                       r.relation_type as type,
+                       r.confidence as confidence,
+                       r.properties as properties
+                LIMIT $limit
+                """
+                
+                rel_results, _ = self.graph_repo.execute_cypher(rel_query, {
+                    "dh_id": digital_human_id,
+                    "node_names": list(node_names),
+                    "limit": limit
+                })
+                
+                for row in rel_results:
+                    # row 是一个列表，按照查询中的顺序访问
+                    # [source, target, type, confidence, properties]
+                    source = row[0] if len(row) > 0 else None
+                    target = row[1] if len(row) > 1 else None
+                    rel_type = row[2] if len(row) > 2 else "RELATES_TO"
+                    rel_confidence = row[3] if len(row) > 3 else 0.5
+                    rel_properties = row[4] if len(row) > 4 else "{}"
+                    
+                    edges.append({
+                        "source": source,
+                        "target": target,
+                        "type": rel_type,
+                        "confidence": rel_confidence,
+                        "properties": json.loads(rel_properties) if isinstance(rel_properties, str) else rel_properties or {}
+                    })
+            
+            # 获取总体统计信息
+            stats_query = """
+            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            RETURN count(k) as total_nodes
+            """
+            stats_results, _ = self.graph_repo.execute_cypher(stats_query, {"dh_id": digital_human_id})
+            total_nodes = stats_results[0][0] if stats_results and len(stats_results) > 0 else 0
+            
+            rel_stats_query = """
+            MATCH (k1:Knowledge {digital_human_id: $dh_id})-[r:RELATES_TO]->(k2:Knowledge {digital_human_id: $dh_id})
+            RETURN count(r) as total_edges
+            """
+            rel_stats_results, _ = self.graph_repo.execute_cypher(rel_stats_query, {"dh_id": digital_human_id})
+            total_edges = rel_stats_results[0][0] if rel_stats_results and len(rel_stats_results) > 0 else 0
+            
+            return {
+                "nodes": nodes,
+                "edges": edges,
+                "statistics": {
+                    "total_nodes": total_nodes,
+                    "total_edges": total_edges,
+                    "displayed_nodes": len(nodes),
+                    "displayed_edges": len(edges),
+                    "categories": type_counts
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"获取数字人记忆图谱失败: {str(e)}")
+            return {
+                "nodes": [],
+                "edges": [],
+                "statistics": {
+                    "total_nodes": 0,
+                    "total_edges": 0,
+                    "displayed_nodes": 0,
+                    "displayed_edges": 0,
+                    "categories": {}
+                },
+                "error": str(e)
             }
