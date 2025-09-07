@@ -86,18 +86,11 @@ class TestDigitalHumanTrainingService:
     
     @pytest.fixture
     async def training_service(self, mock_training_message_repo, mock_knowledge_extractor, mock_graph_service):
-        service = DigitalHumanTrainingService(
+        return DigitalHumanTrainingService(
             training_message_repo=mock_training_message_repo,
             knowledge_extractor=mock_knowledge_extractor,
             graph_service=mock_graph_service
         )
-        
-        # 不再设置 graph_repo，因为已经从服务中移除了
-        # 不再替换 llm 和 training_graph，使用 service 自带的真实组件
-        # service.llm 已经在 __init__ 中初始化为真实的 ChatOpenAI
-        # service.training_graph 已经在 __init__ 中构建为真实的 LangGraph
-        
-        return service
     
     @pytest.mark.asyncio
     async def test_intent_recognition_node(self, training_service):

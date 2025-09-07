@@ -4,9 +4,7 @@ from .endpoints import (
     digital_humans, 
     user, 
     conversations, 
-    chroma,
-    # 记忆体系统端点
-    memory
+    chroma
 )
 from .admin import admin_router
 
@@ -45,14 +43,6 @@ api_router.include_router(
     chroma.router,
     prefix="/chroma",
     tags=["Chroma 向量数据库"]
-)
-
-# ==================== 记忆体系统路由 ====================
-# 记忆体系统（包含人员、组织、关系管理）
-api_router.include_router(
-    memory.router,
-    prefix="/graph",
-    tags=["记忆体系统"]
 )
 
 
