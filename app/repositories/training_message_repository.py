@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 from app.core.models import DigitalHumanTrainingMessage
 from app.core.logger import logger
@@ -118,6 +118,27 @@ class TrainingMessageRepository:
                 if total_messages > 0 else 0
             )
         }
+    
+    def get_training_messages_paginated(
+        self,
+        digital_human_id: int,
+        page: int = 1,
+        size: int = 20
+    ) -> Tuple[List[DigitalHumanTrainingMessage], int]:
+        """分页获取训练消息"""
+        query = self.db.query(DigitalHumanTrainingMessage).filter(
+            DigitalHumanTrainingMessage.digital_human_id == digital_human_id
+        )
+        
+        total = query.count()
+        
+        messages = query.order_by(
+            DigitalHumanTrainingMessage.created_at.desc()
+        ).offset((page - 1) * size).limit(size).all()
+        
+        logger.info(f"分页获取训练消息: 数字人ID={digital_human_id}, 页码={page}, 每页={size}, 总数={total}")
+        
+        return messages, total
     
     def commit(self):
         self.db.commit()

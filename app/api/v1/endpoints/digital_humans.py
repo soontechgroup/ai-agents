@@ -5,7 +5,8 @@ from app.schemas.digital_human import (
     DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse, 
     DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, 
     DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest,
-    MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics
+    MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics,
+    TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse
 )
 from app.schemas.common_response import SuccessResponse
 from app.schemas.common_response import PaginationMeta
@@ -224,3 +225,64 @@ async def get_digital_human_memory_graph(
     logger.success(f"✅ 成功获取数字人记忆图谱: {graph_data['statistics']['displayed_nodes']} 个节点, {graph_data['statistics']['displayed_edges']} 条边")
     
     return ResponseUtil.success(data=memory_graph, message="获取数字人记忆图谱成功")
+
+
+@router.post("/training-messages", response_model=TrainingMessagesPageResponse, summary="获取数字人训练消息历史")
+async def get_training_messages(
+    request: TrainingMessagesRequest,
+    current_user: User = Depends(get_current_active_user),
+    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
+    training_service: DigitalHumanTrainingService = Depends(get_digital_human_training_service)
+):
+    """
+    获取数字人训练消息历史
+    
+    权限验证：
+    - 用户只能查看自己创建的数字人的训练消息
+    
+    返回格式：
+    - 分页的训练消息列表
+    - 包含用户消息和助手回复
+    - 包含抽取的知识（如果有）
+    """
+    # 验证用户权限
+    digital_human = digital_human_service.get_digital_human_by_id(
+        request.digital_human_id, 
+        current_user.id
+    )
+    
+    if not digital_human:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="数字人不存在或您无权限访问"
+        )
+    
+    logger.info(f"📜 用户 {current_user.id} 获取数字人训练消息: ID={request.digital_human_id}, 页码={request.page}, 每页={request.size}")
+    
+    # 获取训练消息历史
+    messages, total = training_service.get_training_history(
+        digital_human_id=request.digital_human_id,
+        page=request.page,
+        size=request.size
+    )
+    
+    # 构建分页信息
+    total_pages = math.ceil(total / request.size)
+    pagination = PaginationMeta(
+        page=request.page,
+        size=request.size,
+        total=total,
+        pages=total_pages
+    )
+    
+    # 构建响应
+    message_responses = [TrainingMessageResponse.from_orm(msg) for msg in messages]
+    
+    logger.success(f"✅ 成功获取训练消息: 返回 {len(message_responses)} 条消息，总计 {total} 条")
+    
+    return TrainingMessagesPageResponse(
+        code=200,
+        message="获取训练消息历史成功",
+        data=message_responses,
+        pagination=pagination
+    )

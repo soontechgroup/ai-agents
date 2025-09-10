@@ -157,3 +157,30 @@ class MemoryGraphRequest(BaseModel):
     digital_human_id: int = Field(..., description="数字人ID")
     limit: int = Field(default=100, ge=1, le=500, description="返回的最大节点数")
     node_types: Optional[List[str]] = Field(None, description="要筛选的节点类型列表")
+
+
+class TrainingMessagesRequest(BaseModel):
+    """获取训练消息请求"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    page: int = Field(default=1, ge=1, description="页码")
+    size: int = Field(default=20, ge=1, le=100, description="每页数量")
+
+
+class TrainingMessageResponse(BaseModel):
+    """训练消息响应"""
+    id: int = Field(..., description="消息ID")
+    role: str = Field(..., description="消息角色")
+    content: str = Field(..., description="消息内容")
+    extracted_knowledge: Optional[Dict[str, Any]] = Field(None, description="抽取的知识")
+    created_at: datetime = Field(..., description="创建时间")
+    
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+
+class TrainingMessagesPageResponse(PaginatedResponse[List[TrainingMessageResponse]]):
+    """训练消息分页响应"""
+    pass

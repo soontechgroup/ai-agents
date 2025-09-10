@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Generator, Optional, AsyncGenerator, TypedDict, Annotated
+from typing import Dict, List, Any, Generator, Optional, AsyncGenerator, TypedDict, Annotated, Tuple
 import json
 from datetime import datetime
 from langchain_openai import ChatOpenAI
@@ -11,6 +11,7 @@ from app.services.graph_service import GraphService
 from app.repositories.training_message_repository import TrainingMessageRepository
 from app.core.logger import logger
 from app.core.config import settings
+from app.core.models import DigitalHumanTrainingMessage
 
 
 class TrainingState(TypedDict):
@@ -603,6 +604,19 @@ class DigitalHumanTrainingService:
             return result.next_question
             
         return None
+    
+    def get_training_history(
+        self,
+        digital_human_id: int,
+        page: int = 1,
+        size: int = 20
+    ) -> Tuple[List[DigitalHumanTrainingMessage], int]:
+        """获取训练历史记录"""
+        return self.training_message_repo.get_training_messages_paginated(
+            digital_human_id=digital_human_id,
+            page=page,
+            size=size
+        )
     
     async def process_training_conversation(
         self,
