@@ -184,3 +184,53 @@ class TrainingMessageResponse(BaseModel):
 class TrainingMessagesPageResponse(PaginatedResponse[List[TrainingMessageResponse]]):
     """训练消息分页响应"""
     pass
+
+
+class TrainingSessionResponse(BaseModel):
+    """训练会话响应"""
+    id: int = Field(..., description="会话ID")
+    digital_human_id: int = Field(..., description="数字人ID")
+    user_id: int = Field(..., description="用户ID")
+    thread_id: str = Field(..., description="线程ID")
+    session_type: str = Field(..., description="会话类型")
+    status: str = Field(..., description="会话状态")
+    total_messages: int = Field(default=0, description="消息总数")
+    extracted_entities: int = Field(default=0, description="提取的实体数")
+    extracted_relations: int = Field(default=0, description="提取的关系数")
+    knowledge_summary: Optional[Dict[str, Any]] = Field(None, description="知识总结")
+    started_at: datetime = Field(..., description="开始时间")
+    completed_at: Optional[datetime] = Field(None, description="完成时间")
+    applied_at: Optional[datetime] = Field(None, description="应用时间")
+    
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime('%Y-%m-%d %H:%M:%S') if v else None
+        }
+
+
+class TrainingSessionListRequest(BaseModel):
+    """获取训练会话列表请求"""
+    digital_human_id: Optional[int] = Field(None, description="数字人ID")
+    status: Optional[str] = Field(None, description="会话状态")
+    page: int = Field(default=1, ge=1, description="页码")
+    size: int = Field(default=20, ge=1, le=100, description="每页数量")
+
+
+class TrainingSessionPageResponse(PaginatedResponse[List[TrainingSessionResponse]]):
+    """训练会话分页响应"""
+    pass
+
+
+class CompleteTrainingSessionRequest(BaseModel):
+    """完成训练会话请求"""
+    session_id: int = Field(..., description="会话ID")
+    apply_knowledge: bool = Field(default=False, description="是否应用知识到数字人")
+
+
+class TrainingSessionSummary(BaseModel):
+    """训练会话摘要"""
+    active_sessions: int = Field(..., description="活跃会话数")
+    completed_sessions: int = Field(..., description="已完成会话数")
+    total_entities: int = Field(..., description="总实体数")
+    total_relations: int = Field(..., description="总关系数")

@@ -1,9 +1,10 @@
 import os
 from typing import Generator, Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
-from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import BaseMessage
+from app.core.messages import UserMessage, AssistantMessage, SystemMessage
 from langgraph.graph import StateGraph, END
-from app.core.checkpointer import PostgresCheckpointer
+from app.core.checkpointer import MySQLCheckpointer
 from app.core.database import get_db
 from pydantic import BaseModel
 import json
@@ -41,8 +42,12 @@ class LangGraphService:
                 timeout=30
             )
             
-            # 使用 PostgreSQL 检查点保存器，避免双层缓存
-            self.checkpointer = PostgresCheckpointer(db_session_factory or get_db)
+            # 使用 MySQL 检查点保存器，支持版本管理和缓存
+            self.checkpointer = MySQLCheckpointer(
+                db_session_factory or get_db,
+                cache_size=100,  # 缓存100个检查点
+                cache_ttl=300    # 缓存5分钟
+            )
             
             # 构建对话图
             self.graph = self._build_conversation_graph()
@@ -67,7 +72,7 @@ class LangGraphService:
             )
             
             # 发送简单测试消息验证API密钥
-            test_message = [HumanMessage(content="test")]
+            test_message = [UserMessage(content="test")]
             test_client.invoke(test_message)
             
         except openai.AuthenticationError:
@@ -104,7 +109,7 @@ class LangGraphService:
     def _process_user_input(self, state: ConversationState) -> ConversationState:
         """处理用户输入"""
         # 添加用户消息到历史
-        user_msg = HumanMessage(content=state.user_message)
+        user_msg = UserMessage(content=state.user_message)
         state.messages.append(user_msg)
         return state
     
@@ -138,7 +143,7 @@ class LangGraphService:
     def _finalize_response(self, state: ConversationState) -> ConversationState:
         """完成响应处理"""
         # 添加助手消息到历史
-        ai_msg = AIMessage(content=state.assistant_response)
+        ai_msg = AssistantMessage(content=state.assistant_response)
         state.messages.append(ai_msg)
         return state
     
@@ -260,7 +265,7 @@ class LangGraphService:
             full_messages.extend(recent_messages)
             
             # 添加当前用户消息
-            full_messages.append(HumanMessage(content=message))
+            full_messages.append(UserMessage(content=message))
             
             # 更新LLM配置
             stream_llm = ChatOpenAI(
@@ -331,9 +336,9 @@ class LangGraphService:
             
             history = []
             for msg in messages:
-                if isinstance(msg, HumanMessage):
+                if isinstance(msg, UserMessage):
                     history.append({"role": "user", "content": msg.content})
-                elif isinstance(msg, AIMessage):
+                elif isinstance(msg, AssistantMessage):
                     history.append({"role": "assistant", "content": msg.content})
                 elif isinstance(msg, SystemMessage):
                     history.append({"role": "system", "content": msg.content})

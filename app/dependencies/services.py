@@ -5,6 +5,7 @@ from app.dependencies.database import get_db
 from app.repositories.user_repository import UserRepository
 from app.repositories.chroma_repository import ChromaRepository
 from app.repositories.training_message_repository import TrainingMessageRepository
+from app.repositories.training_session_repository import TrainingSessionRepository
 from app.services.auth_service import AuthService
 from app.services.chroma_service import ChromaService
 from app.services.embedding_service import EmbeddingService
@@ -64,9 +65,23 @@ def get_training_message_repository(
     return TrainingMessageRepository(db)
 
 
+def get_training_session_repository(
+    db: Session = Depends(get_db)
+) -> TrainingSessionRepository:
+    return TrainingSessionRepository(db)
+
+
 def get_digital_human_training_service(
     training_message_repo: TrainingMessageRepository = Depends(get_training_message_repository),
+    training_session_repo: TrainingSessionRepository = Depends(get_training_session_repository),
     knowledge_extractor: KnowledgeExtractor = Depends(get_knowledge_extractor),
     graph_service: GraphService = Depends(get_graph_service)
 ) -> DigitalHumanTrainingService:
-    return DigitalHumanTrainingService(training_message_repo, knowledge_extractor, graph_service)
+    from app.core.database import get_db
+    return DigitalHumanTrainingService(
+        training_message_repo, 
+        training_session_repo, 
+        knowledge_extractor, 
+        graph_service,
+        db_session_factory=get_db  # 传入数据库会话工厂
+    )

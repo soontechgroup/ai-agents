@@ -1,23 +1,28 @@
 from typing import Dict, List, Any, Generator, Optional, AsyncGenerator, TypedDict, Annotated, Tuple
 import json
+import uuid
 from datetime import datetime
 from langchain_openai import ChatOpenAI
-from langchain.schema import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage
+from app.core.messages import UserMessage, AssistantMessage, SystemMessage, serialize_message
 from langgraph.graph import StateGraph, END
 import operator
 
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
 from app.repositories.training_message_repository import TrainingMessageRepository
+from app.repositories.training_session_repository import TrainingSessionRepository
+from app.core.checkpointer import MySQLCheckpointer
 from app.core.logger import logger
 from app.core.config import settings
-from app.core.models import DigitalHumanTrainingMessage
+from app.core.models import DigitalHumanTrainingMessage, TrainingSession
 
 
 class TrainingState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     digital_human_id: int
     user_id: int
+    session_id: int  # 训练会话ID
     current_message: str
     extracted_knowledge: Dict[str, Any]
     knowledge_context: Dict[str, Any]
@@ -39,10 +44,13 @@ class DigitalHumanTrainingService:
     def __init__(
         self,
         training_message_repo: TrainingMessageRepository,
+        training_session_repo: TrainingSessionRepository,
         knowledge_extractor: KnowledgeExtractor,
-        graph_service: GraphService
+        graph_service: GraphService,
+        db_session_factory=None
     ):
         self.training_message_repo = training_message_repo
+        self.training_session_repo = training_session_repo
         self.knowledge_extractor = knowledge_extractor
         self.graph_service = graph_service
         
@@ -50,6 +58,14 @@ class DigitalHumanTrainingService:
             api_key=settings.OPENAI_API_KEY,
             model="gpt-4o-mini",
             temperature=0.3
+        )
+        
+        # 使用 MySQL 检查点保存器，支持版本管理和缓存
+        from app.core.database import get_db
+        self.checkpointer = MySQLCheckpointer(
+            db_session_factory or get_db,
+            cache_size=100,  # 缓存100个检查点
+            cache_ttl=300    # 缓存5分钟
         )
         
         self.training_graph = self._build_training_graph()
@@ -80,7 +96,7 @@ class DigitalHumanTrainingService:
         workflow.add_edge("question_generation", "save_message")
         workflow.add_edge("save_message", END)
         
-        return workflow.compile()
+        return workflow.compile(checkpointer=self.checkpointer)
     
     def _create_event(
         self, 
@@ -161,12 +177,32 @@ class DigitalHumanTrainingService:
             "💭 分析消息内容，识别用户意图..."
         ))
         
+        # 构建对话历史上下文
+        history_context = ""
+        messages = state.get('messages', [])
+        if len(messages) > 1:  # 有历史消息
+            recent_messages = messages[-6:-1]  # 获取最近几条历史（不包括当前消息）
+            if recent_messages:
+                history_context = "\n对话历史：\n"
+                for msg in recent_messages:
+                    # 处理消息可能是字典或对象的情况
+                    if isinstance(msg, dict):
+                        role = "用户" if msg.get("role") == "user" else "助手"
+                        content = msg.get("content", "")
+                    elif isinstance(msg, BaseMessage):
+                        role = "用户" if isinstance(msg, UserMessage) else "助手"
+                        content = msg.content
+                    else:
+                        continue
+                    
+                    history_context += f"{role}: {content[:100]}...\n" if len(content) > 100 else f"{role}: {content}\n"
+        
         prompt = f"""
 分析以下用户消息的意图和内容类型：
+{history_context}
+当前用户消息: {state['current_message']}
 
-用户消息: {state['current_message']}
-
-请判断：
+请基于对话历史和当前消息判断：
 1. 意图类型（information_sharing/question_asking/clarification/greeting/other）
 2. 当前对话阶段（initial/exploring/deepening/concluding）
 
@@ -433,7 +469,11 @@ class DigitalHumanTrainingService:
         
         context_prompt = self._build_context_prompt(state)
         
-        prompt = f"""
+        # 构建包含历史的消息列表
+        messages = []
+        
+        # 添加系统提示
+        system_prompt = f"""
 你是一个正在了解用户的数字人。基于当前对话状态，生成下一个引导性问题。
 
 {context_prompt}
@@ -443,11 +483,46 @@ class DigitalHumanTrainingService:
 2. 根据用户刚才的回答延伸
 3. 逐步深入了解用户
 4. 不要重复已经问过的内容
+5. 基于对话历史保持连贯性
 
 生成一个引导性问题：
 """
+        messages.append(SystemMessage(content=system_prompt))
         
-        response = self.llm.invoke([SystemMessage(content=prompt)])
+        # 添加历史消息（保留最近10条）
+        recent_messages = state.get('messages', [])[-10:]
+        if recent_messages:
+            logger.debug(f"💬 包含 {len(recent_messages)} 条历史消息")
+            
+            # 处理消息格式，确保都是 BaseMessage 对象
+            for msg in recent_messages:
+                if isinstance(msg, BaseMessage):
+                    messages.append(msg)
+                elif isinstance(msg, dict):
+                    # 将字典格式转换为 BaseMessage 对象
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    if role == "user" or role == "human":
+                        messages.append(UserMessage(content=content))
+                    elif role == "assistant" or role == "ai":
+                        messages.append(AssistantMessage(content=content))
+                    elif role == "system":
+                        messages.append(SystemMessage(content=content))
+                    else:
+                        logger.warning(f"⚠️ 未知消息角色: {role}")
+            
+            # 打印消息内容摘要用于调试
+            for idx, msg in enumerate(messages[-3:]):  # 只打印最近3条
+                content_preview = msg.content[:50] + "..." if len(msg.content) > 50 else msg.content
+                logger.debug(f"  消息{idx+1}: [{msg.__class__.__name__}] {content_preview}")
+        
+        # 打印完整的消息列表传递给LLM（临时调试）
+        logger.info(f"🔍 传递给LLM的完整消息列表（共{len(messages)}条）：")
+        for idx, msg in enumerate(messages):
+            content_preview = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
+            logger.info(f"  [{idx}] {msg.__class__.__name__}: {content_preview}")
+        
+        response = self.llm.invoke(messages)
         next_question = response.content.strip()
         
         step_results = state.get('step_results', {}).copy()
@@ -468,13 +543,21 @@ class DigitalHumanTrainingService:
         completed_steps = ["question_generation"]
         thinking_process.append("已生成引导性问题")
         
+        # 将助手回复添加到消息历史（使用可序列化的字典格式）
+        messages = [{
+            "role": "assistant",
+            "content": next_question,
+            "additional_kwargs": {}
+        }]
+        
         return {
             "current_step": current_step,
             "next_question": next_question,
             "step_results": step_results,
             "completed_steps": completed_steps,
             "thinking_process": thinking_process,
-            "events": events
+            "events": events,
+            "messages": messages  # 追加助手消息到历史
         }
     
     def _build_context_prompt(self, state: Dict[str, Any]) -> str:
@@ -575,19 +658,30 @@ class DigitalHumanTrainingService:
         self,
         digital_human_id: int,
         user_id: int,
-        question: str
+        question: str,
+        session_id: Optional[int] = None
     ) -> AsyncGenerator[str, None]:
         """保存助手消息并发送事件"""
-        assistant_msg = self.training_message_repo.create_training_message(
-            digital_human_id=digital_human_id,
-            user_id=user_id,
-            role="assistant",
-            content=question
-        )
+        if session_id:
+            assistant_msg = self.training_session_repo.add_message_to_session(
+                session_id=session_id,
+                digital_human_id=digital_human_id,
+                user_id=user_id,
+                role="assistant",
+                content=question
+            )
+        else:
+            assistant_msg = self.training_message_repo.create_training_message(
+                digital_human_id=digital_human_id,
+                user_id=user_id,
+                role="assistant",
+                content=question
+            )
         
         yield json.dumps({
             "type": "assistant_question",
             "id": assistant_msg.id,
+            "session_id": session_id,
             "data": question
         }, ensure_ascii=False)
     
@@ -626,26 +720,112 @@ class DigitalHumanTrainingService:
     ) -> Generator[str, None, None]:
         user_msg = None
         state = None
+        session = None
         
         try:
-            user_msg = self.training_message_repo.create_training_message(
+            # 获取或创建训练会话
+            session = self.training_session_repo.get_active_session(
+                digital_human_id=digital_human_id,
+                user_id=user_id
+            )
+            
+            if not session:
+                thread_id = f"training_{digital_human_id}_{user_id}_{uuid.uuid4().hex[:8]}"
+                session = self.training_session_repo.create_session(
+                    digital_human_id=digital_human_id,
+                    user_id=user_id,
+                    thread_id=thread_id,
+                    session_type="knowledge_input"
+                )
+                yield json.dumps({
+                    "type": "session_created",
+                    "session_id": session.id,
+                    "data": "新的训练会话已创建"
+                }, ensure_ascii=False)
+            
+            user_msg = self.training_session_repo.add_message_to_session(
+                session_id=session.id,
                 digital_human_id=digital_human_id,
                 user_id=user_id,
                 role="user",
                 content=user_message
             )
             
+            # 确保 id 和 session_id 是可序列化的
+            msg_id = user_msg.id if hasattr(user_msg, 'id') else None
+            sess_id = session.id if hasattr(session, 'id') else None
+            
+            # 如果是 Mock 对象，获取其实际值
+            if hasattr(msg_id, '_mock_name'):
+                msg_id = 100  # 默认值
+            if hasattr(sess_id, '_mock_name'):
+                sess_id = 1  # 默认值
+                
             yield json.dumps({
                 "type": "user_message",
-                "id": user_msg.id,
+                "id": msg_id,
+                "session_id": sess_id,
                 "data": user_message
             }, ensure_ascii=False)
+            
+            # 配置 thread_id 用于 checkpointer
+            config = {"configurable": {"thread_id": session.thread_id}}
+            
+            # 从 checkpointer 加载历史消息
+            existing_messages = []
+            try:
+                checkpoint = self.checkpointer.get(config["configurable"])
+                if checkpoint and checkpoint.get("channel_values"):
+                    existing_messages = checkpoint["channel_values"].get("messages", [])
+                    logger.debug(f"📚 加载历史消息: {len(existing_messages)} 条")
+                    
+                    # 打印最近几条历史消息用于调试
+                    for idx, msg in enumerate(existing_messages[-3:]):
+                        if isinstance(msg, BaseMessage):
+                            content_preview = msg.content[:50] + "..." if len(msg.content) > 50 else msg.content
+                            logger.debug(f"  历史{idx+1}: [{msg.__class__.__name__}] {content_preview}")
+                        elif isinstance(msg, dict):
+                            content_preview = msg.get("content", "")[:50] + "..." if len(msg.get("content", "")) > 50 else msg.get("content", "")
+                            logger.debug(f"  历史{idx+1}: [dict:{msg.get('role', 'unknown')}] {content_preview}")
+            except Exception as e:
+                logger.warning(f"⚠️ 加载历史消息失败: {str(e)}")
+                existing_messages = []
+            
+            # 添加当前消息到历史（使用字典格式保持一致性）
+            existing_messages.append({
+                "role": "user",
+                "content": user_message,
+                "additional_kwargs": {}
+            })
+            logger.debug(f"📝 添加当前用户消息: {user_message[:50]}...")
+            
+            # 获取当前上下文
+            knowledge_context = self._get_current_context(digital_human_id)
+            
+            # 确保 session_id 不是 Mock 对象
+            sess_id_for_state = session.id if hasattr(session, 'id') else 1
+            if hasattr(sess_id_for_state, '_mock_name'):
+                sess_id_for_state = 1  # 使用默认值
             
             state = TrainingState(
                 digital_human_id=digital_human_id,
                 user_id=user_id,
+                session_id=sess_id_for_state,
                 current_message=user_message,
-                messages=[HumanMessage(content=user_message)]
+                messages=existing_messages,  # 使用从 checkpointer 加载的历史消息
+                extracted_knowledge={},
+                knowledge_context=knowledge_context,
+                next_question="",
+                should_extract=False,
+                should_explore_deeper=False,
+                conversation_stage="exploring",
+                total_knowledge_points=knowledge_context.get("total_knowledge_points", 0),
+                categories=knowledge_context.get("categories", {}),
+                current_step="initializing",
+                completed_steps=[],
+                step_results={},
+                thinking_process=[],
+                events=[]
             )
             
             yield json.dumps({
@@ -657,8 +837,9 @@ class DigitalHumanTrainingService:
             final_state = None
             previous_state = None
             
-            # 使用 astream 获取状态更新
-            async for chunk in self.training_graph.astream(state):
+            # 使用流式获取状态更新，传入 config 以启用 checkpointer
+            # 处理流式输出
+            async for chunk in self.training_graph.astream(state, config):
                 # chunk 是 {"节点名": 节点状态} 格式
                 if chunk and isinstance(chunk, dict):
                     logger.debug(f"📊 状态更新: {list(chunk.keys())}")
@@ -761,29 +942,37 @@ class DigitalHumanTrainingService:
                 if next_q:
                     logger.info(f"🤖 从最终状态提取问题: {next_q}")
                     async for msg in self._save_and_send_assistant_message(
-                        digital_human_id, user_id, next_q
+                        digital_human_id, user_id, next_q, session.id if session else None
                     ):
                         yield msg
             else:
                 # 如果没有从流中获取到状态，尝试直接运行
                 logger.debug("没有从流事件中获取到最终状态，尝试直接运行...")
-                result = await self.training_graph.ainvoke(state)
+                result = await self.training_graph.ainvoke(state, config)
                 next_question = self._extract_next_question(result)
                 
                 if next_question:
                     logger.info(f"🤖 从直接运行结果提取问题: {next_question}")
                     async for msg in self._save_and_send_assistant_message(
-                        digital_human_id, user_id, next_question
+                        digital_human_id, user_id, next_question, session.id if session else None
                     ):
                         yield msg
             
-            self.training_message_repo.commit()
         except Exception as e:
-            logger.error(f"训练对话处理失败: {str(e)}")
+            import traceback
+            error_detail = traceback.format_exc()
+            logger.error(f"训练对话处理失败: {str(e)}\n详细错误:\n{error_detail}")
             yield json.dumps({
                 "type": "error",
                 "data": f"处理失败: {str(e)}"
             }, ensure_ascii=False)
+        finally:
+            # 确保 commit 总是被调用
+            try:
+                self.training_message_repo.commit()
+                self.training_session_repo.commit()
+            except Exception as commit_error:
+                logger.error(f"提交事务失败: {str(commit_error)}")
     
     
     

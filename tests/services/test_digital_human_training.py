@@ -60,7 +60,6 @@ class TestDigitalHumanTrainingService:
     @pytest.fixture
     def mock_graph_service(self):
         service = Mock()
-        # 为新增的方法创建异步 mock
         service.store_digital_human_entity = AsyncMock(return_value=True)
         service.store_digital_human_relationship = AsyncMock(return_value=True)
         service.get_digital_human_knowledge_context = Mock(return_value={
@@ -85,9 +84,38 @@ class TestDigitalHumanTrainingService:
         return repo
     
     @pytest.fixture
-    async def training_service(self, mock_training_message_repo, mock_knowledge_extractor, mock_graph_service):
+    def mock_training_session_repo(self):
+        repo = Mock()
+        session = Mock()
+        session.id = 1
+        session.thread_id = "test-thread-123"
+        session.digital_human_id = 1
+        session.user_id = 1
+        repo.get_or_create_session = Mock(return_value=session)
+        repo.update_session = Mock()
+        repo.commit = Mock()
+        
+        # 配置 add_message_to_session 返回具有可序列化 id 的 Mock 对象
+        def create_message(session_id, digital_human_id, user_id, role, content):
+            message = Mock()
+            message.id = 100  # 使用数字而不是 Mock
+            message.session_id = session_id
+            message.digital_human_id = digital_human_id
+            message.user_id = user_id
+            message.role = role
+            message.content = content
+            message.extracted_knowledge = {}
+            message.extraction_metadata = {}
+            return message
+        
+        repo.add_message_to_session = Mock(side_effect=create_message)
+        return repo
+    
+    @pytest.fixture
+    async def training_service(self, mock_training_message_repo, mock_training_session_repo, mock_knowledge_extractor, mock_graph_service):
         return DigitalHumanTrainingService(
             training_message_repo=mock_training_message_repo,
+            training_session_repo=mock_training_session_repo,
             knowledge_extractor=mock_knowledge_extractor,
             graph_service=mock_graph_service
         )
@@ -131,36 +159,29 @@ class TestDigitalHumanTrainingService:
         
         assert result_state.get('current_step') == "recognizing_intent"
         assert "intent_recognition" in result_state.get('completed_steps', [])
-        # 检查意图存储在 step_results 中
         assert "intent_recognition" in result_state.get('step_results', {})
         assert "intent" in result_state.get('step_results', {}).get("intent_recognition", {})
-        # 真实 AI 可能有不同的判断，所以只验证字段存在
         assert isinstance(result_state.get('should_extract'), bool)
         assert len(result_state.get('thinking_process', [])) >= 2
         print(f"✅ 真实 AI 判断: intent = {intent}, should_extract = {result_state.get('should_extract')}")
     
     @pytest.mark.asyncio
     async def test_intent_recognition_json_error(self, training_service):
-        """测试意图识别JSON解析失败时应该抛出异常"""
         state = TrainingState(
             digital_human_id=1,
             user_id=1,
             current_message="测试消息"
         )
         
-        # 临时模拟一个坏的响应来测试错误处理
-        # 这是唯一需要 mock 的地方，因为我们要测试错误处理
         bad_response = Mock()
         bad_response.content = "这不是一个有效的JSON"
         original_llm = training_service.llm
         training_service.llm = Mock()
         training_service.llm.invoke = Mock(return_value=bad_response)
         
-        # 应该抛出 ValueError
         with pytest.raises(ValueError, match="意图识别响应格式错误"):
             training_service._recognize_intent(state)
         
-        # 恢复原来的 llm
         training_service.llm = original_llm
     
     @pytest.mark.asyncio
@@ -210,7 +231,6 @@ class TestDigitalHumanTrainingService:
             event_obj = json.loads(event)
             events.append(event_obj)
             
-            # 记录节点事件
             if event_obj.get('type') == 'node_start':
                 node_events["starts"].append(event_obj.get('node'))
                 print(f"🔵 [{event_obj.get('type')}] 节点: {event_obj.get('node')}")
@@ -229,11 +249,9 @@ class TestDigitalHumanTrainingService:
         print(f"节点开始事件: {node_events['starts']}")
         print(f"节点完成事件: {node_events['completes']}")
         
-        # 验证基本事件
         assert "user_message" in event_types
         assert any(t in event_types for t in ["thinking", "node_start", "node_complete"])
         
-        # 验证节点事件
         if node_events["starts"]:
             print(f"✅ 检测到 {len(node_events['starts'])} 个节点开始事件")
             assert "intent_recognition" in ' '.join(node_events["starts"])
@@ -274,7 +292,6 @@ class TestDigitalHumanTrainingService:
     
     @pytest.mark.asyncio
     async def test_fallback_to_ainvoke(self, training_service):
-        """测试当 astream 不可用时的异常处理"""
         with patch.object(training_service.training_graph, 'astream', side_effect=AttributeError("'async_generator' object has no attribute 'astream'")):
             events = []
             
@@ -285,9 +302,7 @@ class TestDigitalHumanTrainingService:
             ):
                 events.append(json.loads(event))
             
-            # 验证异常被正确捕获并返回错误事件
             assert len(events) > 0
-            # 确保有错误事件产生
             assert any(e["type"] == "error" for e in events)
     
     @pytest.mark.asyncio
@@ -317,19 +332,18 @@ class TestDigitalHumanTrainingService:
         ):
             events.append(json.loads(event))
         
-        # 验证 training_message_repo 的 create_training_message 被调用
-        assert training_service.training_message_repo.create_training_message.called
+        # 检查 session repo 的 add_message_to_session 被调用
+        assert training_service.training_session_repo.add_message_to_session.called
         
-        # 获取调用参数
-        save_calls = training_service.training_message_repo.create_training_message.call_args_list
+        save_calls = training_service.training_session_repo.add_message_to_session.call_args_list
         
-        # 验证至少有一个用户消息被保存
+        # 找到用户消息的调用
         user_message_calls = [call for call in save_calls if call.kwargs.get('role') == 'user']
         assert len(user_message_calls) > 0
         assert user_message_calls[0].kwargs['content'] == "测试消息持久化"
         
-        # 验证 commit 被调用
-        assert training_service.training_message_repo.commit.called
+        # 检查 commit 被调用
+        assert training_service.training_session_repo.commit.called
     
     @pytest.mark.asyncio
     async def test_complete_workflow_integration(self, training_service):
@@ -351,15 +365,11 @@ class TestDigitalHumanTrainingService:
             collected_events.append(event_obj)
             event_type = event_obj.get('type')
             
-            # 根据事件类型显示不同的信息
             if event_type == 'thinking':
-                # 过滤掉thinking事件，只计数不打印
                 continue
             elif event_type == 'user_message':
-                # 用户消息已经在开头显示过了
                 continue
             elif event_type == 'node_start':
-                # 节点开始不显示，只在完成时显示
                 continue
             elif event_type == 'node_complete':
                 node = event_obj.get('node', '')
@@ -407,14 +417,12 @@ class TestDigitalHumanTrainingService:
             elif event_type == 'error':
                 print(f"  ❌ 错误: {event_obj.get('data', '')}")
         
-        # 统计事件
         thinking_count = len([e for e in collected_events if e.get('type') == 'thinking'])
         actual_events = len(collected_events) - thinking_count
         
         print(f"\n📊 执行统计:")
         print(f"  - 总事件数: {len(collected_events)} (过滤thinking后: {actual_events})")
         
-        # 检查节点执行情况
         main_nodes = ['intent_recognition', 'knowledge_extraction', 'context_analysis', 
                       'question_generation', 'save_message']
         successful_nodes = []
@@ -428,7 +436,6 @@ class TestDigitalHumanTrainingService:
         if len(successful_nodes) == len(main_nodes):
             print(f"  - ✅ 全部节点成功执行")
         
-        # 验证知识提取
         knowledge_events = [e for e in collected_events 
                            if e.get('type') == 'knowledge_extracted']
         if knowledge_events:
@@ -437,7 +444,6 @@ class TestDigitalHumanTrainingService:
             print(f"  - 实际提取实体数: {len(entities)}")
             assert len(entities) > 0, "应该提取到至少一个实体"
         
-        # 基本验证
         event_types = [e["type"] for e in collected_events]
         assert "user_message" in event_types
         assert len(collected_events) >= 3
@@ -455,7 +461,6 @@ class TestDigitalHumanTrainingService:
     
     @pytest.mark.asyncio
     async def test_no_knowledge_extraction_scenario(self, training_service):
-        # 使用一个简单的问候语，真实 AI 应该能识别这不包含知识
         state = {
             "digital_human_id": 1,
             "user_id": 1,
@@ -477,14 +482,10 @@ class TestDigitalHumanTrainingService:
         }
         
         result_state = training_service._recognize_intent(state)
-        # 真实 AI 应该识别这是 greeting，不需要抽取知识
         intent = result_state.get('step_results', {}).get('intent_recognition', {}).get('intent', '未知')
         print(f"AI 识别结果: intent={intent}, should_extract={result_state.get('should_extract')}")
         
-        # 即使 should_extract 是 True，知识抽取也应该返回空
         result_state = await training_service._extract_knowledge(result_state)
-        # 对于"你好"这样的消息，应该没有实体可抽取
-        # 但由于是 mock 的 extractor，可能会返回模拟数据
         print(f"抽取结果: {result_state.get('extracted_knowledge')}")
     
     @pytest.mark.asyncio
@@ -497,9 +498,8 @@ class TestDigitalHumanTrainingService:
             "properties": {"role": "engineer"}
         }
         
-        # 现在应该使用 graph_service 的方法
         result = await training_service.graph_service.store_digital_human_entity(1, entity)
-        assert result is True  # Mock 返回 True
+        assert result is True
         
         relationship = {
             "source": "实体1",
@@ -510,32 +510,28 @@ class TestDigitalHumanTrainingService:
         }
         
         result = await training_service.graph_service.store_digital_human_relationship(1, relationship)
-        assert result is True  # Mock 返回 True
+        assert result is True
         
         print("✅ 图存储操作完成（通过 GraphService）")
     
     @pytest.mark.asyncio
     async def test_generate_graph_visualization(self):
-        """生成并保存工作流图的可视化"""
         print("\n========== 生成工作流图可视化 ==========")
         
-        # 创建真实的服务实例（不用 mock）
         from app.services.digital_human_training_service import DigitalHumanTrainingService
         
-        # 这里传入 None 因为只需要图的结构，不需要真实的依赖
         service = DigitalHumanTrainingService(
             training_message_repo=None,
+            training_session_repo=None,
             knowledge_extractor=None,
             graph_service=None
         )
         
-        # 1. 尝试生成图片
         print("\n📸 尝试生成图片...")
         saved_path = service.save_graph_visualization()
         if saved_path:
             print(f"✅ 图已保存到: {saved_path}")
         
-        # 2. 图已保存，无需再生成其他格式
         print("\n💡 提示: 可以打开 graph_visualizations/training_graph.mmd 查看 Mermaid 图")
         print("     或访问 https://mermaid.live 粘贴内容查看流程图")
         

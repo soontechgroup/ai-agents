@@ -75,9 +75,9 @@ async def log_requests(request: Request, call_next):
     except Exception as e:
         process_time = time.time() - start_time
         
-        logger.bind(request_id=request_id).exception(
+        logger.bind(request_id=request_id).error(
             f"💥 [{request_id}] 请求处理异常: {request.method} {request.url.path} | "
-            f"耗时: {process_time:.3f}s | 异常: {type(e).__name__}"
+            f"耗时: {process_time:.3f}s | 异常: {type(e).__name__}: {str(e)}"
         )
         
         raise
@@ -87,7 +87,7 @@ async def log_requests(request: Request, call_next):
 async def global_exception_handler(request: Request, exc: Exception):
     request_id = get_request_id() or "no-request-id"
     
-    logger.bind(request_id=request_id).exception(
+    logger.bind(request_id=request_id).error(
         f"🔥 [{request_id}] 未处理异常 | 路径: {request.url.path} | "
         f"异常: {type(exc).__name__}: {str(exc)}"
     )

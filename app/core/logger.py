@@ -41,8 +41,8 @@ def setup_logger():
         level=settings.LOG_LEVEL.upper(),
         colorize=True,
         enqueue=True,  # 异步日志
-        backtrace=True,  # 显示完整堆栈
-        diagnose=settings.DEBUG,  # 调试模式下显示变量值
+        backtrace=False,  # 不显示完整堆栈
+        diagnose=False,  # 不显示变量值
     )
     
     # 所有日志文件
@@ -55,7 +55,7 @@ def setup_logger():
         compression="zip",  # 压缩旧文件
         enqueue=True,
         encoding="utf-8",
-        backtrace=True,
+        backtrace=False,
         diagnose=False,  # 文件中不显示变量值（安全考虑）
     )
     
@@ -69,8 +69,8 @@ def setup_logger():
         compression="zip",
         enqueue=True,
         encoding="utf-8",
-        backtrace=True,
-        diagnose=True,  # 错误日志记录详细信息
+        backtrace=False,
+        diagnose=False,  # 简化错误日志
     )
     
     # 添加请求日志（仅在生产环境）
