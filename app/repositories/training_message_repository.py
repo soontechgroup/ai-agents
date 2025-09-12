@@ -127,8 +127,7 @@ class TrainingMessageRepository:
     ) -> Tuple[List[DigitalHumanTrainingMessage], int]:
         """分页获取训练消息"""
         query = self.db.query(DigitalHumanTrainingMessage).filter(
-            DigitalHumanTrainingMessage.digital_human_id == digital_human_id,
-            DigitalHumanTrainingMessage.session_id.isnot(None)  # 只查询有 session_id 的消息
+            DigitalHumanTrainingMessage.digital_human_id == digital_human_id
         )
         
         total = query.count()

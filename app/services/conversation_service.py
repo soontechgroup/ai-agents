@@ -26,7 +26,7 @@ class ConversationService:
             conversation_data, user_id, thread_id
         )
         
-        return ConversationResponse.from_orm(conversation)
+        return ConversationResponse.model_validate(conversation)
     
     def get_conversation_by_id(
         self,
@@ -40,7 +40,7 @@ class ConversationService:
         if not conversation:
             return None
         
-        return ConversationResponse.from_orm(conversation)
+        return ConversationResponse.model_validate(conversation)
     
     def get_conversations_paginated(
         self,
@@ -52,7 +52,7 @@ class ConversationService:
         )
         
         conversation_responses = [
-            ConversationResponse.from_orm(conv) for conv in conversations
+            ConversationResponse.model_validate(conv) for conv in conversations
         ]
         
         return conversation_responses, total
@@ -70,7 +70,7 @@ class ConversationService:
         if not conversation:
             return None
         
-        return ConversationResponse.from_orm(conversation)
+        return ConversationResponse.model_validate(conversation)
     
     def delete_conversation(self, conversation_id: int, user_id: int) -> bool:
         return self.conversation_repo.delete_conversation(conversation_id, user_id)
@@ -92,8 +92,8 @@ class ConversationService:
             conversation_id, message_limit
         )
         
-        conversation_response = ConversationResponse.from_orm(conversation)
-        message_responses = [MessageResponse.from_orm(msg) for msg in messages]
+        conversation_response = ConversationResponse.model_validate(conversation)
+        message_responses = [MessageResponse.model_validate(msg) for msg in messages]
         
         return ConversationWithMessages(
             **conversation_response.dict(),
@@ -131,7 +131,7 @@ class ConversationService:
                 conversation_id, "assistant", ai_response
             )
             
-            return MessageResponse.from_orm(ai_message)
+            return MessageResponse.model_validate(ai_message)
             
         except ValueError as e:
             raise ValueError(str(e))
@@ -256,7 +256,7 @@ class ConversationService:
             conversation_id, limit
         )
         
-        return [MessageResponse.from_orm(msg) for msg in messages]
+        return [MessageResponse.model_validate(msg) for msg in messages]
     
     def clear_conversation_history(
         self,

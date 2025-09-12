@@ -77,38 +77,12 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
 
 
-class TrainingSession(Base):
-    __tablename__ = "training_sessions"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    thread_id = Column(String(100), nullable=False, unique=True, index=True)
-    
-    session_type = Column(String(50), default="knowledge_input")
-    status = Column(Enum("in_progress", "completed", "applied", "cancelled", name="training_status"), default="in_progress")
-    
-    total_messages = Column(Integer, default=0)
-    extracted_entities = Column(Integer, default=0)
-    extracted_relations = Column(Integer, default=0)
-    knowledge_summary = Column(JSON, nullable=True)
-    
-    started_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    applied_at = Column(DateTime(timezone=True), nullable=True)
-    
-    digital_human = relationship("DigitalHuman")
-    user = relationship("User")
-    training_messages = relationship("DigitalHumanTrainingMessage", back_populates="session")
-
-
 class DigitalHumanTrainingMessage(Base):
     __tablename__ = "digital_human_training_messages"
     
     id = Column(Integer, primary_key=True, index=True)
     digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    session_id = Column(Integer, ForeignKey("training_sessions.id"), nullable=True, index=True)
     role = Column(Enum("user", "assistant", name="training_message_role"), nullable=False)
     content = Column(Text, nullable=False)
     extracted_knowledge = Column(JSON, nullable=True)
@@ -117,7 +91,6 @@ class DigitalHumanTrainingMessage(Base):
     
     digital_human = relationship("DigitalHuman")
     user = relationship("User")
-    session = relationship("TrainingSession", back_populates="training_messages")
 
 
 class ConversationCheckpoint(Base):

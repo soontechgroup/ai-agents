@@ -11,18 +11,16 @@ import operator
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
 from app.repositories.training_message_repository import TrainingMessageRepository
-from app.repositories.training_session_repository import TrainingSessionRepository
 from app.core.checkpointer import MySQLCheckpointer
 from app.core.logger import logger
 from app.core.config import settings
-from app.core.models import DigitalHumanTrainingMessage, TrainingSession
+from app.core.models import DigitalHumanTrainingMessage
 
 
 class TrainingState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     digital_human_id: int
     user_id: int
-    session_id: int  # 训练会话ID
     current_message: str
     extracted_knowledge: Dict[str, Any]
     knowledge_context: Dict[str, Any]
@@ -44,13 +42,13 @@ class DigitalHumanTrainingService:
     def __init__(
         self,
         training_message_repo: TrainingMessageRepository,
-        training_session_repo: TrainingSessionRepository,
+        # training_session_repo: TrainingSessionRepository,  # 移除会话概念
         knowledge_extractor: KnowledgeExtractor,
         graph_service: GraphService,
         db_session_factory=None
     ):
         self.training_message_repo = training_message_repo
-        self.training_session_repo = training_session_repo
+        # self.training_session_repo = training_session_repo  # 移除会话概念
         self.knowledge_extractor = knowledge_extractor
         self.graph_service = graph_service
         
@@ -658,30 +656,19 @@ class DigitalHumanTrainingService:
         self,
         digital_human_id: int,
         user_id: int,
-        question: str,
-        session_id: Optional[int] = None
+        question: str
     ) -> AsyncGenerator[str, None]:
         """保存助手消息并发送事件"""
-        if session_id:
-            assistant_msg = self.training_session_repo.add_message_to_session(
-                session_id=session_id,
-                digital_human_id=digital_human_id,
-                user_id=user_id,
-                role="assistant",
-                content=question
-            )
-        else:
-            assistant_msg = self.training_message_repo.create_training_message(
-                digital_human_id=digital_human_id,
-                user_id=user_id,
-                role="assistant",
-                content=question
-            )
+        assistant_msg = self.training_message_repo.create_training_message(
+            digital_human_id=digital_human_id,
+            user_id=user_id,
+            role="assistant",
+            content=question
+        )
         
         yield json.dumps({
             "type": "assistant_question",
             "id": assistant_msg.id,
-            "session_id": session_id,
             "data": question
         }, ensure_ascii=False)
     
@@ -720,56 +707,34 @@ class DigitalHumanTrainingService:
     ) -> Generator[str, None, None]:
         user_msg = None
         state = None
-        session = None
         
         try:
-            # 获取或创建训练会话
-            session = self.training_session_repo.get_active_session(
-                digital_human_id=digital_human_id,
-                user_id=user_id
-            )
+            # 使用固定的 thread_id，确保训练的连续性
+            thread_id = f"training_{digital_human_id}_{user_id}"
             
-            if not session:
-                thread_id = f"training_{digital_human_id}_{user_id}_{uuid.uuid4().hex[:8]}"
-                session = self.training_session_repo.create_session(
-                    digital_human_id=digital_human_id,
-                    user_id=user_id,
-                    thread_id=thread_id,
-                    session_type="knowledge_input"
-                )
-                yield json.dumps({
-                    "type": "session_created",
-                    "session_id": session.id,
-                    "data": "新的训练会话已创建"
-                }, ensure_ascii=False)
-            
-            user_msg = self.training_session_repo.add_message_to_session(
-                session_id=session.id,
+            # 保存用户消息到训练消息表
+            user_msg = self.training_message_repo.create_training_message(
                 digital_human_id=digital_human_id,
                 user_id=user_id,
                 role="user",
                 content=user_message
             )
             
-            # 确保 id 和 session_id 是可序列化的
+            # 确保 id 是可序列化的
             msg_id = user_msg.id if hasattr(user_msg, 'id') else None
-            sess_id = session.id if hasattr(session, 'id') else None
             
             # 如果是 Mock 对象，获取其实际值
             if hasattr(msg_id, '_mock_name'):
                 msg_id = 100  # 默认值
-            if hasattr(sess_id, '_mock_name'):
-                sess_id = 1  # 默认值
                 
             yield json.dumps({
                 "type": "user_message",
                 "id": msg_id,
-                "session_id": sess_id,
                 "data": user_message
             }, ensure_ascii=False)
             
             # 配置 thread_id 用于 checkpointer
-            config = {"configurable": {"thread_id": session.thread_id}}
+            config = {"configurable": {"thread_id": thread_id}}
             
             # 从 checkpointer 加载历史消息
             existing_messages = []
@@ -802,15 +767,9 @@ class DigitalHumanTrainingService:
             # 获取当前上下文
             knowledge_context = self._get_current_context(digital_human_id)
             
-            # 确保 session_id 不是 Mock 对象
-            sess_id_for_state = session.id if hasattr(session, 'id') else 1
-            if hasattr(sess_id_for_state, '_mock_name'):
-                sess_id_for_state = 1  # 使用默认值
-            
             state = TrainingState(
                 digital_human_id=digital_human_id,
                 user_id=user_id,
-                session_id=sess_id_for_state,
                 current_message=user_message,
                 messages=existing_messages,  # 使用从 checkpointer 加载的历史消息
                 extracted_knowledge={},
@@ -942,7 +901,7 @@ class DigitalHumanTrainingService:
                 if next_q:
                     logger.info(f"🤖 从最终状态提取问题: {next_q}")
                     async for msg in self._save_and_send_assistant_message(
-                        digital_human_id, user_id, next_q, session.id if session else None
+                        digital_human_id, user_id, next_q
                     ):
                         yield msg
             else:
@@ -954,7 +913,7 @@ class DigitalHumanTrainingService:
                 if next_question:
                     logger.info(f"🤖 从直接运行结果提取问题: {next_question}")
                     async for msg in self._save_and_send_assistant_message(
-                        digital_human_id, user_id, next_question, session.id if session else None
+                        digital_human_id, user_id, next_question
                     ):
                         yield msg
             
@@ -970,7 +929,6 @@ class DigitalHumanTrainingService:
             # 确保 commit 总是被调用
             try:
                 self.training_message_repo.commit()
-                self.training_session_repo.commit()
             except Exception as commit_error:
                 logger.error(f"提交事务失败: {str(commit_error)}")
     

@@ -6,9 +6,7 @@ from app.schemas.digital_human import (
     DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, 
     DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest,
     MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics,
-    TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse,
-    TrainingSessionResponse, TrainingSessionListRequest, TrainingSessionPageResponse,
-    CompleteTrainingSessionRequest, TrainingSessionSummary
+    TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse
 )
 from app.schemas.common_response import SuccessResponse
 from app.schemas.common_response import PaginationMeta
@@ -20,8 +18,7 @@ from app.core.logger import logger
 from app.services.digital_human_service import DigitalHumanService
 from app.services.digital_human_training_service import DigitalHumanTrainingService
 from app.services.graph_service import GraphService
-from app.dependencies.services import get_digital_human_training_service, get_training_session_repository
-from app.repositories.training_session_repository import TrainingSessionRepository
+from app.dependencies.services import get_digital_human_training_service
 from app.core.database import get_db
 from app.core.models import User
 from app.guards import get_current_active_user
@@ -73,7 +70,7 @@ async def get_digital_human_templates(
         pages=total_pages
     )
     
-    digital_human_responses = [DigitalHumanResponse.from_orm(dh) for dh in digital_humans]
+    digital_human_responses = [DigitalHumanResponse.model_validate(dh) for dh in digital_humans]
     
     logger.info(f"✔️ 成功返回 {len(digital_human_responses)} 个数字人模板给用户 {current_user.id}")
     
@@ -279,7 +276,7 @@ async def get_training_messages(
     )
     
     # 构建响应
-    message_responses = [TrainingMessageResponse.from_orm(msg) for msg in messages]
+    message_responses = [TrainingMessageResponse.model_validate(msg) for msg in messages]
     
     logger.success(f"✅ 成功获取训练消息: 返回 {len(message_responses)} 条消息，总计 {total} 条")
     
@@ -291,186 +288,3 @@ async def get_training_messages(
     )
 
 
-@router.post("/training-sessions", response_model=TrainingSessionPageResponse, summary="获取训练会话列表")
-async def get_training_sessions(
-    request: TrainingSessionListRequest,
-    current_user: User = Depends(get_current_active_user),
-    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
-    session_repo: TrainingSessionRepository = Depends(get_training_session_repository)
-):
-    """
-    获取用户的训练会话列表
-    
-    权限验证：
-    - 用户只能查看自己的训练会话
-    - 如果指定了 digital_human_id，验证用户是否有权限访问该数字人
-    """
-    # 如果指定了数字人ID，验证权限
-    if request.digital_human_id:
-        digital_human = digital_human_service.get_digital_human_by_id(
-            request.digital_human_id, 
-            current_user.id
-        )
-        
-        if not digital_human:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="数字人不存在或您无权限访问"
-            )
-    
-    logger.info(f"📚 用户 {current_user.id} 获取训练会话列表: 数字人={request.digital_human_id}, 状态={request.status}")
-    
-    # 获取会话列表
-    offset = (request.page - 1) * request.size
-    sessions, total = session_repo.get_user_sessions(
-        user_id=current_user.id,
-        digital_human_id=request.digital_human_id,
-        status=request.status,
-        limit=request.size,
-        offset=offset
-    )
-    
-    # 构建分页信息
-    total_pages = math.ceil(total / request.size)
-    pagination = PaginationMeta(
-        page=request.page,
-        size=request.size,
-        total=total,
-        pages=total_pages
-    )
-    
-    # 构建响应
-    session_responses = [TrainingSessionResponse.from_orm(session) for session in sessions]
-    
-    logger.success(f"✅ 成功获取训练会话: 返回 {len(session_responses)} 个会话，总计 {total} 个")
-    
-    return TrainingSessionPageResponse(
-        code=200,
-        message="获取训练会话列表成功",
-        data=session_responses,
-        pagination=pagination
-    )
-
-
-@router.post("/training-session/complete", response_model=SuccessResponse[TrainingSessionResponse], summary="完成训练会话")
-async def complete_training_session(
-    request: CompleteTrainingSessionRequest,
-    current_user: User = Depends(get_current_active_user),
-    session_repo: TrainingSessionRepository = Depends(get_training_session_repository),
-    graph_service: GraphService = Depends(get_graph_service)
-):
-    """
-    完成训练会话并生成知识总结
-    
-    权限验证：
-    - 用户只能完成自己的训练会话
-    - 会话必须处于进行中状态
-    """
-    # 获取会话并验证权限
-    session = session_repo.get_session_by_id(request.session_id, current_user.id)
-    
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="训练会话不存在或您无权限访问"
-        )
-    
-    if session.status != "in_progress":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"会话状态不正确，当前状态: {session.status}"
-        )
-    
-    logger.info(f"🏁 用户 {current_user.id} 完成训练会话: ID={request.session_id}, 应用知识={request.apply_knowledge}")
-    
-    # 获取会话统计
-    messages = session_repo.get_session_messages(request.session_id)
-    entities_count = 0
-    relations_count = 0
-    
-    for msg in messages:
-        if msg.extracted_knowledge:
-            entities_count += len(msg.extracted_knowledge.get('entities', []))
-            relations_count += len(msg.extracted_knowledge.get('relationships', []))
-    
-    # 生成知识总结
-    knowledge_summary = {
-        "total_messages": len(messages),
-        "entities_extracted": entities_count,
-        "relations_extracted": relations_count,
-        "completion_time": datetime.now().isoformat()
-    }
-    
-    # 更新会话状态
-    status = "applied" if request.apply_knowledge else "completed"
-    updated_session = session_repo.complete_session_with_summary(
-        session_id=request.session_id,
-        entities_count=entities_count,
-        relations_count=relations_count,
-        knowledge_summary=knowledge_summary
-    )
-    
-    if request.apply_knowledge:
-        updated_session = session_repo.update_session_status(
-            session_id=request.session_id,
-            status="applied"
-        )
-    
-    logger.success(f"✅ 训练会话完成: ID={request.session_id}, 实体={entities_count}, 关系={relations_count}")
-    
-    return ResponseUtil.success(
-        data=TrainingSessionResponse.from_orm(updated_session),
-        message="训练会话已完成"
-    )
-
-
-@router.get("/training-sessions/summary", response_model=SuccessResponse[TrainingSessionSummary], summary="获取训练会话摘要")
-async def get_training_sessions_summary(
-    digital_human_id: Optional[int] = None,
-    current_user: User = Depends(get_current_active_user),
-    session_repo: TrainingSessionRepository = Depends(get_training_session_repository)
-):
-    """
-    获取用户的训练会话摘要统计
-    
-    权限验证：
-    - 用户只能查看自己的训练会话统计
-    """
-    logger.info(f"📊 用户 {current_user.id} 获取训练会话摘要: 数字人={digital_human_id}")
-    
-    # 获取活跃会话
-    active_sessions, _ = session_repo.get_user_sessions(
-        user_id=current_user.id,
-        digital_human_id=digital_human_id,
-        status="in_progress",
-        limit=1000,
-        offset=0
-    )
-    
-    # 获取已完成会话
-    completed_sessions, _ = session_repo.get_user_sessions(
-        user_id=current_user.id,
-        digital_human_id=digital_human_id,
-        status="completed",
-        limit=1000,
-        offset=0
-    )
-    
-    # 统计总实体和关系数
-    total_entities = 0
-    total_relations = 0
-    
-    for session in completed_sessions:
-        total_entities += session.extracted_entities or 0
-        total_relations += session.extracted_relations or 0
-    
-    summary = TrainingSessionSummary(
-        active_sessions=len(active_sessions),
-        completed_sessions=len(completed_sessions),
-        total_entities=total_entities,
-        total_relations=total_relations
-    )
-    
-    logger.success(f"✅ 获取训练会话摘要成功: 活跃={len(active_sessions)}, 完成={len(completed_sessions)}")
-    
-    return ResponseUtil.success(data=summary, message="获取训练会话摘要成功")
