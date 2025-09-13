@@ -1,5 +1,6 @@
 from typing import Dict, List, Any, Optional, Union
 import logging
+import json
 
 from app.repositories.neomodel import (
     GraphRepository,
@@ -566,5 +567,274 @@ class GraphService:
                     "displayed_edges": 0,
                     "categories": {}
                 },
+                "error": str(e)
+            }
+    
+    async def search_digital_human_memories(
+        self,
+        digital_human_id: int,
+        query: str,
+        node_types: Optional[List[str]] = None,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """搜索数字人的记忆节点"""
+        try:
+            type_filter = ""
+            if node_types:
+                type_filter = f"AND k.type IN {node_types}"
+            
+            search_query = f"""
+            MATCH (dh:DigitalHuman {{id: $dh_id}})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            WHERE toLower(k.name) CONTAINS toLower($query) 
+                  OR toLower(k.properties) CONTAINS toLower($query)
+                  {type_filter}
+            RETURN k.name as id,
+                   k.name as label,
+                   k.type as type,
+                   k.confidence as confidence,
+                   k.properties as properties,
+                   k.updated_at as updated_at
+            ORDER BY k.confidence DESC, k.updated_at DESC
+            LIMIT $limit
+            """
+            
+            results, _ = self.graph_repo.execute_cypher(search_query, {
+                "dh_id": digital_human_id,
+                "query": query,
+                "limit": limit
+            })
+            
+            nodes = []
+            for row in results:
+                node_id = row[0] if len(row) > 0 else None
+                node_label = row[1] if len(row) > 1 else ""
+                node_type = row[2] if len(row) > 2 else "unknown"
+                confidence = row[3] if len(row) > 3 else 0.5
+                properties = row[4] if len(row) > 4 else "{}"
+                updated_at = row[5] if len(row) > 5 else None
+                
+                parsed_props = json.loads(properties) if isinstance(properties, str) else properties or {}
+                
+                nodes.append({
+                    "id": node_id,
+                    "label": node_label,
+                    "type": node_type,
+                    "confidence": confidence,
+                    "properties": parsed_props,
+                    "updated_at": str(updated_at) if updated_at else None
+                })
+            
+            return {
+                "query": query,
+                "results": nodes,
+                "count": len(nodes),
+                "success": True
+            }
+            
+        except Exception as e:
+            logger.error(f"搜索数字人记忆失败: {str(e)}")
+            return {
+                "query": query,
+                "results": [],
+                "count": 0,
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def get_memory_node_detail(
+        self,
+        digital_human_id: int,
+        node_id: str,
+        include_relations: bool = True,
+        relation_depth: int = 1
+    ) -> Dict[str, Any]:
+        """获取记忆节点的详细信息"""
+        try:
+            node_query = """
+            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge {name: $node_id})
+            RETURN k.name as id,
+                   k.name as label,
+                   k.type as type,
+                   k.confidence as confidence,
+                   k.properties as properties,
+                   k.types as types,
+                   k.updated_at as updated_at
+            """
+            
+            node_results, _ = self.graph_repo.execute_cypher(node_query, {
+                "dh_id": digital_human_id,
+                "node_id": node_id
+            })
+            
+            if not node_results:
+                return {"error": "Node not found", "success": False}
+            
+            row = node_results[0]
+            node_detail = {
+                "id": row[0] if len(row) > 0 else None,
+                "label": row[1] if len(row) > 1 else "",
+                "type": row[2] if len(row) > 2 else "unknown",
+                "confidence": row[3] if len(row) > 3 else 0.5,
+                "properties": json.loads(row[4]) if isinstance(row[4], str) else row[4] or {},
+                "types": json.loads(row[5]) if isinstance(row[5], str) else row[5] or [],
+                "updated_at": str(row[6]) if len(row) > 6 and row[6] else None
+            }
+            
+            relations = []
+            connected_nodes = []
+            
+            if include_relations:
+                rel_query = f"""
+                MATCH (k1:Knowledge {{name: $node_id, digital_human_id: $dh_id}})
+                MATCH (k1)-[r:RELATES_TO*1..{relation_depth}]-(k2:Knowledge {{digital_human_id: $dh_id}})
+                RETURN DISTINCT 
+                       type(r[0]) as rel_type,
+                       k1.name as source,
+                       k2.name as target,
+                       k2.type as target_type,
+                       k2.properties as target_props,
+                       r[0].confidence as rel_confidence,
+                       r[0].properties as rel_props
+                LIMIT 100
+                """
+                
+                rel_results, _ = self.graph_repo.execute_cypher(rel_query, {
+                    "dh_id": digital_human_id,
+                    "node_id": node_id
+                })
+                
+                seen_nodes = set()
+                for row in rel_results:
+                    rel_type = row[0] if len(row) > 0 else "RELATES_TO"
+                    source = row[1] if len(row) > 1 else None
+                    target = row[2] if len(row) > 2 else None
+                    target_type = row[3] if len(row) > 3 else "unknown"
+                    target_props = json.loads(row[4]) if isinstance(row[4], str) else row[4] or {}
+                    rel_confidence = row[5] if len(row) > 5 else 0.5
+                    rel_props = json.loads(row[6]) if isinstance(row[6], str) else row[6] or {}
+                    
+                    relations.append({
+                        "type": rel_type,
+                        "source": source,
+                        "target": target,
+                        "confidence": rel_confidence,
+                        "properties": rel_props
+                    })
+                    
+                    if target not in seen_nodes:
+                        connected_nodes.append({
+                            "id": target,
+                            "label": target,
+                            "type": target_type,
+                            "properties": target_props
+                        })
+                        seen_nodes.add(target)
+            
+            return {
+                "node": node_detail,
+                "relations": relations,
+                "connected_nodes": connected_nodes,
+                "success": True
+            }
+            
+        except Exception as e:
+            logger.error(f"获取记忆节点详情失败: {str(e)}")
+            return {
+                "error": str(e),
+                "success": False
+            }
+    
+    async def get_memory_statistics(
+        self,
+        digital_human_id: int,
+        include_timeline: bool = False
+    ) -> Dict[str, Any]:
+        """获取数字人的记忆统计信息"""
+        try:
+            node_stats_query = """
+            MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            RETURN k.type as type, count(k) as count
+            ORDER BY count DESC
+            """
+            
+            node_results, _ = self.graph_repo.execute_cypher(node_stats_query, {
+                "dh_id": digital_human_id
+            })
+            
+            node_categories = {}
+            total_nodes = 0
+            for row in node_results:
+                node_type = row[0] if len(row) > 0 else "unknown"
+                count = row[1] if len(row) > 1 else 0
+                node_categories[node_type] = count
+                total_nodes += count
+            
+            edge_stats_query = """
+            MATCH (k1:Knowledge {digital_human_id: $dh_id})-[r:RELATES_TO]->(k2:Knowledge {digital_human_id: $dh_id})
+            RETURN r.relation_type as type, count(r) as count
+            ORDER BY count DESC
+            """
+            
+            edge_results, _ = self.graph_repo.execute_cypher(edge_stats_query, {
+                "dh_id": digital_human_id
+            })
+            
+            edge_types = {}
+            total_edges = 0
+            for row in edge_results:
+                edge_type = row[0] if len(row) > 0 else "RELATES_TO"
+                count = row[1] if len(row) > 1 else 0
+                edge_types[edge_type] = count
+                total_edges += count
+            
+            network_density = 0
+            avg_connections = 0
+            if total_nodes > 1:
+                max_possible_edges = total_nodes * (total_nodes - 1) / 2
+                network_density = total_edges / max_possible_edges if max_possible_edges > 0 else 0
+                avg_connections = (total_edges * 2) / total_nodes if total_nodes > 0 else 0
+            
+            result = {
+                "total_nodes": total_nodes,
+                "total_edges": total_edges,
+                "node_categories": node_categories,
+                "edge_types": edge_types,
+                "network_density": round(network_density, 4),
+                "avg_connections_per_node": round(avg_connections, 2)
+            }
+            
+            if include_timeline:
+                timeline_query = """
+                MATCH (dh:DigitalHuman {id: $dh_id})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+                WHERE k.updated_at IS NOT NULL
+                RETURN date(k.updated_at) as date, count(k) as count
+                ORDER BY date DESC
+                LIMIT 30
+                """
+                
+                timeline_results, _ = self.graph_repo.execute_cypher(timeline_query, {
+                    "dh_id": digital_human_id
+                })
+                
+                timeline = []
+                for row in timeline_results:
+                    date = str(row[0]) if len(row) > 0 else None
+                    count = row[1] if len(row) > 1 else 0
+                    if date:
+                        timeline.append({"date": date, "count": count})
+                
+                result["timeline"] = timeline
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取记忆统计失败: {str(e)}")
+            return {
+                "total_nodes": 0,
+                "total_edges": 0,
+                "node_categories": {},
+                "edge_types": {},
+                "network_density": 0,
+                "avg_connections_per_node": 0,
                 "error": str(e)
             }

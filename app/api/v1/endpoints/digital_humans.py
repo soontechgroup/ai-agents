@@ -6,11 +6,13 @@ from app.schemas.digital_human import (
     DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, 
     DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest,
     MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics,
-    TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse
+    TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse,
+    MemorySearchRequest, MemoryDetailRequest, MemoryDetailResponse,
+    MemoryStatsRequest, MemoryStatsResponse
 )
 from app.schemas.common_response import SuccessResponse
 from app.schemas.common_response import PaginationMeta
-from typing import Optional
+from typing import Optional, List
 import math
 import json
 import asyncio
@@ -286,5 +288,176 @@ async def get_training_messages(
         data=message_responses,
         pagination=pagination
     )
+
+
+@router.post("/memory-search", response_model=SuccessResponse[List[MemoryGraphNode]], summary="搜索数字人记忆")
+async def search_memory(
+    request: MemorySearchRequest,
+    current_user: User = Depends(get_current_active_user),
+    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
+    graph_service: GraphService = Depends(get_graph_service)
+):
+    """搜索数字人的记忆节点"""
+    digital_human = digital_human_service.get_digital_human_by_id(
+        request.digital_human_id, 
+        current_user.id
+    )
+    
+    if not digital_human:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="数字人不存在或您无权限访问"
+        )
+    
+    logger.info(f"🔍 用户 {current_user.id} 搜索数字人记忆: ID={request.digital_human_id}, 关键词={request.query}")
+    
+    search_result = await graph_service.search_digital_human_memories(
+        digital_human_id=request.digital_human_id,
+        query=request.query,
+        node_types=request.node_types,
+        limit=request.limit
+    )
+    
+    if not search_result.get("success", False):
+        logger.error(f"搜索记忆失败: {search_result.get('error')}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="搜索记忆失败，请稍后重试"
+        )
+    
+    memory_nodes = [
+        MemoryGraphNode(
+            id=node["id"],
+            label=node["label"],
+            type=node["type"],
+            size=10 + node.get("confidence", 0.5) * 20,
+            confidence=node.get("confidence", 0.5),
+            properties=node.get("properties", {}),
+            updated_at=node.get("updated_at")
+        )
+        for node in search_result.get("results", [])
+    ]
+    
+    logger.success(f"✅ 搜索完成: 找到 {len(memory_nodes)} 个匹配的记忆节点")
+    
+    return ResponseUtil.success(data=memory_nodes, message=f"搜索到 {len(memory_nodes)} 个记忆节点")
+
+
+@router.post("/memory-detail", response_model=SuccessResponse[MemoryDetailResponse], summary="获取记忆节点详情")
+async def get_memory_detail(
+    request: MemoryDetailRequest,
+    current_user: User = Depends(get_current_active_user),
+    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
+    graph_service: GraphService = Depends(get_graph_service)
+):
+    """获取特定记忆节点的详细信息"""
+    digital_human = digital_human_service.get_digital_human_by_id(
+        request.digital_human_id, 
+        current_user.id
+    )
+    
+    if not digital_human:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="数字人不存在或您无权限访问"
+        )
+    
+    logger.info(f"📝 用户 {current_user.id} 获取记忆节点详情: 数字人ID={request.digital_human_id}, 节点ID={request.node_id}")
+    
+    detail_result = await graph_service.get_memory_node_detail(
+        digital_human_id=request.digital_human_id,
+        node_id=request.node_id,
+        include_relations=request.include_relations,
+        relation_depth=request.relation_depth
+    )
+    
+    if not detail_result.get("success", False):
+        error_msg = detail_result.get("error", "未知错误")
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="记忆节点不存在"
+            )
+        else:
+            logger.error(f"获取记忆节点详情失败: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="获取记忆节点详情失败"
+            )
+    
+    node_data = detail_result.get("node", {})
+    memory_node = MemoryGraphNode(
+        id=node_data.get("id", ""),
+        label=node_data.get("label", ""),
+        type=node_data.get("type", "unknown"),
+        size=10 + node_data.get("confidence", 0.5) * 20,
+        confidence=node_data.get("confidence", 0.5),
+        properties=node_data.get("properties", {}),
+        updated_at=node_data.get("updated_at")
+    )
+    
+    connected_nodes = [
+        MemoryGraphNode(
+            id=node["id"],
+            label=node["label"],
+            type=node["type"],
+            size=15,
+            confidence=0.5,
+            properties=node.get("properties", {}),
+            updated_at=None
+        )
+        for node in detail_result.get("connected_nodes", [])
+    ]
+    
+    response = MemoryDetailResponse(
+        node=memory_node,
+        relations=detail_result.get("relations", []),
+        connected_nodes=connected_nodes
+    )
+    
+    logger.success(f"✅ 获取记忆节点详情成功: {len(connected_nodes)} 个相关节点")
+    
+    return ResponseUtil.success(data=response, message="获取记忆节点详情成功")
+
+
+@router.post("/memory-stats", response_model=SuccessResponse[MemoryStatsResponse], summary="获取记忆统计信息")
+async def get_memory_statistics(
+    request: MemoryStatsRequest,
+    current_user: User = Depends(get_current_active_user),
+    digital_human_service: DigitalHumanService = Depends(get_digital_human_service),
+    graph_service: GraphService = Depends(get_graph_service)
+):
+    """获取数字人的记忆统计信息"""
+    digital_human = digital_human_service.get_digital_human_by_id(
+        request.digital_human_id, 
+        current_user.id
+    )
+    
+    if not digital_human:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="数字人不存在或您无权限访问"
+        )
+    
+    logger.info(f"📊 用户 {current_user.id} 获取数字人记忆统计: ID={request.digital_human_id}")
+    
+    stats = await graph_service.get_memory_statistics(
+        digital_human_id=request.digital_human_id,
+        include_timeline=request.include_timeline
+    )
+    
+    response = MemoryStatsResponse(
+        total_nodes=stats.get("total_nodes", 0),
+        total_edges=stats.get("total_edges", 0),
+        node_categories=stats.get("node_categories", {}),
+        edge_types=stats.get("edge_types", {}),
+        network_density=stats.get("network_density", 0),
+        avg_connections_per_node=stats.get("avg_connections_per_node", 0),
+        timeline=stats.get("timeline") if request.include_timeline else None
+    )
+    
+    logger.success(f"✅ 获取记忆统计成功: {response.total_nodes} 个节点, {response.total_edges} 条关系")
+    
+    return ResponseUtil.success(data=response, message="获取记忆统计信息成功")
 
 

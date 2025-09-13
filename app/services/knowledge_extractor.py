@@ -129,21 +129,45 @@ class KnowledgeExtractor:
 - **CONCEPT**：抽象概念、理论、技术
 - **PRODUCT**：产品、服务、工具
 - **TEMPORAL**：时间、日期、时期
+- **SKILL**：技能、能力、专长
 
 ### 领域特定类型（可自由创造）：
 - **TECH_COMPANY**、**AI_RESEARCHER**、**SOFTWARE_ENGINEER**
 - **BLOCKCHAIN_EXPERT**、**STARTUP_FOUNDER** 等
 - 根据上下文自主判断和创造新类型
 
+## 实体属性提取要求
+
+### 对于 PERSON 类型，请尽可能提取以下属性：
+- **age**：年龄（如果文中提到）
+- **gender**：性别（如果文中提到）
+- **occupation**：职业/职位
+- **education**：教育背景
+- **skills**：技能列表
+- **experience**：工作经验
+- **nationality**：国籍
+- **location**：所在地
+
+### 对于 ORGANIZATION 类型，请提取：
+- **industry**：所属行业
+- **size**：规模（员工数量等）
+- **founded**：成立时间
+- **headquarters**：总部位置
+- **type**：组织类型（公司/非营利/政府等）
+
+### 对于其他类型，根据上下文提取相关属性
+
 ## 关系类型系统
 
 ### 标准关系类型：
-- **WORKS_FOR**（工作关系）
+- **WORKS_FOR**（工作关系）- 属性：position（职位）、since（开始时间）、department（部门）
 - **LOCATED_IN**（位置关系）  
 - **PART_OF**（隶属关系）
 - **CREATED_BY**（创建关系）
 - **COMPETES_WITH**（竞争关系）
 - **COLLABORATES_WITH**（合作关系）
+- **KNOWS**（认识关系）- 属性：relationship_type（朋友/同事/家人等）
+- **HAS_SKILL**（拥有技能）- 属性：proficiency（熟练度）、years（年限）
 
 ### 可扩展关系类型：
 根据上下文创造具体的关系类型，如：**FOUNDED_BY**、**INVESTED_IN**、**MENTORS** 等

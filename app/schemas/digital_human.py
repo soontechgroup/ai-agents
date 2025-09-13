@@ -184,3 +184,43 @@ class TrainingMessageResponse(BaseModel):
 class TrainingMessagesPageResponse(PaginatedResponse[List[TrainingMessageResponse]]):
     """训练消息分页响应"""
     pass
+
+
+class MemorySearchRequest(BaseModel):
+    """记忆搜索请求"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    query: str = Field(..., description="搜索关键词")
+    node_types: Optional[List[str]] = Field(None, description="要筛选的节点类型列表")
+    limit: int = Field(default=50, ge=1, le=200, description="返回的最大结果数")
+
+
+class MemoryDetailRequest(BaseModel):
+    """记忆详情请求"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    node_id: str = Field(..., description="节点ID")
+    include_relations: bool = Field(default=True, description="是否包含相关关系")
+    relation_depth: int = Field(default=1, ge=1, le=3, description="关系查询深度")
+
+
+class MemoryDetailResponse(BaseModel):
+    """记忆详情响应"""
+    node: MemoryGraphNode = Field(..., description="节点详情")
+    relations: List[Dict[str, Any]] = Field(default_factory=list, description="相关关系")
+    connected_nodes: List[MemoryGraphNode] = Field(default_factory=list, description="相关联的节点")
+
+
+class MemoryStatsRequest(BaseModel):
+    """记忆统计请求"""
+    digital_human_id: int = Field(..., description="数字人ID")
+    include_timeline: bool = Field(default=False, description="是否包含时间线统计")
+
+
+class MemoryStatsResponse(BaseModel):
+    """记忆统计响应"""
+    total_nodes: int = Field(..., description="总节点数")
+    total_edges: int = Field(..., description="总关系数")
+    node_categories: Dict[str, int] = Field(..., description="各类型节点数量")
+    edge_types: Dict[str, int] = Field(..., description="各类型关系数量")
+    network_density: float = Field(..., description="网络密度")
+    avg_connections_per_node: float = Field(..., description="节点平均连接数")
+    timeline: Optional[List[Dict[str, Any]]] = Field(None, description="时间线统计")
