@@ -4,7 +4,8 @@ from .endpoints import (
     digital_humans, 
     user, 
     conversations, 
-    chroma
+    chroma,
+    search
 )
 from .admin import admin_router
 
@@ -45,7 +46,12 @@ api_router.include_router(
     tags=["Chroma 向量数据库"]
 )
 
-
+# 包含混合搜索路由
+api_router.include_router(
+    search.router,
+    prefix="/search",
+    tags=["混合搜索"]
+)
 
 # 包含管理后台路由
 api_router.include_router(

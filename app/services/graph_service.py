@@ -140,25 +140,35 @@ class GraphService:
     async def extract_and_store_knowledge(
         self,
         text: str,
-        source_id: Optional[str] = None
+        digital_human_id: int,
+        source_id: Optional[str] = None,
+        use_embeddings: bool = True
     ) -> Dict:
         try:
-            extraction_result = await self.knowledge_extractor.extract(text)
+            # 使用带 embedding 的抽取方法
+            if use_embeddings:
+                extraction_result = await self.knowledge_extractor.extract_with_embeddings(text, digital_human_id)
+            else:
+                extraction_result = await self.knowledge_extractor.extract(text)
             
             for entity_data in extraction_result['entities']:
-                await self.create_entity(
+                # 存储到 Neo4j 时包含 embedding_id
+                self.extracted_knowledge_repo.create_entity(
                     name=entity_data['name'],
-                    types=[entity_data['type']],
-                    description=entity_data.get('description'),
-                    source=source_id
+                    entity_type=entity_data.get('type', 'unknown'),
+                    description=entity_data.get('description', ''),
+                    source_id=source_id,
+                    embedding_id=entity_data.get('embedding_id')
                 )
             
             for rel_data in extraction_result['relationships']:
-                await self.create_relationship(
-                    source_name=rel_data['source'],
-                    target_name=rel_data['target'],
-                    relationship_type=rel_data.get('relation_type', 'RELATED'),
-                    properties={'description': rel_data.get('description')}
+                # 存储到 Neo4j 时包含 embedding_id
+                self.extracted_knowledge_repo.create_relationship(
+                    source=rel_data['source'],
+                    target=rel_data['target'],
+                    description=f"{rel_data.get('relation_type', 'RELATED')}: {rel_data.get('description', '')}",
+                    source_id=source_id,
+                    embedding_id=rel_data.get('embedding_id')
                 )
             
             logger.info(
@@ -297,7 +307,7 @@ class GraphService:
         digital_human_id: int,
         entity: Dict[str, Any]
     ) -> bool:
-        """存储数字人的知识实体到图数据库"""
+        """存储数字人的知识实体到图数据库（包含embedding_id）"""
         try:
             import json
             query = """
@@ -310,18 +320,20 @@ class GraphService:
                 k.types = $types,
                 k.confidence = $confidence,
                 k.properties = $properties,
+                k.embedding_id = $embedding_id,
                 k.updated_at = datetime()
             MERGE (dh)-[r:HAS_KNOWLEDGE]->(k)
             SET r.updated_at = datetime()
             """
-            
+
             self.graph_repo.execute_cypher(query, {
                 "dh_id": digital_human_id,
                 "name": entity.get("name"),
                 "type": entity.get("type", "unknown"),
                 "types": json.dumps(entity.get("types", [])),
                 "confidence": entity.get("confidence", 0.5),
-                "properties": json.dumps(entity.get("properties", {}))
+                "properties": json.dumps(entity.get("properties", {})),
+                "embedding_id": entity.get("embedding_id", "")
             })
             
             logger.info(f"存储数字人实体成功: {entity.get('name')} (数字人ID: {digital_human_id})")
@@ -336,7 +348,7 @@ class GraphService:
         digital_human_id: int,
         relationship: Dict[str, Any]
     ) -> bool:
-        """存储数字人的知识关系到图数据库"""
+        """存储数字人的知识关系到图数据库（包含embedding_id）"""
         try:
             import json
             query = """
@@ -352,16 +364,18 @@ class GraphService:
             SET r.relation_type = $relation_type,
                 r.confidence = $confidence,
                 r.properties = $properties,
+                r.embedding_id = $embedding_id,
                 r.updated_at = datetime()
             """
-            
+
             self.graph_repo.execute_cypher(query, {
                 "dh_id": digital_human_id,
                 "source": relationship.get("source"),
                 "target": relationship.get("target"),
                 "relation_type": relationship.get("relation_type"),
                 "confidence": relationship.get("confidence", 0.5),
-                "properties": json.dumps(relationship.get("properties", {}))
+                "properties": json.dumps(relationship.get("properties", {})),
+                "embedding_id": relationship.get("embedding_id", "")
             })
             
             logger.info(f"存储数字人关系成功: {relationship.get('source')} -> {relationship.get('target')}")

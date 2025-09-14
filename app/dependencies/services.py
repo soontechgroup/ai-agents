@@ -13,6 +13,7 @@ from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.digital_human_training_service import DigitalHumanTrainingService
 from app.services.graph_service import GraphService
 from app.services.conversation_service import ConversationService
+from app.services.hybrid_search_service import HybridSearchService
 from app.dependencies.graph import get_graph_service
 
 
@@ -64,15 +65,21 @@ def get_training_message_repository(
     return TrainingMessageRepository(db)
 
 
+def get_hybrid_search_service() -> HybridSearchService:
+    return HybridSearchService()
+
+
 def get_digital_human_training_service(
     training_message_repo: TrainingMessageRepository = Depends(get_training_message_repository),
     knowledge_extractor: KnowledgeExtractor = Depends(get_knowledge_extractor),
-    graph_service: GraphService = Depends(get_graph_service)
+    graph_service: GraphService = Depends(get_graph_service),
+    hybrid_search_service: HybridSearchService = Depends(get_hybrid_search_service)
 ) -> DigitalHumanTrainingService:
     from app.core.database import get_db
     return DigitalHumanTrainingService(
-        training_message_repo, 
-        knowledge_extractor, 
+        training_message_repo,
+        knowledge_extractor,
         graph_service,
+        hybrid_search_service,
         db_session_factory=get_db
     )

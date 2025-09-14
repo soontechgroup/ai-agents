@@ -12,32 +12,32 @@ from app.services.extraction_config import ExtractionConfig, ProcessingStrategy
 from app.services.entity_merger import EntityMerger
 from app.services.relationship_discoverer import CrossChunkRelationshipDiscoverer
 from app.services.context_manager import ContextManager
+from app.services.embedding_service import EmbeddingService
 
 
 class KnowledgeExtractor:
-    """内部知识抽取服务，供其他服务调用"""
     
     def __init__(self, config: Optional[ExtractionConfig] = None):
-        self.config = config or ExtractionConfig()  # 使用默认配置
+        self.config = config or ExtractionConfig()
         
         self.llm = ChatOpenAI(
             model=settings.LLM_MODEL,
             temperature=0
         )
         
-        # 基于配置创建文本分割器
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.config.chunk_size,
             chunk_overlap=self.config.chunk_overlap
         )
         
-        # 初始化组件
         self.entity_merger = EntityMerger(self.config)
         self.relationship_discoverer = CrossChunkRelationshipDiscoverer(self.config)
         self.context_manager = ContextManager(self.config)
         self.graph_factory = DynamicGraphFactory()
         
-        # 处理状态
+        # 初始化 embedding 服务
+        self.embedding_service = EmbeddingService()
+        
         self.processing_stats = {
             "total_chunks": 0,
             "processed_chunks": 0,
@@ -47,17 +47,55 @@ class KnowledgeExtractor:
         }
     
     async def extract(self, text: str) -> Dict[str, List]:
-        """抽取实体和关系（简单版本，向后兼容）"""
         
         chunks = self.text_splitter.split_text(text)
         
-        # 简单实现：先处理第一个块
         if chunks:
             prompt = self._build_prompt(chunks[0])
             response = await self.llm.ainvoke(prompt)
             return self._parse_output(response.content)
         
         return {"entities": [], "relationships": []}
+    
+    async def extract_with_embeddings(self, text: str, digital_human_id: int) -> Dict[str, Any]:
+        """抽取知识并生成 embeddings"""
+        
+        # 1. 基础抽取
+        result = await self.extract(text)
+        
+        # 2. 为每个实体生成 embedding
+        for entity in result['entities']:
+            try:
+                embedding_result = await self.embedding_service.embed_entity(entity, digital_human_id)
+                entity['embedding_id'] = embedding_result['embedding_id']
+                logger.debug(f"Generated embedding for entity: {entity['name']} (DH: {digital_human_id})")
+            except Exception as e:
+                logger.error(f"Failed to generate embedding for entity {entity['name']}: {str(e)}")
+                entity['embedding_id'] = None
+        
+        # 3. 为每个关系生成 embedding
+        for relationship in result['relationships']:
+            try:
+                embedding_result = await self.embedding_service.embed_relationship(relationship, digital_human_id)
+                relationship['embedding_id'] = embedding_result['embedding_id']
+                logger.debug(f"Generated embedding for relationship: {relationship['source']} -> {relationship['target']} (DH: {digital_human_id})")
+            except Exception as e:
+                logger.error(f"Failed to generate embedding for relationship: {str(e)}")
+                relationship['embedding_id'] = None
+        
+        # 4. 可选：为原始文本生成 embedding
+        if self.config.log_intermediate_results:
+            try:
+                text_embedding = await self.embedding_service.embed_text_chunk(
+                    text[:1000],  # 只取前1000字符
+                    digital_human_id,
+                    metadata={"source": "knowledge_extraction"}
+                )
+                result['text_embedding_id'] = text_embedding['embedding_id']
+            except Exception as e:
+                logger.error(f"Failed to generate text embedding: {str(e)}")
+        
+        return result
     
     async def extract_full(self, text: str, 
                           progress_callback: Optional[Callable[[int, int, int, int], None]] = None) -> Dict[str, Any]:
@@ -225,17 +263,15 @@ RELATIONSHIP|{{"source":"马斯克","target":"特斯拉","types":["LEADS","WORKS
             json_part = parts[1].strip()
             
             try:
-                # 尝试解析JSON格式
                 if prefix == 'ENTITY' and json_part.startswith('{'):
                     entity_data = json.loads(json_part)
-                    # 转换为标准格式，兼容原有接口
                     entities.append({
                         "name": entity_data.get("name", ""),
                         "type": "|".join(entity_data.get("types", [])) if entity_data.get("types") else "",
-                        "types": entity_data.get("types", []),  # 新增：支持多类型
+                        "types": entity_data.get("types", []),
                         "description": entity_data.get("properties", {}).get("description", ""),
-                        "properties": entity_data.get("properties", {}),  # 新增：结构化属性
-                        "confidence": entity_data.get("confidence", 0.5)  # 新增：置信度
+                        "properties": entity_data.get("properties", {}),
+                        "confidence": entity_data.get("confidence", 0.5)
                     })
                 
                 elif prefix == 'RELATIONSHIP' and json_part.startswith('{'):
@@ -244,15 +280,14 @@ RELATIONSHIP|{{"source":"马斯克","target":"特斯拉","types":["LEADS","WORKS
                         "source": rel_data.get("source", ""),
                         "target": rel_data.get("target", ""),
                         "relation_type": "|".join(rel_data.get("types", [])) if rel_data.get("types") else "",
-                        "types": rel_data.get("types", []),  # 新增：支持多类型
+                        "types": rel_data.get("types", []),
                         "description": rel_data.get("properties", {}).get("description", ""),
-                        "properties": rel_data.get("properties", {}),  # 新增：结构化属性
-                        "confidence": rel_data.get("confidence", 0.5),  # 新增：置信度
-                        "strength": rel_data.get("strength", 0.5)  # 新增：关系强度
+                        "properties": rel_data.get("properties", {}),
+                        "confidence": rel_data.get("confidence", 0.5),
+                        "strength": rel_data.get("strength", 0.5)
                     })
                     
             except (json.JSONDecodeError, KeyError) as e:
-                # JSON解析失败，尝试使用旧格式解析
                 parts_old = line.split('|')
                 if len(parts_old) >= 3 and parts_old[0].strip() == 'ENTITY':
                     entities.append({
@@ -323,8 +358,6 @@ RELATIONSHIP|{{"source":"马斯克","target":"特斯拉","types":["LEADS","WORKS
                 logger.error(f"处理块 {chunk_index} 时出错: {str(e)}")
                 if not self.config.continue_on_chunk_error:
                     raise
-        
-        # 发现跨块关系
         cross_chunk_relations = self.relationship_discoverer.discover_relationships(
             all_chunk_results, merged_entities
         )
@@ -382,8 +415,6 @@ RELATIONSHIP|{{"source":"马斯克","target":"特斯拉","types":["LEADS","WORKS
         
         # 实体合并
         merged_entities = self.entity_merger.merge_entities(all_entities)
-        
-        # 发现跨块关系
         if self.config.enable_cross_chunk_relations:
             cross_chunk_relations = self.relationship_discoverer.discover_relationships(
                 valid_results, merged_entities

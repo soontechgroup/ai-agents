@@ -10,6 +10,7 @@ import operator
 
 from app.services.knowledge_extractor import KnowledgeExtractor
 from app.services.graph_service import GraphService
+from app.services.hybrid_search_service import HybridSearchService
 from app.repositories.training_message_repository import TrainingMessageRepository
 from app.core.checkpointer import MySQLCheckpointer
 from app.core.logger import logger
@@ -24,6 +25,7 @@ class TrainingState(TypedDict):
     current_message: str
     extracted_knowledge: Dict[str, Any]
     knowledge_context: Dict[str, Any]
+    memory_search_results: Dict[str, Any]  # 记忆搜索结果
     next_question: str
     should_extract: bool
     should_explore_deeper: bool
@@ -45,12 +47,14 @@ class DigitalHumanTrainingService:
         # training_session_repo: TrainingSessionRepository,  # 移除会话概念
         knowledge_extractor: KnowledgeExtractor,
         graph_service: GraphService,
+        hybrid_search_service: Optional[HybridSearchService] = None,
         db_session_factory=None
     ):
         self.training_message_repo = training_message_repo
         # self.training_session_repo = training_session_repo  # 移除会话概念
         self.knowledge_extractor = knowledge_extractor
         self.graph_service = graph_service
+        self.hybrid_search_service = hybrid_search_service or HybridSearchService()
         
         self.llm = ChatOpenAI(
             api_key=settings.OPENAI_API_KEY,
@@ -70,30 +74,33 @@ class DigitalHumanTrainingService:
     
     def _build_training_graph(self):
         workflow = StateGraph(TrainingState)
-        
+
         workflow.add_node("intent_recognition", self._recognize_intent)
+        workflow.add_node("memory_search", self._search_memory)
         workflow.add_node("knowledge_extraction", self._extract_knowledge)
         workflow.add_node("context_analysis", self._analyze_context)
         workflow.add_node("question_generation", self._generate_question)
         workflow.add_node("save_message", self._save_message)
-        
+
         workflow.set_entry_point("intent_recognition")
-        
+
+        workflow.add_edge("intent_recognition", "memory_search")
+
         workflow.add_conditional_edges(
-            "intent_recognition",
-            self._route_after_intent,
+            "memory_search",
+            self._route_after_search,
             {
                 "extract": "knowledge_extraction",
                 "analyze": "context_analysis",
                 "direct": "question_generation"
             }
         )
-        
+
         workflow.add_edge("knowledge_extraction", "context_analysis")
         workflow.add_edge("context_analysis", "question_generation")
         workflow.add_edge("question_generation", "save_message")
         workflow.add_edge("save_message", END)
-        
+
         return workflow.compile(checkpointer=self.checkpointer)
     
     def _create_event(
@@ -285,7 +292,97 @@ class DigitalHumanTrainingService:
             return "analyze"
         else:
             return "direct"
-    
+
+    async def _search_memory(self, state: TrainingState) -> Dict[str, Any]:
+        """
+        搜索相关记忆以提供上下文。
+
+        基于当前消息内容，搜索数字人的知识库中相关的实体、关系和文本块，
+        为后续的理解和回应提供上下文信息。
+
+        Args:
+            state: 当前训练状态，包含 current_message 和 digital_human_id
+
+        Returns:
+            更新后的状态字典，包含：
+            - memory_search_results: 搜索到的相关记忆
+            - events: 节点执行事件列表
+        """
+        events = [self._create_event(
+            "node_start",
+            "memory_search",
+            "🔍 搜索相关记忆..."
+        )]
+
+        current_step = "searching_memory"
+        thinking_process = ["正在搜索相关记忆..."]
+
+        try:
+            # 使用混合搜索获取相关记忆
+            search_results = await self.hybrid_search_service.search(
+                query=state['current_message'],
+                digital_human_id=state['digital_human_id'],
+                mode="hybrid",
+                entity_limit=5,
+                relationship_limit=3,
+                expand_graph=True
+            )
+
+            # 记录搜索统计
+            stats = search_results.get("statistics", {})
+            events.append(self._create_event(
+                "memory_found",
+                "memory_search",
+                f"✅ 找到 {stats.get('total_entities', 0)} 个相关实体，{stats.get('total_relationships', 0)} 个关系",
+                {
+                    "entities_count": stats.get('total_entities', 0),
+                    "relationships_count": stats.get('total_relationships', 0)
+                }
+            ))
+
+            thinking_process.append(f"找到 {stats.get('total_entities', 0)} 个相关记忆点")
+
+        except Exception as e:
+            logger.warning(f"记忆搜索失败: {e}")
+            search_results = {
+                "entities": [],
+                "relationships": [],
+                "statistics": {"total_entities": 0, "total_relationships": 0}
+            }
+            events.append(self._create_event(
+                "memory_search_failed",
+                "memory_search",
+                "⚠️ 记忆搜索失败，继续处理"
+            ))
+
+        events.append(self._create_event(
+            "node_complete",
+            "memory_search",
+            "✅ 记忆搜索完成"
+        ))
+
+        return {
+            "current_step": current_step,
+            "memory_search_results": search_results,
+            "thinking_process": thinking_process,
+            "events": events
+        }
+
+    def _route_after_search(self, state: TrainingState) -> str:
+        """基于搜索结果决定下一步路由"""
+        # 如果原本就需要提取知识，继续提取
+        if state.get('should_extract', False):
+            return "extract"
+        # 如果找到了相关记忆，进行上下文分析
+        elif state.get('memory_search_results', {}).get('statistics', {}).get('total_entities', 0) > 0:
+            return "analyze"
+        # 如果已有足够的知识点，进行分析
+        elif state.get('total_knowledge_points', 0) > 5:
+            return "analyze"
+        # 否则直接生成问题
+        else:
+            return "direct"
+
     async def _extract_knowledge(self, state: TrainingState) -> Dict[str, Any]:
         """
         从用户消息中提取知识实体和关系。
@@ -329,15 +426,21 @@ class DigitalHumanTrainingService:
                 "events": events
             }
         
-        extraction_result = await self.knowledge_extractor.extract(state['current_message'])
+        # 使用 extract_with_embeddings 生成向量嵌入
+        extraction_result = await self.knowledge_extractor.extract_with_embeddings(
+            state['current_message'],
+            state['digital_human_id']
+        )
         extracted_knowledge = extraction_result
-        
+
         entity_count = len(extraction_result.get("entities", []))
         relationship_count = len(extraction_result.get("relationships", []))
-        
+
+        # 存储实体到图数据库（现在包含embedding_id）
         for entity in extraction_result.get("entities", []):
             await self.graph_service.store_digital_human_entity(state['digital_human_id'], entity)
-        
+
+        # 存储关系到图数据库（现在包含embedding_id）
         for relationship in extraction_result.get("relationships", []):
             await self.graph_service.store_digital_human_relationship(state['digital_human_id'], relationship)
         
@@ -560,20 +663,50 @@ class DigitalHumanTrainingService:
     
     def _build_context_prompt(self, state: Dict[str, Any]) -> str:
         prompt_parts = []
-        
+
         if state.get('current_message'):
             prompt_parts.append(f"用户刚才说: {state['current_message']}")
-        
+
+        # 添加记忆搜索结果
+        memory_search_results = state.get('memory_search_results', {})
+        if memory_search_results:
+            memory_entities = memory_search_results.get('entities', [])
+            if memory_entities:
+                entity_summaries = []
+                for entity in memory_entities[:3]:  # 只显示前3个最相关的
+                    name = entity.get('name', '')
+                    desc = entity.get('description', '')
+                    if name:
+                        summary = f"{name}"
+                        if desc:
+                            summary += f" ({desc[:50]}...)" if len(desc) > 50 else f" ({desc})"
+                        entity_summaries.append(summary)
+                if entity_summaries:
+                    prompt_parts.append(f"相关记忆: {'; '.join(entity_summaries)}")
+
+            memory_relationships = memory_search_results.get('relationships', [])
+            if memory_relationships:
+                rel_summaries = []
+                for rel in memory_relationships[:2]:  # 只显示前2个关系
+                    source = rel.get('source', '')
+                    target = rel.get('target', '')
+                    types = rel.get('types', [])
+                    if source and target:
+                        type_str = types[0] if types else "相关"
+                        rel_summaries.append(f"{source} -> {target} ({type_str})")
+                if rel_summaries:
+                    prompt_parts.append(f"记忆中的关系: {'; '.join(rel_summaries)}")
+
         extracted_knowledge = state.get('extracted_knowledge', {})
         if extracted_knowledge and extracted_knowledge.get("entities"):
             entities = extracted_knowledge["entities"]
             entity_names = [e.get("name") for e in entities[:3]]
             prompt_parts.append(f"提取到的实体: {', '.join(entity_names)}")
-        
+
         total_knowledge_points = state.get('total_knowledge_points', 0)
         if total_knowledge_points > 0:
             prompt_parts.append(f"已了解的知识点数: {total_knowledge_points}")
-        
+
         categories = state.get('categories', {})
         if categories:
             cat_summary = []
@@ -582,10 +715,10 @@ class DigitalHumanTrainingService:
                     cat_summary.append(f"{cat}({info['count']}个)")
             if cat_summary:
                 prompt_parts.append(f"已了解的领域: {', '.join(cat_summary)}")
-        
+
         conversation_stage = state.get('conversation_stage', 'exploring')
         prompt_parts.append(f"当前对话阶段: {conversation_stage}")
-        
+
         return "\n".join(prompt_parts)
     
     async def _save_message(self, state: TrainingState) -> Dict[str, Any]:

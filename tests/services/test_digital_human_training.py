@@ -40,8 +40,49 @@ class TestDigitalHumanTrainingService:
         return repo
     
     @pytest.fixture
+    def mock_hybrid_search_service(self):
+        service = AsyncMock()
+        service.search = AsyncMock(return_value={
+            "entities": [
+                {
+                    "name": "记忆实体1",
+                    "types": ["Person"],
+                    "description": "来自记忆的实体",
+                    "confidence": 0.9,
+                    "distance": 0.1
+                },
+                {
+                    "name": "记忆实体2",
+                    "types": ["Organization"],
+                    "description": "历史组织信息",
+                    "confidence": 0.85,
+                    "distance": 0.2
+                }
+            ],
+            "relationships": [
+                {
+                    "source": "记忆实体1",
+                    "target": "记忆实体2",
+                    "types": ["WORKS_AT"],
+                    "description": "在此工作",
+                    "confidence": 0.8,
+                    "strength": 0.7
+                }
+            ],
+            "statistics": {
+                "total_entities": 2,
+                "total_relationships": 1,
+                "mode": "hybrid",
+                "semantic_entities": 2,
+                "graph_entities": 0
+            }
+        })
+        return service
+
+    @pytest.fixture
     def mock_knowledge_extractor(self):
         extractor = AsyncMock()
+        # 模拟 extract 方法（旧的）
         extractor.extract = AsyncMock(return_value={
             "entities": [
                 {"name": "测试实体", "type": "person", "confidence": 0.9},
@@ -53,6 +94,33 @@ class TestDigitalHumanTrainingService:
                     "target": "测试公司",
                     "relation_type": "工作于",
                     "confidence": 0.8
+                }
+            ]
+        })
+
+        # 模拟 extract_with_embeddings 方法（新的，包含embedding_id）
+        extractor.extract_with_embeddings = AsyncMock(return_value={
+            "entities": [
+                {
+                    "name": "测试实体",
+                    "type": "person",
+                    "confidence": 0.9,
+                    "embedding_id": "entity-embed-123"
+                },
+                {
+                    "name": "测试公司",
+                    "type": "organization",
+                    "confidence": 0.85,
+                    "embedding_id": "entity-embed-456"
+                }
+            ],
+            "relationships": [
+                {
+                    "source": "测试实体",
+                    "target": "测试公司",
+                    "relation_type": "工作于",
+                    "confidence": 0.8,
+                    "embedding_id": "rel-embed-789"
                 }
             ]
         })
@@ -113,7 +181,7 @@ class TestDigitalHumanTrainingService:
         return repo
     
     @pytest.fixture
-    async def training_service(self, mock_training_message_repo, mock_knowledge_extractor, mock_graph_service):
+    async def training_service(self, mock_training_message_repo, mock_knowledge_extractor, mock_graph_service, mock_hybrid_search_service):
         # Create a mock db_session_factory that returns a generator
         def mock_db_session_factory():
             mock_session = Mock()
@@ -127,14 +195,92 @@ class TestDigitalHumanTrainingService:
             mock_session.commit = Mock()
             mock_session.rollback = Mock()
             yield mock_session
-        
+
         return DigitalHumanTrainingService(
             training_message_repo=mock_training_message_repo,
             knowledge_extractor=mock_knowledge_extractor,
             graph_service=mock_graph_service,
+            hybrid_search_service=mock_hybrid_search_service,
             db_session_factory=mock_db_session_factory
         )
     
+    @pytest.mark.asyncio
+    async def test_memory_search_node(self, training_service, mock_hybrid_search_service):
+        """测试记忆搜索节点"""
+        # 准备状态
+        state = {
+            "digital_human_id": 1,
+            "user_id": 1,
+            "current_message": "我记得我们讨论过Python编程",
+            "messages": []
+        }
+
+        # 执行记忆搜索
+        result = await training_service._search_memory(state)
+
+        # 验证搜索被调用
+        mock_hybrid_search_service.search.assert_called_once_with(
+            query="我记得我们讨论过Python编程",
+            digital_human_id=1,
+            mode="hybrid",
+            entity_limit=5,
+            relationship_limit=3,
+            expand_graph=True
+        )
+
+        # 验证返回结果
+        assert "memory_search_results" in result
+        assert result["memory_search_results"]["statistics"]["total_entities"] == 2
+        assert result["memory_search_results"]["statistics"]["total_relationships"] == 1
+        assert len(result["memory_search_results"]["entities"]) == 2
+        assert result["memory_search_results"]["entities"][0]["name"] == "记忆实体1"
+
+        # 验证事件
+        assert "events" in result
+        events = result["events"]
+        assert any(e["type"] == "node_start" for e in events)
+        assert any(e["type"] == "memory_found" for e in events)
+        assert any(e["type"] == "node_complete" for e in events)
+
+    @pytest.mark.asyncio
+    async def test_route_after_search(self, training_service):
+        """测试搜索后的路由逻辑"""
+        # 场景1：需要提取知识
+        state = {
+            "should_extract": True,
+            "memory_search_results": {"statistics": {"total_entities": 5}},
+            "total_knowledge_points": 10
+        }
+        route = training_service._route_after_search(state)
+        assert route == "extract"
+
+        # 场景2：有相关记忆，进行分析
+        state = {
+            "should_extract": False,
+            "memory_search_results": {"statistics": {"total_entities": 3}},
+            "total_knowledge_points": 2
+        }
+        route = training_service._route_after_search(state)
+        assert route == "analyze"
+
+        # 场景3：有足够知识点，进行分析
+        state = {
+            "should_extract": False,
+            "memory_search_results": {"statistics": {"total_entities": 0}},
+            "total_knowledge_points": 10
+        }
+        route = training_service._route_after_search(state)
+        assert route == "analyze"
+
+        # 场景4：无记忆无知识，直接生成问题
+        state = {
+            "should_extract": False,
+            "memory_search_results": {"statistics": {"total_entities": 0}},
+            "total_knowledge_points": 2
+        }
+        route = training_service._route_after_search(state)
+        assert route == "direct"
+
     @pytest.mark.asyncio
     async def test_intent_recognition_node(self, training_service):
         print("\n========== 测试意图识别节点 ==========")
@@ -199,6 +345,44 @@ class TestDigitalHumanTrainingService:
         
         training_service.llm = original_llm
     
+    @pytest.mark.asyncio
+    async def test_embedding_generation_in_extraction(self, training_service, mock_knowledge_extractor, mock_graph_service):
+        """测试知识提取时生成embedding_id"""
+        state = {
+            "digital_human_id": 1,
+            "user_id": 1,
+            "current_message": "我是Python工程师，在测试公司工作",
+            "should_extract": True,
+            "step_results": {}
+        }
+
+        # 执行知识提取
+        result = await training_service._extract_knowledge(state)
+
+        # 验证调用了 extract_with_embeddings 而不是 extract
+        mock_knowledge_extractor.extract_with_embeddings.assert_called_once_with(
+            "我是Python工程师，在测试公司工作",
+            1
+        )
+
+        # 验证存储实体时包含了 embedding_id
+        entity_calls = mock_graph_service.store_digital_human_entity.call_args_list
+        assert len(entity_calls) == 2
+
+        # 检查第一个实体包含 embedding_id
+        first_entity = entity_calls[0][0][1]  # 获取第二个参数（entity）
+        assert "embedding_id" in first_entity
+        assert first_entity["embedding_id"] == "entity-embed-123"
+
+        # 验证存储关系时包含了 embedding_id
+        rel_calls = mock_graph_service.store_digital_human_relationship.call_args_list
+        assert len(rel_calls) == 1
+
+        # 检查关系包含 embedding_id
+        first_rel = rel_calls[0][0][1]  # 获取第二个参数（relationship）
+        assert "embedding_id" in first_rel
+        assert first_rel["embedding_id"] == "rel-embed-789"
+
     @pytest.mark.asyncio
     async def test_knowledge_extraction_node(self, training_service):
         state = TrainingState(

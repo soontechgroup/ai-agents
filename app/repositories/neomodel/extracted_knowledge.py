@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 class ExtractedKnowledgeRepository:
     
-    def create_entity(self, name: str, entity_type: str, description: str, source_id: Optional[str] = None) -> bool:
+    def create_entity(self, name: str, entity_type: str, description: str, source_id: Optional[str] = None, embedding_id: Optional[str] = None) -> bool:
         try:
             query = """
             MERGE (e:ExtractedEntity {name: $name})
             SET e.type = $type,
                 e.description = $description,
                 e.source_id = $source_id,
+                e.embedding_id = $embedding_id,
                 e.updated_at = datetime()
             RETURN e
             """
@@ -27,7 +28,8 @@ class ExtractedKnowledgeRepository:
                 "name": name,
                 "type": entity_type,
                 "description": description,
-                "source_id": source_id or ""
+                "source_id": source_id or "",
+                "embedding_id": embedding_id or ""
             }
             results, _ = db.cypher_query(query, params)
             return len(results) > 0
@@ -35,7 +37,7 @@ class ExtractedKnowledgeRepository:
             logger.error(f"创建抽取实体失败: {name} - {str(e)}")
             return False
     
-    def create_relationship(self, source: str, target: str, description: str, source_id: Optional[str] = None) -> bool:
+    def create_relationship(self, source: str, target: str, description: str, source_id: Optional[str] = None, embedding_id: Optional[str] = None) -> bool:
         try:
             query = """
             MATCH (s:ExtractedEntity {name: $source})
@@ -43,6 +45,7 @@ class ExtractedKnowledgeRepository:
             MERGE (s)-[r:EXTRACTED_RELATION]->(t)
             SET r.description = $description,
                 r.source_id = $source_id,
+                r.embedding_id = $embedding_id,
                 r.updated_at = datetime()
             RETURN r
             """
@@ -50,7 +53,8 @@ class ExtractedKnowledgeRepository:
                 "source": source,
                 "target": target,
                 "description": description,
-                "source_id": source_id or ""
+                "source_id": source_id or "",
+                "embedding_id": embedding_id or ""
             }
             results, _ = db.cypher_query(query, params)
             return len(results) > 0
@@ -65,7 +69,8 @@ class ExtractedKnowledgeRepository:
                 name=entity.get('name'),
                 entity_type=entity.get('type'),
                 description=entity.get('description'),
-                source_id=source_id
+                source_id=source_id,
+                embedding_id=entity.get('embedding_id')
             ):
                 created_count += 1
         return created_count
@@ -77,7 +82,8 @@ class ExtractedKnowledgeRepository:
                 source=rel.get('source'),
                 target=rel.get('target'),
                 description=rel.get('description'),
-                source_id=source_id
+                source_id=source_id,
+                embedding_id=rel.get('embedding_id')
             ):
                 created_count += 1
         return created_count

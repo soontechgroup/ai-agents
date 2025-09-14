@@ -176,6 +176,35 @@ class ChromaRepository:
             logger.error(f"查询文档失败: {e}")
             raise
     
+    def query_with_embedding(
+        self,
+        collection_name: str,
+        query_embedding: List[float],
+        n_results: int = 10,
+        where: Optional[Dict[str, Any]] = None,
+        include: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        使用单个 embedding 向量查询文档
+        
+        Args:
+            collection_name: 集合名称
+            query_embedding: 查询向量
+            n_results: 返回结果数量
+            where: 元数据过滤条件
+            include: 包含的字段列表
+            
+        Returns:
+            Dict[str, Any]: 查询结果
+        """
+        return self.query_documents(
+            collection_name=collection_name,
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            where=where,
+            include=include
+        )
+    
     def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
         """
         获取集合信息

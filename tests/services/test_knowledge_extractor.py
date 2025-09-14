@@ -660,3 +660,173 @@ class TestKnowledgeExtractorMultiChunk:
         assert estimate['text_length'] == len(test_text)
         
         logger.info("✅ 处理时间估算测试完成")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="需要OPENAI_API_KEY环境变量进行真实API测试")
+class TestKnowledgeExtractorWithEmbeddings:
+    """测试带 Embedding 功能的知识抽取"""
+
+    def setup_method(self):
+        """初始化配置"""
+        logger.info("🚀 初始化 Embedding 功能测试")
+        self.config = ExtractionConfig(
+            chunk_size=500,
+            chunk_overlap=50,
+            min_entity_confidence=0.5,
+            min_relationship_confidence=0.5
+        )
+        self.extractor = KnowledgeExtractor(self.config)
+
+    @pytest.mark.asyncio
+    async def test_extract_with_embeddings_basic(self):
+        """测试基础的 extract_with_embeddings 功能"""
+        from unittest.mock import Mock, AsyncMock, patch
+
+        logger.info("📝 测试 extract_with_embeddings 基础功能")
+
+        # Mock EmbeddingService
+        mock_embedding_service = Mock()
+        mock_embedding_service.embed_entity = AsyncMock(return_value={
+            "embedding_id": "test-entity-embed-id",
+            "vector": [0.1, 0.2, 0.3],
+            "text": "test entity text"
+        })
+        mock_embedding_service.embed_relationship = AsyncMock(return_value={
+            "embedding_id": "test-rel-embed-id",
+            "vector": [0.4, 0.5, 0.6],
+            "text": "test relationship text"
+        })
+        mock_embedding_service.embed_text_chunk = AsyncMock(return_value={
+            "embedding_id": "test-chunk-embed-id",
+            "vector": [0.7, 0.8, 0.9],
+            "text": "test chunk"
+        })
+
+        # 设置 mock
+        self.extractor.embedding_service = mock_embedding_service
+
+        # 测试文本
+        test_text = "苹果公司的乔布斯创建了iPhone产品。"
+        digital_human_id = 123
+
+        # 执行带 embedding 的抽取
+        result = await self.extractor.extract_with_embeddings(test_text, digital_human_id)
+
+        # 验证基本结构
+        assert "entities" in result
+        assert "relationships" in result
+
+        # 验证每个实体都有 embedding_id
+        for entity in result["entities"]:
+            assert "embedding_id" in entity
+            logger.info(f"实体 {entity.get('name')} - Embedding ID: {entity.get('embedding_id')}")
+
+        # 验证每个关系都有 embedding_id
+        for rel in result["relationships"]:
+            assert "embedding_id" in rel
+            logger.info(f"关系 {rel.get('source')} -> {rel.get('target')} - Embedding ID: {rel.get('embedding_id')}")
+
+        # 验证 EmbeddingService 被正确调用
+        assert mock_embedding_service.embed_entity.call_count == len(result["entities"])
+        assert mock_embedding_service.embed_relationship.call_count == len(result["relationships"])
+
+        # 验证 digital_human_id 被传递
+        if mock_embedding_service.embed_entity.call_count > 0:
+            call_args = mock_embedding_service.embed_entity.call_args_list[0]
+            assert call_args[0][1] == digital_human_id  # 第二个参数是 digital_human_id
+
+        logger.info("✅ extract_with_embeddings 基础功能测试完成")
+
+    @pytest.mark.asyncio
+    async def test_extract_with_embeddings_multi_tenant(self):
+        """测试多租户隔离的 embedding 生成"""
+        from unittest.mock import Mock, AsyncMock
+
+        logger.info("🏢 测试多租户 embedding 隔离")
+
+        # Mock EmbeddingService
+        mock_embedding_service = Mock()
+        embed_counter = {"count": 0}
+
+        async def mock_embed_entity(entity, dh_id):
+            embed_counter["count"] += 1
+            return {
+                "embedding_id": f"entity-{dh_id}-{embed_counter['count']}",
+                "vector": [0.1 * dh_id],
+                "text": entity.get("name", "")
+            }
+
+        async def mock_embed_relationship(rel, dh_id):
+            embed_counter["count"] += 1
+            return {
+                "embedding_id": f"rel-{dh_id}-{embed_counter['count']}",
+                "vector": [0.2 * dh_id],
+                "text": f"{rel.get('source')} -> {rel.get('target')}"
+            }
+
+        mock_embedding_service.embed_entity = AsyncMock(side_effect=mock_embed_entity)
+        mock_embedding_service.embed_relationship = AsyncMock(side_effect=mock_embed_relationship)
+        mock_embedding_service.embed_text_chunk = AsyncMock(return_value={
+            "embedding_id": "text-embed",
+            "vector": [0.5],
+            "text": "chunk"
+        })
+
+        self.extractor.embedding_service = mock_embedding_service
+
+        test_text = "测试公司开发了新产品。"
+
+        # 为不同数字人生成 embeddings
+        result1 = await self.extractor.extract_with_embeddings(test_text, digital_human_id=1)
+        result2 = await self.extractor.extract_with_embeddings(test_text, digital_human_id=2)
+
+        # 验证不同数字人的 embedding_id 不同
+        if result1["entities"] and result2["entities"]:
+            entity1_embed = result1["entities"][0].get("embedding_id", "")
+            entity2_embed = result2["entities"][0].get("embedding_id", "")
+
+            assert "1" in entity1_embed, f"数字人1的embedding应包含ID: {entity1_embed}"
+            assert "2" in entity2_embed, f"数字人2的embedding应包含ID: {entity2_embed}"
+            assert entity1_embed != entity2_embed, "不同数字人应有不同的embedding_id"
+
+            logger.info(f"数字人1 embedding: {entity1_embed}")
+            logger.info(f"数字人2 embedding: {entity2_embed}")
+
+        logger.info("✅ 多租户 embedding 隔离测试完成")
+
+    @pytest.mark.asyncio
+    async def test_extract_with_embeddings_error_handling(self):
+        """测试 embedding 生成错误处理"""
+        from unittest.mock import Mock, AsyncMock
+
+        logger.info("⚠️ 测试 embedding 错误处理")
+
+        # Mock 会抛出异常的 EmbeddingService
+        mock_embedding_service = Mock()
+        mock_embedding_service.embed_entity = AsyncMock(side_effect=Exception("Embedding service error"))
+        mock_embedding_service.embed_relationship = AsyncMock(side_effect=Exception("Embedding service error"))
+        mock_embedding_service.embed_text_chunk = AsyncMock(side_effect=Exception("Embedding service error"))
+
+        self.extractor.embedding_service = mock_embedding_service
+
+        test_text = "测试文本包含实体和关系。"
+        digital_human_id = 999
+
+        # 执行抽取（应该优雅处理错误）
+        result = await self.extractor.extract_with_embeddings(test_text, digital_human_id)
+
+        # 验证即使 embedding 失败，基础抽取仍然成功
+        assert "entities" in result
+        assert "relationships" in result
+
+        # 验证 embedding_id 为 None（因为失败了）
+        for entity in result["entities"]:
+            assert entity.get("embedding_id") is None
+            logger.info(f"实体 {entity.get('name')} - Embedding ID: None (预期)")
+
+        for rel in result["relationships"]:
+            assert rel.get("embedding_id") is None
+            logger.info(f"关系 - Embedding ID: None (预期)")
+
+        logger.info("✅ Embedding 错误处理测试完成")

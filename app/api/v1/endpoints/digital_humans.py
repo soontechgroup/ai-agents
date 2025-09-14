@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.schemas.digital_human import (
-    DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse, 
-    DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest, 
+    DigitalHumanCreate, DigitalHumanUpdate, DigitalHumanResponse,
+    DigitalHumanPageRequest, DigitalHumanPageResponse, DigitalHumanDetailRequest,
     DigitalHumanUpdateRequest, DigitalHumanDeleteRequest, DigitalHumanTrainRequest,
     MemoryGraphRequest, MemoryGraphResponse, MemoryGraphNode, MemoryGraphEdge, MemoryGraphStatistics,
     TrainingMessagesRequest, TrainingMessageResponse, TrainingMessagesPageResponse,
@@ -56,26 +56,26 @@ async def get_digital_human_templates(
     digital_human_service: DigitalHumanService = Depends(get_digital_human_service)
 ):
     logger.info(f"📋 用户 {current_user.id} 获取数字人列表 - 页码: {request.page}, 每页: {request.size}, 包含公开: {request.include_public}")
-    
+
     digital_humans, total = digital_human_service.get_digital_humans_paginated(
         request, current_user.id, request.include_public
     )
-    
+
     logger.debug(f"📊 查询到 {len(digital_humans)} 个数字人模板，总计 {total} 个")
-    
+
     total_pages = math.ceil(total / request.size)
-    
+
     pagination = PaginationMeta(
         page=request.page,
         size=request.size,
         total=total,
         pages=total_pages
     )
-    
+
     digital_human_responses = [DigitalHumanResponse.model_validate(dh) for dh in digital_humans]
-    
+
     logger.info(f"✔️ 成功返回 {len(digital_human_responses)} 个数字人模板给用户 {current_user.id}")
-    
+
     return DigitalHumanPageResponse(
         code=200,
         message="获取数字人模板列表成功",
@@ -129,18 +129,18 @@ async def train_digital_human(
     training_service: DigitalHumanTrainingService = Depends(get_digital_human_training_service)
 ):
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限训练"
         )
-    
+
     logger.info(f"🎓 用户 {current_user.id} 开始训练数字人: ID={request.digital_human_id}, 消息={request.message[:50]}...")
-    
+
     async def generate():
         try:
             async for chunk in training_service.process_training_conversation(
@@ -156,7 +156,7 @@ async def train_digital_human(
                 "data": "训练过程出现错误，请重试"
             }, ensure_ascii=False)
             yield f"data: {error_msg}\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -178,11 +178,11 @@ async def get_digital_human_memory_graph(
 ):
     """
     获取指定数字人的记忆图谱数据，用于前端可视化展示
-    
+
     权限验证：
     - 用户只能查看自己创建的数字人记忆
     - 公开的数字人记忆暂不支持查看
-    
+
     返回格式：
     - nodes: 知识节点列表，包含节点ID、标签、类型、大小等信息
     - edges: 关系边列表，包含源节点、目标节点、关系类型等信息
@@ -190,25 +190,25 @@ async def get_digital_human_memory_graph(
     """
     # 验证用户是否有权限访问该数字人
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限访问"
         )
-    
+
     logger.info(f"📊 用户 {current_user.id} 获取数字人记忆图谱: ID={request.digital_human_id}")
-    
+
     # 获取记忆图谱数据
     graph_data = await graph_service.get_digital_human_memory_graph(
         digital_human_id=request.digital_human_id,
         limit=request.limit,
         node_types=request.node_types
     )
-    
+
     # 检查是否有错误
     if "error" in graph_data:
         logger.error(f"获取记忆图谱失败: {graph_data['error']}")
@@ -216,16 +216,16 @@ async def get_digital_human_memory_graph(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="获取记忆图谱失败，请稍后重试"
         )
-    
+
     # 构建响应
     memory_graph = MemoryGraphResponse(
         nodes=[MemoryGraphNode(**node) for node in graph_data["nodes"]],
         edges=[MemoryGraphEdge(**edge) for edge in graph_data["edges"]],
         statistics=MemoryGraphStatistics(**graph_data["statistics"])
     )
-    
+
     logger.success(f"✅ 成功获取数字人记忆图谱: {graph_data['statistics']['displayed_nodes']} 个节点, {graph_data['statistics']['displayed_edges']} 条边")
-    
+
     return ResponseUtil.success(data=memory_graph, message="获取数字人记忆图谱成功")
 
 
@@ -238,10 +238,10 @@ async def get_training_messages(
 ):
     """
     获取数字人训练消息历史
-    
+
     权限验证：
     - 用户只能查看自己创建的数字人的训练消息
-    
+
     返回格式：
     - 分页的训练消息列表
     - 包含用户消息和助手回复
@@ -249,25 +249,25 @@ async def get_training_messages(
     """
     # 验证用户权限
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限访问"
         )
-    
+
     logger.info(f"📜 用户 {current_user.id} 获取数字人训练消息: ID={request.digital_human_id}, 页码={request.page}, 每页={request.size}")
-    
+
     # 获取训练消息历史
     messages, total = training_service.get_training_history(
         digital_human_id=request.digital_human_id,
         page=request.page,
         size=request.size
     )
-    
+
     # 构建分页信息
     total_pages = math.ceil(total / request.size)
     pagination = PaginationMeta(
@@ -276,12 +276,12 @@ async def get_training_messages(
         total=total,
         pages=total_pages
     )
-    
+
     # 构建响应
     message_responses = [TrainingMessageResponse.model_validate(msg) for msg in messages]
-    
+
     logger.success(f"✅ 成功获取训练消息: 返回 {len(message_responses)} 条消息，总计 {total} 条")
-    
+
     return TrainingMessagesPageResponse(
         code=200,
         message="获取训练消息历史成功",
@@ -299,32 +299,32 @@ async def search_memory(
 ):
     """搜索数字人的记忆节点"""
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限访问"
         )
-    
+
     logger.info(f"🔍 用户 {current_user.id} 搜索数字人记忆: ID={request.digital_human_id}, 关键词={request.query}")
-    
+
     search_result = await graph_service.search_digital_human_memories(
         digital_human_id=request.digital_human_id,
         query=request.query,
         node_types=request.node_types,
         limit=request.limit
     )
-    
+
     if not search_result.get("success", False):
         logger.error(f"搜索记忆失败: {search_result.get('error')}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="搜索记忆失败，请稍后重试"
         )
-    
+
     memory_nodes = [
         MemoryGraphNode(
             id=node["id"],
@@ -337,9 +337,9 @@ async def search_memory(
         )
         for node in search_result.get("results", [])
     ]
-    
+
     logger.success(f"✅ 搜索完成: 找到 {len(memory_nodes)} 个匹配的记忆节点")
-    
+
     return ResponseUtil.success(data=memory_nodes, message=f"搜索到 {len(memory_nodes)} 个记忆节点")
 
 
@@ -352,25 +352,25 @@ async def get_memory_detail(
 ):
     """获取特定记忆节点的详细信息"""
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限访问"
         )
-    
+
     logger.info(f"📝 用户 {current_user.id} 获取记忆节点详情: 数字人ID={request.digital_human_id}, 节点ID={request.node_id}")
-    
+
     detail_result = await graph_service.get_memory_node_detail(
         digital_human_id=request.digital_human_id,
         node_id=request.node_id,
         include_relations=request.include_relations,
         relation_depth=request.relation_depth
     )
-    
+
     if not detail_result.get("success", False):
         error_msg = detail_result.get("error", "未知错误")
         if "not found" in error_msg.lower():
@@ -384,7 +384,7 @@ async def get_memory_detail(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="获取记忆节点详情失败"
             )
-    
+
     node_data = detail_result.get("node", {})
     memory_node = MemoryGraphNode(
         id=node_data.get("id", ""),
@@ -395,7 +395,7 @@ async def get_memory_detail(
         properties=node_data.get("properties", {}),
         updated_at=node_data.get("updated_at")
     )
-    
+
     connected_nodes = [
         MemoryGraphNode(
             id=node["id"],
@@ -408,15 +408,15 @@ async def get_memory_detail(
         )
         for node in detail_result.get("connected_nodes", [])
     ]
-    
+
     response = MemoryDetailResponse(
         node=memory_node,
         relations=detail_result.get("relations", []),
         connected_nodes=connected_nodes
     )
-    
+
     logger.success(f"✅ 获取记忆节点详情成功: {len(connected_nodes)} 个相关节点")
-    
+
     return ResponseUtil.success(data=response, message="获取记忆节点详情成功")
 
 
@@ -429,23 +429,23 @@ async def get_memory_statistics(
 ):
     """获取数字人的记忆统计信息"""
     digital_human = digital_human_service.get_digital_human_by_id(
-        request.digital_human_id, 
+        request.digital_human_id,
         current_user.id
     )
-    
+
     if not digital_human:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="数字人不存在或您无权限访问"
         )
-    
+
     logger.info(f"📊 用户 {current_user.id} 获取数字人记忆统计: ID={request.digital_human_id}")
-    
+
     stats = await graph_service.get_memory_statistics(
         digital_human_id=request.digital_human_id,
         include_timeline=request.include_timeline
     )
-    
+
     response = MemoryStatsResponse(
         total_nodes=stats.get("total_nodes", 0),
         total_edges=stats.get("total_edges", 0),
@@ -455,9 +455,7 @@ async def get_memory_statistics(
         avg_connections_per_node=stats.get("avg_connections_per_node", 0),
         timeline=stats.get("timeline") if request.include_timeline else None
     )
-    
+
     logger.success(f"✅ 获取记忆统计成功: {response.total_nodes} 个节点, {response.total_edges} 条关系")
-    
+
     return ResponseUtil.success(data=response, message="获取记忆统计信息成功")
-
-
