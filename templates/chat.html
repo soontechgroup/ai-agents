@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot Demo - LangGraph Enhanced</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="chat-header">
+            <h1>🤖 AI Chatbot Demo</h1>
+            <p>LangGraph-Enhanced Memory with Web Search Tools</p>
+            <div class="status-bar">
+                <span id="status">Ready</span>
+                <span id="stats-info"></span>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <div class="chat-container">
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="message-content">
+                        <p>Hello! I'm your AI assistant with enhanced memory and web search capabilities.</p>
+                        <p>I can:</p>
+                        <ul>
+                            <li>Remember our conversation using LangGraph workflows</li>
+                            <li>Search the web for current information</li>
+                            <li>Extract and store facts about you</li>
+                            <li>Use context from previous chats</li>
+                        </ul>
+                        <p>Try asking me something like "What's the latest news about AI?" or tell me about yourself!</p>
+                    </div>
+                    <div class="message-meta">
+                        <span class="timestamp">System</span>
+                        <span class="sources">Welcome message</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="chat-input-container">
+                <div class="input-group">
+                    <input type="text" id="messageInput" placeholder="Type your message here..." maxlength="500">
+                    <button id="sendButton">Send</button>
+                </div>
+                <div class="input-info">
+                    <span id="charCount">0/500</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar with Controls -->
+        <div class="sidebar">
+            <div class="control-section">
+                <h3>Chat Controls</h3>
+                <button id="clearMemory" class="control-btn">Clear Memory</button>
+                <button id="runDemo" class="control-btn">Run Demo</button>
+                <button id="showStats" class="control-btn">Show Stats</button>
+            </div>
+
+            <div class="control-section">
+                <h3>Memory Status</h3>
+                <div class="stats-display" id="memoryStats">
+                    <div>Conversations: <span id="convCount">0</span></div>
+                    <div>Stored Documents: <span id="docCount">0</span></div>
+                    <div>Last Processing: <span id="lastProcessing">-</span></div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Features</h3>
+                <ul class="feature-list">
+                    <li>✅ LangGraph Workflows</li>
+                    <li>✅ Web Search Integration</li>
+                    <li>✅ Memory Persistence</li>
+                    <li>✅ Fact Extraction</li>
+                    <li>✅ Intent Classification</li>
+                    <li>✅ Context Awareness</li>
+                </ul>
+            </div>
+
+            <div class="control-section">
+                <h3>Architecture Info</h3>
+                <div class="arch-info">
+                    <p><strong>Memory:</strong> Graph-based with ChromaDB</p>
+                    <p><strong>Search:</strong> Web search tools</p>
+                    <p><strong>AI:</strong> OpenAI GPT models</p>
+                    <p><strong>Processing:</strong> LangGraph patterns</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Processing your message...</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
