@@ -27,9 +27,14 @@ wheels/
 *.egg
 MANIFEST
 
-# ChromaDB data
+# ChromaDB data and memory files
 data/
 chroma_db/
+*_memory/
+memory_data/
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment variables
 .env
