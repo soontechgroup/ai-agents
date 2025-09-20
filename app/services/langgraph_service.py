@@ -1,5 +1,6 @@
 import os
 from typing import Generator, Dict, Any, Optional, List
+from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage
 from app.core.messages import UserMessage, AssistantMessage, SystemMessage
@@ -11,6 +12,8 @@ import json
 import uuid
 import openai
 from app.core.models import DigitalHuman
+from app.services.hybrid_search_service import HybridSearchService
+from app.core.logger import logger
 
 
 class ConversationState(BaseModel):
@@ -20,6 +23,8 @@ class ConversationState(BaseModel):
     thread_id: str = ""
     user_message: str = ""
     assistant_response: str = ""
+    memory_context: str = ""  # 格式化的记忆文本（用于AI上下文）
+    memory_search_results: Optional[Dict[str, Any]] = None  # 原始搜索结果（用于保存）
 
 
 class LangGraphService:
@@ -30,10 +35,10 @@ class LangGraphService:
             self.openai_api_key = os.getenv("OPENAI_API_KEY")
             if not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required")
-            
+
             # 验证 OpenAI API 密钥
             self._validate_openai_api_key()
-            
+
             self.llm = ChatOpenAI(
                 api_key=self.openai_api_key,
                 model="gpt-4o-mini",
@@ -41,14 +46,17 @@ class LangGraphService:
                 streaming=True,
                 timeout=30
             )
-            
+
             # 使用 MySQL 检查点保存器，支持版本管理和缓存
             self.checkpointer = MySQLCheckpointer(
                 db_session_factory or get_db,
                 cache_size=100,  # 缓存100个检查点
                 cache_ttl=300    # 缓存5分钟
             )
-            
+
+            # 初始化混合搜索服务
+            self.hybrid_search_service = HybridSearchService()
+
             # 构建对话图
             self.graph = self._build_conversation_graph()
             
@@ -91,18 +99,20 @@ class LangGraphService:
     def _build_conversation_graph(self) -> StateGraph:
         """构建对话状态图"""
         workflow = StateGraph(ConversationState)
-        
+
         # 添加节点
         workflow.add_node("process_input", self._process_user_input)
+        workflow.add_node("search_memory", self._search_memory)  # 新增：记忆搜索节点
         workflow.add_node("generate_response", self._generate_ai_response)
         workflow.add_node("finalize", self._finalize_response)
-        
+
         # 添加边
         workflow.set_entry_point("process_input")
-        workflow.add_edge("process_input", "generate_response")
+        workflow.add_edge("process_input", "search_memory")  # 先搜索记忆
+        workflow.add_edge("search_memory", "generate_response")  # 再生成响应
         workflow.add_edge("generate_response", "finalize")
         workflow.add_edge("finalize", END)
-        
+
         # 编译图
         return workflow.compile(checkpointer=self.checkpointer)
     
@@ -112,33 +122,166 @@ class LangGraphService:
         user_msg = UserMessage(content=state.user_message)
         state.messages.append(user_msg)
         return state
+
+    def _search_memory(self, state: ConversationState) -> ConversationState:
+        """搜索相关记忆"""
+        try:
+            # 获取数字人ID
+            digital_human_id = state.digital_human_config.get("id") if state.digital_human_config else None
+            if not digital_human_id:
+                logger.debug("No digital_human_id found, skipping memory search")
+                return state
+
+            logger.info(f"Searching memories for digital_human_id: {digital_human_id}, query: {state.user_message[:50]}...")
+
+            # 使用同步方式搜索记忆
+            import asyncio
+            loop = None
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # 在事件循环中运行异步搜索
+            search_results = loop.run_until_complete(
+                self.hybrid_search_service.search(
+                    query=state.user_message,
+                    digital_human_id=digital_human_id,
+                    mode="hybrid",
+                    entity_limit=10,
+                    relationship_limit=5,
+                    expand_graph=True
+                )
+            )
+
+            # 保存原始搜索结果
+            state.memory_search_results = search_results
+
+            # 格式化记忆为文本（用于AI上下文）
+            state.memory_context = self._format_memory_context(search_results)
+
+            if state.memory_context:
+                logger.info(f"Found {len(search_results.get('entities', []))} entities and {len(search_results.get('relationships', []))} relationships")
+            else:
+                logger.debug("No relevant memories found")
+
+            return state
+
+        except Exception as e:
+            logger.warning(f"Memory search failed: {e}")
+            # 记忆搜索失败不影响对话，继续流程
+            return state
+
+    def _format_memory_context(self, search_results: Dict[str, Any]) -> str:
+        """将搜索结果格式化为简洁的上下文文本"""
+        context_parts = []
+
+        # 格式化实体（取前5个最相关的）
+        entities = search_results.get("entities", [])
+        if entities:
+            entity_texts = []
+            for e in entities[:5]:
+                name = e.get('name', '')
+                description = e.get('description', '')
+                if name:
+                    if description:
+                        entity_texts.append(f"- {name}: {description}")
+                    else:
+                        entity_texts.append(f"- {name}")
+
+            if entity_texts:
+                context_parts.append("相关记忆：\n" + "\n".join(entity_texts))
+
+        # 格式化关系（取前3个最相关的）
+        relationships = search_results.get("relationships", [])
+        if relationships:
+            rel_texts = []
+            for r in relationships[:3]:
+                source = r.get('source', '')
+                target = r.get('target', '')
+                description = r.get('description', '')
+                types = r.get('types', '')
+
+                if source and target:
+                    if description:
+                        rel_texts.append(f"- {source} → {target}: {description}")
+                    elif types:
+                        rel_texts.append(f"- {source} → {target} ({types})")
+                    else:
+                        rel_texts.append(f"- {source} → {target}")
+
+            if rel_texts:
+                context_parts.append("相关关系：\n" + "\n".join(rel_texts))
+
+        return "\n\n".join(context_parts) if context_parts else ""
     
     def _generate_ai_response(self, state: ConversationState) -> ConversationState:
         """生成AI响应"""
         # 获取数字人配置
         config = state.digital_human_config or {}
-        
-        # 构建系统提示
+
+        # 构建系统提示（包含记忆上下文）
         system_prompt = self._build_system_prompt(config)
-        
+        if state.memory_context:
+            system_prompt += f"\n\n基于以下相关记忆回答用户：\n{state.memory_context}"
+
         # 准备消息列表
         messages = []
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt))
-        
+
         # 添加历史消息（保留最近的对话）
         recent_messages = state.messages[-10:]  # 保留最近10条消息
         messages.extend(recent_messages)
-        
+
         # 更新LLM配置
         self.llm.temperature = config.get("temperature", 0.7)
         self.llm.max_tokens = config.get("max_tokens", 2048)
-        
+
         # 生成响应
         response = self.llm.invoke(messages)
         state.assistant_response = response.content
-        
+
         return state
+
+    def _generate_ai_response_stream(self, state: ConversationState) -> Generator[str, None, None]:
+        """流式生成AI响应"""
+        # 获取数字人配置
+        config = state.digital_human_config or {}
+
+        # 构建系统提示（包含记忆上下文）
+        system_prompt = self._build_system_prompt(config)
+        if state.memory_context:
+            system_prompt += f"\n\n基于以下相关记忆回答用户：\n{state.memory_context}"
+
+        # 准备消息列表
+        messages = []
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+
+        # 添加历史消息（保留最近的对话）
+        recent_messages = state.messages[-10:]  # 保留最近10条消息
+        messages.extend(recent_messages)
+
+        # 创建流式LLM
+        stream_llm = ChatOpenAI(
+            api_key=self.openai_api_key,
+            model="gpt-4o-mini",
+            temperature=config.get("temperature", 0.7),
+            max_tokens=config.get("max_tokens", 2048),
+            streaming=True
+        )
+
+        # 流式生成响应
+        full_response = ""
+        for chunk in stream_llm.stream(messages):
+            if chunk.content:
+                full_response += chunk.content
+                yield chunk.content
+
+        # 保存完整响应到状态
+        state.assistant_response = full_response
     
     def _finalize_response(self, state: ConversationState) -> ConversationState:
         """完成响应处理"""
@@ -194,11 +337,11 @@ class LangGraphService:
         message: str,
         thread_id: str,
         digital_human_config: Dict[str, Any]
-    ) -> str:
-        """同步聊天"""
+    ) -> Dict[str, Any]:
+        """同步聊天 - 返回响应和记忆信息"""
         try:
             config = {"configurable": {"thread_id": thread_id}}
-            
+
             # 获取历史消息
             try:
                 checkpoint = self.checkpointer.get(config["configurable"])
@@ -208,18 +351,64 @@ class LangGraphService:
                     existing_messages = []
             except:
                 existing_messages = []
-            
+
             initial_state = ConversationState(
                 thread_id=thread_id,
                 user_message=message,
                 digital_human_config=digital_human_config,
                 messages=existing_messages  # 包含历史消息
             )
-            
+
             # 运行对话图
             result = self.graph.invoke(initial_state, config)
-            
-            return result.assistant_response
+
+            # 构建详细的记忆信息
+            memory_data = None
+            if result.memory_search_results and isinstance(result.memory_search_results, dict):
+                # 获取实体和关系
+                entities = result.memory_search_results.get("entities", [])
+                relationships = result.memory_search_results.get("relationships", [])
+
+                # 简化实体数据（只保留前5个最相关的）
+                simplified_entities = []
+                for e in entities[:5]:
+                    # 确保e是字典类型
+                    if isinstance(e, dict):
+                        simplified_entities.append({
+                            "name": e.get("name", ""),
+                            "types": e.get("types", ""),
+                            "description": e.get("description", ""),
+                            "confidence": float(e.get("confidence", 0))
+                        })
+
+                # 简化关系数据（只保留前3个最相关的）
+                simplified_relationships = []
+                for r in relationships[:3]:
+                    # 确保r是字典类型
+                    if isinstance(r, dict):
+                        simplified_relationships.append({
+                            "source": r.get("source", ""),
+                            "target": r.get("target", ""),
+                            "types": r.get("types", ""),
+                            "description": r.get("description", "")
+                        })
+
+                memory_data = {
+                    "type": "memory",
+                    "content": f"找到 {len(entities)} 个实体和 {len(relationships)} 个关系",
+                    "metadata": {
+                        "has_memory": True,
+                        "entity_count": len(entities),
+                        "relationship_count": len(relationships),
+                        "entities": simplified_entities,
+                        "relationships": simplified_relationships
+                    }
+                }
+
+            return {
+                "response": result.assistant_response,
+                "memory": memory_data
+            }
             
         except openai.AuthenticationError:
             raise ValueError("Invalid OpenAI API key. Please check your API configuration.")
@@ -238,54 +427,125 @@ class LangGraphService:
         thread_id: str,
         digital_human_config: Dict[str, Any]
     ) -> Generator[str, None, None]:
-        """流式聊天"""
+        """流式聊天 - 使用图工作流但流式生成响应"""
         try:
-            # 获取数字人配置
-            config_dict = {"configurable": {"thread_id": thread_id}}
-            
-            # 构建系统提示
-            system_prompt = self._build_system_prompt(digital_human_config)
-            
-            # 从 PostgreSQL checkpointer 获取历史消息
-            messages = []
+            config = {"configurable": {"thread_id": thread_id}}
+
+            # 获取历史消息
+            existing_messages = []
             try:
-                checkpoint = self.checkpointer.get(config_dict["configurable"])
+                checkpoint = self.checkpointer.get(config["configurable"])
                 if checkpoint and checkpoint.get("channel_values"):
-                    messages = checkpoint["channel_values"].get("messages", [])
+                    existing_messages = checkpoint["channel_values"].get("messages", [])
             except:
-                messages = []
-            
-            # 准备消息列表
-            full_messages = []
-            if system_prompt:
-                full_messages.append(SystemMessage(content=system_prompt))
-            
-            # 添加历史消息（保留最近的对话）
-            recent_messages = messages[-10:] if messages else []
-            full_messages.extend(recent_messages)
-            
-            # 添加当前用户消息
-            full_messages.append(UserMessage(content=message))
-            
-            # 更新LLM配置
-            stream_llm = ChatOpenAI(
-                api_key=self.openai_api_key,
-                model="gpt-4o-mini",
-                temperature=digital_human_config.get("temperature", 0.7),
-                max_tokens=digital_human_config.get("max_tokens", 2048),
-                streaming=True
+                existing_messages = []
+
+            # 创建初始状态
+            initial_state = ConversationState(
+                thread_id=thread_id,
+                user_message=message,
+                digital_human_config=digital_human_config,
+                messages=existing_messages
             )
-            
-            # 流式生成响应
-            full_response = ""
-            for chunk in stream_llm.stream(full_messages):
-                if chunk.content:
-                    full_response += chunk.content
-                    yield chunk.content
-            
-            # PostgreSQL checkpointer 会自动从数据库读取历史
-            # 消息已经通过 conversation_service 保存到数据库
-            # 无需再手动缓存或保存状态
+
+            # 创建一个特殊的流式图用于流式响应
+            # 注意：这里需要特殊处理，因为标准的 graph.invoke 不支持流式响应
+
+            # 1. 先执行非流式节点（处理输入和搜索记忆）
+            state = self._process_user_input(initial_state)
+            state = self._search_memory(state)
+
+            # 保存中间状态到 checkpointer
+            intermediate_checkpoint = {
+                "v": 1,
+                "ts": datetime.now().isoformat(),
+                "channel_values": {
+                    "messages": state.messages,
+                    "memory_context": state.memory_context,
+                    "memory_search_results": state.memory_search_results
+                },
+                "channel_versions": {
+                    "messages": len(state.messages)
+                },
+                "versions_seen": {}
+            }
+            self.checkpointer.put(
+                config,
+                intermediate_checkpoint,
+                {"source": "stream_intermediate", "node": "search_memory"},
+                {}
+            )
+
+            # 如果有记忆搜索结果，返回详细信息
+            if state.memory_search_results and isinstance(state.memory_search_results, dict):
+                # 获取实体和关系
+                entities = state.memory_search_results.get("entities", [])
+                relationships = state.memory_search_results.get("relationships", [])
+
+                # 简化实体数据（只保留前5个最相关的）
+                simplified_entities = []
+                for e in entities[:5]:
+                    # 确保e是字典类型
+                    if isinstance(e, dict):
+                        simplified_entities.append({
+                            "name": e.get("name", ""),
+                            "types": e.get("types", ""),
+                            "description": e.get("description", ""),
+                            "confidence": float(e.get("confidence", 0))
+                        })
+
+                # 简化关系数据（只保留前3个最相关的）
+                simplified_relationships = []
+                for r in relationships[:3]:
+                    # 确保r是字典类型
+                    if isinstance(r, dict):
+                        simplified_relationships.append({
+                            "source": r.get("source", ""),
+                            "target": r.get("target", ""),
+                            "types": r.get("types", ""),
+                            "description": r.get("description", "")
+                        })
+
+                yield json.dumps({
+                    "type": "memory",
+                    "content": f"找到 {len(entities)} 个实体和 {len(relationships)} 个关系",
+                    "metadata": {
+                        "has_memory": True,
+                        "entity_count": len(entities),
+                        "relationship_count": len(relationships),
+                        "entities": simplified_entities,
+                        "relationships": simplified_relationships
+                    }
+                }, ensure_ascii=False)
+
+            # 2. 流式生成响应
+            for chunk in self._generate_ai_response_stream(state):
+                yield chunk
+
+            # 3. 完成响应处理
+            state = self._finalize_response(state)
+
+            # 4. 保存最终状态到 checkpointer
+            final_checkpoint = {
+                "v": 1,
+                "ts": datetime.now().isoformat(),
+                "channel_values": {
+                    "messages": state.messages,
+                    "memory_context": state.memory_context,
+                    "memory_search_results": state.memory_search_results,
+                    "assistant_response": state.assistant_response
+                },
+                "channel_versions": {
+                    "messages": len(state.messages)
+                },
+                "versions_seen": {}
+            }
+            self.checkpointer.put(
+                config,
+                final_checkpoint,
+                {"source": "stream_final", "node": "finalize"},
+                {}
+            )
             
         except openai.AuthenticationError:
             yield json.dumps({

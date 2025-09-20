@@ -86,11 +86,12 @@ async def get_conversation(
 ):
     """
     获取对话详情
-    
-    - **id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     """
-    conversation = conversation_service.get_conversation_by_id(
-        request.id, current_user.id
+    thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
+    conversation = conversation_service.get_conversation_by_thread_id(
+        thread_id, current_user.id
     )
     
     if not conversation:
@@ -110,15 +111,15 @@ async def update_conversation(
 ):
     """
     更新对话信息
-    
-    - **id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     - **title**: 对话标题（可选）
-    - **status**: 对话状态（可选）
     """
-    # 将ConversationUpdateRequest转换为ConversationUpdate（不包含id）
-    update_data = ConversationUpdate(**request.model_dump(exclude={'id'}))
+    thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
+    # 将ConversationUpdateRequest转换为ConversationUpdate（不包含digital_human_id）
+    update_data = ConversationUpdate(**request.model_dump(exclude={'digital_human_id'}))
     conversation = conversation_service.update_conversation(
-        request.id, update_data, current_user.id
+        thread_id, update_data, current_user.id
     )
     
     if not conversation:
@@ -138,11 +139,12 @@ async def delete_conversation(
 ):
     """
     删除对话（软删除）
-    
-    - **id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     """
+    thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
     success = conversation_service.delete_conversation(
-        request.id, current_user.id
+        thread_id, current_user.id
     )
     
     if not success:
@@ -162,12 +164,13 @@ async def get_conversation_messages(
 ):
     """
     获取对话的所有消息
-    
-    - **conversation_id**: 对话ID  
+
+    - **digital_human_id**: 数字人ID
     - **limit**: 消息数量限制（可选）
     """
+    thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
     conversation_with_messages = conversation_service.get_conversation_with_messages(
-        request.conversation_id, current_user.id, request.limit
+        thread_id, current_user.id, request.limit
     )
     
     if not conversation_with_messages:
@@ -190,13 +193,14 @@ async def send_message(
 ):
     """
     发送消息（同步模式）
-    
-    - **conversation_id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     - **content**: 消息内容
     """
     try:
+        thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
         message = conversation_service.send_message(
-            request.conversation_id, request.content, current_user.id
+            thread_id, request.content, current_user.id
         )
         
         if not message:
@@ -235,20 +239,25 @@ async def chat_stream(
 ):
     """
     流式聊天
-    
-    - **conversation_id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     - **message**: 用户消息内容
     - **stream**: 是否流式响应（默认true）
-    
+
     返回Server-Sent Events流，包含以下类型的数据：
     - **message**: 用户消息确认
+    - **memory**: 记忆搜索结果（前端应展示为状态提示，如"正在查找相关记忆..."）
     - **token**: AI响应的token流
     - **done**: 响应完成
     - **error**: 错误信息
+
+    注意：前端应该根据 type 字段优雅地展示不同类型的消息，
+    而不是直接显示 JSON 字符串
     """
     def generate():
+        thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
         for chunk in conversation_service.send_message_stream(
-            request.conversation_id, request.message, current_user.id
+            thread_id, request.message, current_user.id
         ):
             yield f"data: {chunk}\n\n"
 
@@ -272,11 +281,12 @@ async def clear_conversation_history(
 ):
     """
     清除对话的所有消息历史
-    
-    - **conversation_id**: 对话ID
+
+    - **digital_human_id**: 数字人ID
     """
+    thread_id = f"chat_{request.digital_human_id}_{current_user.id}"
     success = conversation_service.clear_conversation_history(
-        request.conversation_id, current_user.id
+        thread_id, current_user.id
     )
     
     if not success:

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # JWT配置
     SECRET_KEY: str = "your-secret-key-here-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24小时
     
     # 数据库配置 (与 docker-compose.yml 匹配)
     DATABASE_URL: str = "mysql+pymysql://root:123456@localhost:3306/ai_agents"

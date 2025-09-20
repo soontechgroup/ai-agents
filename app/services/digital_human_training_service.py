@@ -801,8 +801,10 @@ class DigitalHumanTrainingService:
         
         yield json.dumps({
             "type": "assistant_question",
-            "id": assistant_msg.id,
-            "data": question
+            "content": question,
+            "metadata": {
+                "id": assistant_msg.id
+            }
         }, ensure_ascii=False)
     
     def _extract_next_question(self, result) -> Optional[str]:
@@ -862,8 +864,10 @@ class DigitalHumanTrainingService:
                 
             yield json.dumps({
                 "type": "user_message",
-                "id": msg_id,
-                "data": user_message
+                "content": user_message,
+                "metadata": {
+                    "id": msg_id
+                }
             }, ensure_ascii=False)
             
             # 配置 thread_id 用于 checkpointer
@@ -922,7 +926,7 @@ class DigitalHumanTrainingService:
             
             yield json.dumps({
                 "type": "thinking",
-                "data": "开始分析对话..."
+                "content": "开始分析对话..."
             }, ensure_ascii=False)
             
             # 保存最终状态
@@ -996,14 +1000,14 @@ class DigitalHumanTrainingService:
                                     # thinking 事件没有 node 属性，使用简化格式
                                     yield json.dumps({
                                         "type": "thinking",
-                                        "data": thought
+                                        "content": thought
                                     }, ensure_ascii=False)
                             else:
                                 for thought in thinking_process:
                                     # thinking 事件没有 node 属性，使用简化格式
                                     yield json.dumps({
                                         "type": "thinking",
-                                        "data": thought
+                                        "content": thought
                                     }, ensure_ascii=False)
                         
                         # 检查知识提取
@@ -1015,8 +1019,11 @@ class DigitalHumanTrainingService:
                             }
                             yield json.dumps({
                                 "type": "knowledge_extracted",
-                                "id": user_msg.id,
-                                "data": extracted_knowledge['entities']
+                                "content": f"提取到 {len(extracted_knowledge.get('entities', []))} 个知识点",
+                                "metadata": {
+                                    "id": user_msg.id,
+                                    "entities": extracted_knowledge['entities']
+                                }
                             }, ensure_ascii=False)
                         
                         # 检查下一个问题
@@ -1056,7 +1063,7 @@ class DigitalHumanTrainingService:
             logger.error(f"训练对话处理失败: {str(e)}\n详细错误:\n{error_detail}")
             yield json.dumps({
                 "type": "error",
-                "data": f"处理失败: {str(e)}"
+                "content": f"处理失败: {str(e)}"
             }, ensure_ascii=False)
         finally:
             # 确保 commit 总是被调用

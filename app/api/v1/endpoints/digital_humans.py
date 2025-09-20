@@ -153,7 +153,7 @@ async def train_digital_human(
             logger.error(f"训练流生成失败: {str(e)}")
             error_msg = json.dumps({
                 "type": "error",
-                "data": "训练过程出现错误，请重试"
+                "content": "训练过程出现错误，请重试"
             }, ensure_ascii=False)
             yield f"data: {error_msg}\n\n"
 

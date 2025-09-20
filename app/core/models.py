@@ -42,39 +42,24 @@ class DigitalHuman(Base):
     last_trained_at = Column(DateTime(timezone=True), nullable=True)
     
     owner = relationship("User", back_populates="digital_humans")
-    conversations = relationship("Conversation", back_populates="digital_human_template")
 
-
-class Conversation(Base):
-    __tablename__ = "conversations"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False)
-    title = Column(String(200), nullable=True)
-    thread_id = Column(String(100), nullable=False, unique=True)
-    status = Column(Enum("active", "archived", "deleted", name="conversation_status"), default="active")
-    last_message_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    user = relationship("User")
-    digital_human_template = relationship("DigitalHuman", back_populates="conversations")
-    messages = relationship("Message", back_populates="conversation")
 
 
 class Message(Base):
     __tablename__ = "messages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=False, index=True)
     role = Column(Enum("user", "assistant", "system", name="message_role"), nullable=False)
     content = Column(Text, nullable=False)
     tokens_used = Column(Integer, nullable=True)
     message_metadata = Column(JSON, nullable=True)
+    memory = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    conversation = relationship("Conversation", back_populates="messages")
+
+    user = relationship("User")
+    digital_human = relationship("DigitalHuman")
 
 
 class DigitalHumanTrainingMessage(Base):
@@ -95,10 +80,11 @@ class DigitalHumanTrainingMessage(Base):
 
 class ConversationCheckpoint(Base):
     __tablename__ = "conversation_checkpoints"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=True, index=True)
     thread_id = Column(String(100), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    digital_human_id = Column(Integer, ForeignKey("digital_humans.id"), nullable=True)
     version = Column(Integer, nullable=False)
     parent_version = Column(Integer, nullable=True)
     checkpoint_data = Column(JSON, nullable=False)
@@ -107,8 +93,9 @@ class ConversationCheckpoint(Base):
     checkpoint_metadata = Column("metadata", JSON, nullable=True)
     task_id = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    conversation = relationship("Conversation")
+
+    user = relationship("User")
+    digital_human = relationship("DigitalHuman")
     
     __table_args__ = (
         Index('idx_thread_version', 'thread_id', 'version'),

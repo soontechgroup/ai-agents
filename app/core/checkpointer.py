@@ -9,7 +9,7 @@ from sqlalchemy import desc, and_
 from langchain_core.messages import BaseMessage
 from app.core.messages import UserMessage, AssistantMessage, SystemMessage, deserialize_message, serialize_message, is_message_dict
 from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointMetadata, CheckpointTuple
-from app.core.models import Conversation, Message, ConversationCheckpoint
+from app.core.models import Message, ConversationCheckpoint
 from app.core.logger import logger
 import threading
 from functools import lru_cache
@@ -25,12 +25,14 @@ class MySQLCheckpointer(BaseCheckpointSaver):
         self._cache_timestamps = {}
         self._lock = threading.RLock()
 
-        self._get_conversation_cached = lru_cache(maxsize=cache_size)(self._get_conversation)
+        self._get_checkpoint_cached = lru_cache(maxsize=cache_size)(self._get_checkpoint_info)
 
-    def _get_conversation(self, thread_id: str) -> Optional[Conversation]:
+    def _get_checkpoint_info(self, thread_id: str) -> Optional[ConversationCheckpoint]:
         db_gen = self.db_session_factory()
         db = next(db_gen)
-        return db.query(Conversation).filter(Conversation.thread_id == thread_id).first()
+        return db.query(ConversationCheckpoint).filter(
+            ConversationCheckpoint.thread_id == thread_id
+        ).order_by(desc(ConversationCheckpoint.version)).first()
 
     def _serialize_messages(self, messages: List[Any]) -> List[Dict]:
         serialized = []
@@ -154,16 +156,26 @@ class MySQLCheckpointer(BaseCheckpointSaver):
                 self._put_to_cache(thread_id, checkpoint)
                 return checkpoint
 
-            conversation = db.query(Conversation).filter(
-                Conversation.thread_id == thread_id
-            ).first()
+            # 如果没有checkpoint，尝试从 Message 表加载历史消息
+            # 从 thread_id 解析出 user_id 和 digital_human_id
+            # thread_id 格式: chat_{digital_human_id}_{user_id} 或 training_{digital_human_id}_{user_id}
+            parts = thread_id.split('_')
+            if len(parts) >= 3:
+                if parts[0] == 'chat':
+                    digital_human_id = int(parts[1])
+                    user_id = int(parts[2])
+                    messages = db.query(Message).filter(
+                        Message.user_id == user_id,
+                        Message.digital_human_id == digital_human_id
+                    ).order_by(Message.created_at).limit(50).all()
+                else:
+                    # training 或其他类型，暂时不从 Message 表加载
+                    messages = []
+            else:
+                messages = []
 
-            if not conversation:
+            if not messages:
                 return None
-
-            messages = db.query(Message).filter(
-                Message.conversation_id == conversation.id
-            ).order_by(Message.created_at).limit(50).all()
 
             langchain_messages = []
             for msg in messages:
@@ -176,7 +188,7 @@ class MySQLCheckpointer(BaseCheckpointSaver):
 
             checkpoint = {
                 "v": 1,
-                "ts": conversation.updated_at.isoformat() if conversation.updated_at else datetime.now().isoformat(),
+                "ts": datetime.now().isoformat(),
                 "channel_values": {
                     "messages": langchain_messages
                 },
@@ -205,11 +217,7 @@ class MySQLCheckpointer(BaseCheckpointSaver):
         db = next(db_gen)
         try:
             try:
-                conversation = db.query(Conversation).filter(
-                    Conversation.thread_id == thread_id
-                ).first()
-
-                conversation_id = conversation.id if conversation else None
+                # 不再需要 conversation_id
 
                 max_version = db.query(ConversationCheckpoint.version).filter(
                     ConversationCheckpoint.thread_id == thread_id
@@ -222,9 +230,14 @@ class MySQLCheckpointer(BaseCheckpointSaver):
                 channel_values = serialized_checkpoint.get("channel_values", {})
                 serialized_metadata = self._deep_serialize_messages(metadata) if metadata else {}
 
+                # 从 metadata 中获取 user_id 和 digital_human_id
+                user_id = metadata.get("user_id") if metadata else None
+                digital_human_id = metadata.get("digital_human_id") if metadata else None
+
                 checkpoint_record = ConversationCheckpoint(
-                    conversation_id=conversation_id,
                     thread_id=thread_id,
+                    user_id=user_id,
+                    digital_human_id=digital_human_id,
                     version=new_version,
                     parent_version=new_version - 1 if new_version > 1 else None,
                     checkpoint_data=serialized_checkpoint,
@@ -235,30 +248,7 @@ class MySQLCheckpointer(BaseCheckpointSaver):
 
                 db.add(checkpoint_record)
 
-                if conversation and "messages" in channel_values:
-                    serialized_messages = channel_values["messages"]
-                    if serialized_messages:
-                        last_msg_data = serialized_messages[-1]
-
-                        existing = db.query(Message).filter(
-                            and_(
-                                Message.conversation_id == conversation.id,
-                                Message.content == last_msg_data.get("content", "")
-                            )
-                        ).first()
-
-                        if not existing:
-                            role = last_msg_data.get("role", "user")
-
-                            new_message = Message(
-                                conversation_id=conversation.id,
-                                role=role,
-                                content=last_msg_data.get("content", ""),
-                                message_metadata=last_msg_data.get("additional_kwargs", {})
-                            )
-                            db.add(new_message)
-
-                    conversation.last_message_at = datetime.now()
+                # 不再需要更新 conversation 表
 
                 db.commit()
 
