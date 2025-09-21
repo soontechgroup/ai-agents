@@ -233,17 +233,21 @@ class ConversationService:
                 } for msg in messages
             ]
         }
-    
-    def send_message(
+    def send_message_stream(
         self,
         thread_id: str,
         message_content: str,
         user_id: int
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Generator[str, None, None]:
         # 获取会话信息
         conversation = self.get_conversation_by_thread_id(thread_id, user_id)
+
         if not conversation:
-            return None
+            yield json.dumps({
+                "type": "error",
+                "content": "对话不存在或无权限访问"
+            })
+            return
 
         # 保存用户消息
         user_message = Message(
@@ -265,209 +269,51 @@ class ConversationService:
             conversation["digital_human_id"]
         )
 
-        try:
-            # 记录开始时间
-            start_time = datetime.now()
-
-            # 调用 AI 生成响应
-            result = self.langgraph_service.chat_sync(
-                message_content,
-                thread_id,
-                digital_human_config
-            )
-            ai_response = result["response"]
-            memory_data = result.get("memory")
-
-            # 计算元信息
-            response_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
-
-            # 更新元信息，包含记忆信息
-            metadata = {
-                "response_time_ms": response_time_ms,
-                "response_tokens": len(ai_response.split()),
-                "response_length": len(ai_response),
-                "model": digital_human_config.get("model", "gpt-4o-mini"),
-                "temperature": digital_human_config.get("temperature", 0.7),
-                "sync_mode": True,
-                "timestamp": datetime.now().isoformat()
-            }
-
-            # 如果有记忆，添加到元信息中
-            if memory_data:
-                metadata["has_memory"] = True
-                metadata["memory_count"] = memory_data.get("metadata", {}).get("count", 0)
-
-            # 保存 AI 消息和元信息
-            ai_message = Message(
-                user_id=user_id,
-                digital_human_id=conversation["digital_human_id"],
-                role="assistant",
-                content=ai_response,
-                message_metadata=metadata,
-                memory=memory_data,  # 新增：保存记忆搜索数据
-                tokens_used=len(ai_response.split())
-            )
-            self.db.add(ai_message)
-            self.db.commit()
-
-            return {
-                "id": ai_message.id,
-                "role": "assistant",
-                "content": ai_response,
-                "tokens_used": ai_message.tokens_used,
-                "metadata": ai_message.message_metadata,
-                "memory": ai_message.memory,  # 新增：返回记忆信息
-                "created_at": ai_message.created_at
-            }
-
-        except ValueError as e:
-            raise ValueError(str(e))
-        except Exception as e:
-            raise ValueError(f"消息发送失败: {str(e)}")
-    
-    def send_message_stream(
-        self,
-        thread_id: str,
-        message_content: str,
-        user_id: int
-    ) -> Generator[str, None, None]:
-        # 获取会话信息
-        conversation = self.get_conversation_by_thread_id(thread_id, user_id)
-        if not conversation:
-            yield json.dumps({
-                "type": "error",
-                "content": "对话不存在或无权限访问"
-            })
-            return
-
-        # 保存用户消息
-        try:
-            user_message = Message(
-                user_id=user_id,
-                digital_human_id=conversation["digital_human_id"],
-                role="user",
-                content=message_content,
-                message_metadata={
-                    "input_tokens": len(message_content.split()),
-                    "input_length": len(message_content),
-                    "timestamp": datetime.now().isoformat()
-                }
-            )
-            self.db.add(user_message)
-            self.db.commit()
-        except Exception as e:
-            yield json.dumps({
-                "type": "error",
-                "content": f"保存消息失败: {str(e)}"
-            })
-            return
-
-        yield json.dumps({
-            "type": "message",
-            "content": "",
-            "metadata": {
-                "message_id": user_message.id,
-                "role": "user",
-                "content": message_content
-            }
-        })
-
-        # 获取数字人配置
-        digital_human_config = self._get_digital_human_config(
-            conversation["digital_human_id"]
-        )
-
-        # 初始化元信息收集
-        metadata = {
-            "has_memory": False,
-            "memory_count": 0,
-            "response_tokens": 0,
-            "stream_chunks": 0,
-            "start_time": datetime.now().isoformat(),
-            "model": digital_human_config.get("model", "gpt-4o-mini"),
-            "temperature": digital_human_config.get("temperature", 0.7),
-            "max_tokens": digital_human_config.get("max_tokens", 2048)
-        }
+        # 记录开始时间（仅用于日志）
         start_time = datetime.now()
-        memory_data = None  # 新增：存储记忆搜索数据
+        memory_data = None  # 存储记忆搜索数据
 
         full_response = ""
-        try:
-            for chunk in self.langgraph_service.chat_stream(
-                message_content,
-                thread_id,
-                digital_human_config
-            ):
-                # 检查 chunk 是否是 JSON 格式的状态消息
-                try:
-                    # 尝试解析为 JSON
-                    data = json.loads(chunk)
-                    # 收集元信息
-                    if data.get("type") == "memory":
-                        metadata["has_memory"] = True
-                        metadata["memory_count"] = data.get("metadata", {}).get("count", 0)
-                        memory_data = data  # 保存完整的记忆搜索数据
-                    # 直接转发给前端，但不追加到 full_response
-                    yield chunk
-                except (json.JSONDecodeError, TypeError):
-                    # 不是 JSON，是实际的 AI 回复内容
-                    # 统计信息
-                    metadata["stream_chunks"] += 1
-                    metadata["response_tokens"] += len(chunk.split())
-                    # 追加到 full_response 并发送给前端
-                    full_response += chunk
-                    yield json.dumps({
-                        "type": "token",
-                        "content": chunk
-                    })
-        except ValueError as e:
-            yield json.dumps({
-                "type": "error",
-                "content": str(e)
-            })
-            return
-        except Exception as e:
-            yield json.dumps({
-                "type": "error",
-                "content": f"AI响应生成失败: {str(e)}"
-            })
-            return
-
-        # 计算最终的元信息
-        metadata["end_time"] = datetime.now().isoformat()
-        metadata["response_time_ms"] = int((datetime.now() - start_time).total_seconds() * 1000)
-        metadata["response_length"] = len(full_response)
+        for chunk in self.langgraph_service.chat_stream(
+            message_content,
+            thread_id,
+            digital_human_config
+        ):
+            # 检查 chunk 是否是 JSON 格式的状态消息
+            if chunk.startswith("{"):
+                # 解析为 JSON
+                data = json.loads(chunk)
+                # 记忆搜索结果，直接转发
+                if data.get("type") == "memory":
+                    memory_data = data  # 保存完整的记忆搜索数据（用于存储到数据库）
+                # 直接转发给前端，但不追加到 full_response
+                yield chunk
+            else:
+                # 是实际的 AI 回复内容
+                # 追加到 full_response 并发送给前端
+                full_response += chunk
+                yield json.dumps({
+                    "type": "token",
+                    "content": chunk
+                })
 
         # 保存 AI 消息
-        try:
-            ai_message = Message(
-                user_id=user_id,
-                digital_human_id=conversation["digital_human_id"],
-                role="assistant",
-                content=full_response,
-                message_metadata=metadata,
-                memory=memory_data,  # 新增：保存记忆搜索数据
-                tokens_used=metadata["response_tokens"]
-            )
-            self.db.add(ai_message)
-            self.db.commit()
-        except Exception as e:
-            print(f"Warning: Failed to save AI message: {str(e)}")
-            ai_message = None
+        ai_message = Message(
+            user_id=user_id,
+            digital_human_id=conversation["digital_human_id"],
+            role="assistant",
+            content=full_response,
+            message_metadata={"response_time_ms": int((datetime.now() - start_time).total_seconds() * 1000)},
+            memory=memory_data,  # 保存记忆搜索数据
+            tokens_used=len(full_response.split())
+        )
+        self.db.add(ai_message)
+        self.db.commit()
 
-        # 发送完成消息，包含统计信息
+        # 发送完成消息
         yield json.dumps({
             "type": "done",
-            "content": "",
-            "metadata": {
-                "message_id": ai_message.id if ai_message else None,
-                "tokens_used": metadata["response_tokens"],
-                "response_time_ms": metadata["response_time_ms"],
-                "has_memory": metadata["has_memory"],
-                "memory_count": metadata["memory_count"],
-                "stream_chunks": metadata["stream_chunks"],
-                "response_length": metadata["response_length"]
-            }
+            "content": ""
         })
     
     def _get_digital_human_config(self, digital_human_id: int) -> Dict[str, Any]:

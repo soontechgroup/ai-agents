@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
@@ -8,11 +8,9 @@ from app.core.models import Base
 from app.api.v1.router import api_router
 from alembic.config import Config
 from alembic import command
-import os
 import time
-import traceback
 
-from app.core.logger import logger, set_request_id, get_request_id
+from app.core.logger import logger, set_request_id
 
 from app.core.mongodb import init_mongodb, close_mongodb
 
@@ -81,26 +79,6 @@ async def log_requests(request: Request, call_next):
         )
         
         raise
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    request_id = get_request_id() or "no-request-id"
-    
-    logger.bind(request_id=request_id).error(
-        f"🔥 [{request_id}] 未处理异常 | 路径: {request.url.path} | "
-        f"异常: {type(exc).__name__}: {str(exc)}"
-    )
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "code": 500,
-            "message": "内部服务器错误",
-            "detail": str(exc) if settings.DEBUG else "服务器处理请求时发生错误",
-            "request_id": request_id
-        }
-    )
 
 
 @app.on_event("startup")

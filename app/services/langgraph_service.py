@@ -218,8 +218,13 @@ class LangGraphService:
     
     def _generate_ai_response(self, state: ConversationState) -> ConversationState:
         """生成AI响应"""
-        # 获取数字人配置
-        config = state.digital_human_config or {}
+        # 获取数字人配置，确保是字典类型
+        config = state.digital_human_config
+        if not isinstance(config, dict):
+            logger.warning(f"digital_human_config is not a dict: {type(config)}, using default config")
+            config = {}
+        if not config:
+            config = {}
 
         # 构建系统提示（包含记忆上下文）
         system_prompt = self._build_system_prompt(config)
@@ -235,9 +240,9 @@ class LangGraphService:
         recent_messages = state.messages[-10:]  # 保留最近10条消息
         messages.extend(recent_messages)
 
-        # 更新LLM配置
-        self.llm.temperature = config.get("temperature", 0.7)
-        self.llm.max_tokens = config.get("max_tokens", 2048)
+        # 安全获取配置值并更新LLM配置
+        self.llm.temperature = config.get("temperature", 0.7) if isinstance(config, dict) else 0.7
+        self.llm.max_tokens = config.get("max_tokens", 2048) if isinstance(config, dict) else 2048
 
         # 生成响应
         response = self.llm.invoke(messages)
@@ -247,8 +252,13 @@ class LangGraphService:
 
     def _generate_ai_response_stream(self, state: ConversationState) -> Generator[str, None, None]:
         """流式生成AI响应"""
-        # 获取数字人配置
-        config = state.digital_human_config or {}
+        # 获取数字人配置，确保是字典类型
+        config = state.digital_human_config
+        if not isinstance(config, dict):
+            logger.warning(f"digital_human_config is not a dict: {type(config)}, using default config")
+            config = {}
+        if not config:
+            config = {}
 
         # 构建系统提示（包含记忆上下文）
         system_prompt = self._build_system_prompt(config)
@@ -264,12 +274,16 @@ class LangGraphService:
         recent_messages = state.messages[-10:]  # 保留最近10条消息
         messages.extend(recent_messages)
 
+        # 安全获取配置值
+        temperature = config.get("temperature", 0.7) if isinstance(config, dict) else 0.7
+        max_tokens = config.get("max_tokens", 2048) if isinstance(config, dict) else 2048
+
         # 创建流式LLM
         stream_llm = ChatOpenAI(
             api_key=self.openai_api_key,
             model="gpt-4o-mini",
-            temperature=config.get("temperature", 0.7),
-            max_tokens=config.get("max_tokens", 2048),
+            temperature=temperature,
+            max_tokens=max_tokens,
             streaming=True
         )
 
@@ -292,6 +306,11 @@ class LangGraphService:
     
     def _build_system_prompt(self, config: Dict[str, Any]) -> str:
         """构建系统提示词"""
+        # 确保config是字典类型
+        if not isinstance(config, dict):
+            logger.warning(f"[PROMPT DEBUG] config is not a dict: {type(config)}, using empty config")
+            config = {}
+
         base_prompt = config.get("system_prompt", "")
         
         # 添加数字人特征
@@ -332,95 +351,6 @@ class LangGraphService:
         """创建新的线程ID"""
         return str(uuid.uuid4())
     
-    def chat_sync(
-        self,
-        message: str,
-        thread_id: str,
-        digital_human_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """同步聊天 - 返回响应和记忆信息"""
-        try:
-            config = {"configurable": {"thread_id": thread_id}}
-
-            # 获取历史消息
-            try:
-                checkpoint = self.checkpointer.get(config["configurable"])
-                if checkpoint and checkpoint.get("channel_values"):
-                    existing_messages = checkpoint["channel_values"].get("messages", [])
-                else:
-                    existing_messages = []
-            except:
-                existing_messages = []
-
-            initial_state = ConversationState(
-                thread_id=thread_id,
-                user_message=message,
-                digital_human_config=digital_human_config,
-                messages=existing_messages  # 包含历史消息
-            )
-
-            # 运行对话图
-            result = self.graph.invoke(initial_state, config)
-
-            # 构建详细的记忆信息
-            memory_data = None
-            if result.memory_search_results and isinstance(result.memory_search_results, dict):
-                # 获取实体和关系
-                entities = result.memory_search_results.get("entities", [])
-                relationships = result.memory_search_results.get("relationships", [])
-
-                # 简化实体数据（只保留前5个最相关的）
-                simplified_entities = []
-                for e in entities[:5]:
-                    # 确保e是字典类型
-                    if isinstance(e, dict):
-                        simplified_entities.append({
-                            "name": e.get("name", ""),
-                            "types": e.get("types", ""),
-                            "description": e.get("description", ""),
-                            "confidence": float(e.get("confidence", 0))
-                        })
-
-                # 简化关系数据（只保留前3个最相关的）
-                simplified_relationships = []
-                for r in relationships[:3]:
-                    # 确保r是字典类型
-                    if isinstance(r, dict):
-                        simplified_relationships.append({
-                            "source": r.get("source", ""),
-                            "target": r.get("target", ""),
-                            "types": r.get("types", ""),
-                            "description": r.get("description", "")
-                        })
-
-                memory_data = {
-                    "type": "memory",
-                    "content": f"找到 {len(entities)} 个实体和 {len(relationships)} 个关系",
-                    "metadata": {
-                        "has_memory": True,
-                        "entity_count": len(entities),
-                        "relationship_count": len(relationships),
-                        "entities": simplified_entities,
-                        "relationships": simplified_relationships
-                    }
-                }
-
-            return {
-                "response": result.assistant_response,
-                "memory": memory_data
-            }
-            
-        except openai.AuthenticationError:
-            raise ValueError("Invalid OpenAI API key. Please check your API configuration.")
-        except openai.RateLimitError:
-            raise ValueError("OpenAI API rate limit exceeded. Please try again later.")
-        except openai.APIError as e:
-            if "invalid_api_key" in str(e).lower():
-                raise ValueError("Invalid OpenAI API key")
-            raise ValueError(f"OpenAI API error: {str(e)}")
-        except Exception as e:
-            raise ValueError(f"Chat generation failed: {str(e)}")
-    
     def chat_stream(
         self,
         message: str,
@@ -435,9 +365,16 @@ class LangGraphService:
             existing_messages = []
             try:
                 checkpoint = self.checkpointer.get(config["configurable"])
-                if checkpoint and checkpoint.get("channel_values"):
-                    existing_messages = checkpoint["channel_values"].get("messages", [])
-            except:
+                # 添加类型检查以确保 checkpoint 和 channel_values 都是字典
+                if checkpoint and isinstance(checkpoint, dict):
+                    channel_values = checkpoint.get("channel_values", {})
+                    if isinstance(channel_values, dict):
+                        existing_messages = channel_values.get("messages", [])
+                    else:
+                        logger.warning(f"Invalid channel_values type for thread {thread_id}: {type(channel_values)}")
+                        existing_messages = []
+            except Exception as e:
+                logger.warning(f"Failed to get checkpoint for thread {thread_id}: {e}")
                 existing_messages = []
 
             # 创建初始状态
@@ -526,6 +463,7 @@ class LangGraphService:
             state = self._finalize_response(state)
 
             # 4. 保存最终状态到 checkpointer
+
             final_checkpoint = {
                 "v": 1,
                 "ts": datetime.now().isoformat(),
@@ -540,6 +478,7 @@ class LangGraphService:
                 },
                 "versions_seen": {}
             }
+
             self.checkpointer.put(
                 config,
                 final_checkpoint,
@@ -587,9 +526,15 @@ class LangGraphService:
             # 直接从 PostgreSQL checkpointer 获取
             config = {"configurable": {"thread_id": thread_id}}
             checkpoint = self.checkpointer.get(config["configurable"])
-            
-            if checkpoint and checkpoint.get("channel_values"):
-                messages = checkpoint["channel_values"].get("messages", [])
+
+            # 添加类型检查以确保 checkpoint 和 channel_values 都是字典
+            if checkpoint and isinstance(checkpoint, dict):
+                channel_values = checkpoint.get("channel_values", {})
+                if isinstance(channel_values, dict):
+                    messages = channel_values.get("messages", [])
+                else:
+                    logger.warning(f"Invalid channel_values type for thread {thread_id}: {type(channel_values)}")
+                    messages = []
             
             if not messages:
                 return []

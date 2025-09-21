@@ -4,7 +4,7 @@ from datetime import datetime
 from app.services.langgraph_service import LangGraphService
 from app.services.conversation_service import ConversationService
 from app.core.messages import UserMessage, AssistantMessage
-from app.core.models import Conversation, Message, DigitalHuman
+from app.core.models import Message, DigitalHuman
 from app.schemas.conversation import ConversationCreate, MessageResponse
 import json
 
@@ -115,7 +115,7 @@ class TestCheckpointerIntegration:
         checkpointer = MySQLCheckpointer(mock_db_factory)
 
         # 模拟查询对话
-        mock_conversation = Mock(spec=Conversation)
+        mock_conversation = Mock()
         mock_conversation.id = 1
         mock_conversation.last_message_at = None
 
@@ -162,7 +162,7 @@ class TestCheckpointerIntegration:
         service.message_repo = mock_message_repo
 
         # 模拟对话
-        mock_conversation = Mock(spec=Conversation)
+        mock_conversation = Mock()
         mock_conversation.id = 1
         mock_conversation.thread_id = "test-thread"
         mock_conversation.digital_human_id = 1

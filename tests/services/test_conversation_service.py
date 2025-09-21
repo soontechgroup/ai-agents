@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.services.conversation_service import ConversationService
 from app.services.langgraph_service import LangGraphService
 from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationPageRequest
-from app.core.models import DigitalHuman, Conversation, Message
+from app.core.models import DigitalHuman, Message
 import json
 
 

@@ -64,7 +64,7 @@ class MySQLCheckpointer(BaseCheckpointSaver):
                 msg = deserialize_message(obj)
                 if msg is not None:
                     return msg
-            
+
             # 不是消息格式，递归处理子元素
             return {k: self._deep_deserialize_messages(v) for k, v in obj.items()}
         elif isinstance(obj, list):
@@ -72,6 +72,7 @@ class MySQLCheckpointer(BaseCheckpointSaver):
         elif isinstance(obj, tuple):
             return tuple(self._deep_deserialize_messages(item) for item in obj)
         else:
+            # 对于其他类型（字符串、数字、布尔值、None等），直接返回原值
             return obj
 
     def _deserialize_messages(self, serialized: List[Dict]) -> List[BaseMessage]:
@@ -142,6 +143,16 @@ class MySQLCheckpointer(BaseCheckpointSaver):
 
                 if checkpoint_record:
                     checkpoint = self._deep_deserialize_messages(checkpoint_record.checkpoint_data)
+                    # 确保返回的是字典类型
+                    if not isinstance(checkpoint, dict):
+                        logger.warning(f"Invalid checkpoint data for thread {thread_id}, version {version}, expected dict but got {type(checkpoint)}")
+                        checkpoint = {
+                            "v": 1,
+                            "ts": datetime.now().isoformat(),
+                            "channel_values": {},
+                            "channel_versions": {},
+                            "versions_seen": {}
+                        }
                     self._put_to_cache(thread_id, checkpoint, version)
                     return checkpoint
 
@@ -153,6 +164,16 @@ class MySQLCheckpointer(BaseCheckpointSaver):
 
             if latest_checkpoint:
                 checkpoint = self._deep_deserialize_messages(latest_checkpoint.checkpoint_data)
+                # 确保返回的是字典类型
+                if not isinstance(checkpoint, dict):
+                    logger.warning(f"Invalid checkpoint data for thread {thread_id}, expected dict but got {type(checkpoint)}")
+                    checkpoint = {
+                        "v": 1,
+                        "ts": datetime.now().isoformat(),
+                        "channel_values": {},
+                        "channel_versions": {},
+                        "versions_seen": {}
+                    }
                 self._put_to_cache(thread_id, checkpoint)
                 return checkpoint
 
@@ -213,6 +234,18 @@ class MySQLCheckpointer(BaseCheckpointSaver):
         if not thread_id or not checkpoint:
             return config
 
+        # 验证 checkpoint 是字典类型
+        if not isinstance(checkpoint, dict):
+            logger.error(f"Invalid checkpoint type for thread {thread_id}: expected dict but got {type(checkpoint)}")
+            # 创建一个默认的 checkpoint 结构
+            checkpoint = {
+                "v": 1,
+                "ts": datetime.now().isoformat(),
+                "channel_values": {},
+                "channel_versions": {},
+                "versions_seen": {}
+            }
+
         db_gen = self.db_session_factory()
         db = next(db_gen)
         try:
@@ -226,13 +259,29 @@ class MySQLCheckpointer(BaseCheckpointSaver):
                 new_version = (max_version[0] + 1) if max_version else 1
 
                 serialized_checkpoint = self._deep_serialize_messages(checkpoint)
+                # 再次验证序列化后的结果是字典
+                if not isinstance(serialized_checkpoint, dict):
+                    logger.error(f"Serialized checkpoint is not a dict for thread {thread_id}")
+                    serialized_checkpoint = {
+                        "v": 1,
+                        "ts": datetime.now().isoformat(),
+                        "channel_values": {},
+                        "channel_versions": {},
+                        "versions_seen": {}
+                    }
 
                 channel_values = serialized_checkpoint.get("channel_values", {})
+
+                # 验证 metadata 类型
+                if metadata is not None and not isinstance(metadata, dict):
+                    logger.error(f"Invalid metadata type for thread {thread_id}: expected dict but got {type(metadata)}")
+                    metadata = {}
+
                 serialized_metadata = self._deep_serialize_messages(metadata) if metadata else {}
 
                 # 从 metadata 中获取 user_id 和 digital_human_id
-                user_id = metadata.get("user_id") if metadata else None
-                digital_human_id = metadata.get("digital_human_id") if metadata else None
+                user_id = metadata.get("user_id") if metadata and isinstance(metadata, dict) else None
+                digital_human_id = metadata.get("digital_human_id") if metadata and isinstance(metadata, dict) else None
 
                 checkpoint_record = ConversationCheckpoint(
                     thread_id=thread_id,
